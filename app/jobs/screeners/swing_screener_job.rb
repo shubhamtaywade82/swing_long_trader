@@ -2,6 +2,8 @@
 
 module Screeners
   class SwingScreenerJob < ApplicationJob
+    include JobLogging
+
     queue_as :default
 
     def perform(instruments: nil, limit: nil)

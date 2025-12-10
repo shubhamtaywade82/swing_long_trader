@@ -80,6 +80,14 @@ group :development, :test do
 
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
+
+  # Testing
+  gem "minitest", "~> 5.18"
+  gem "minitest-rails"
+  gem "webmock", "~> 3.18"
+  gem "vcr", "~> 6.2"
+  gem "factory_bot_rails", "~> 6.4"
+  gem "shoulda-matchers", "~> 6.0"
 end
 
 group :development do

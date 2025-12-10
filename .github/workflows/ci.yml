@@ -1,52 +1,66 @@
 name: CI
 
 on:
-  pull_request:
   push:
-    branches: [ main ]
+    branches: [ main, integration, develop ]
+  pull_request:
+    branches: [ main, integration, develop ]
 
 jobs:
-  scan_ruby:
+  test:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-
-      - name: Scan for common Rails security vulnerabilities using static analysis
-        run: bin/brakeman --no-pager
-      
-      - name: Scan for known security vulnerabilities in gems used
-        run: bin/bundler-audit
-      
-  lint:
-    runs-on: ubuntu-latest
-    env:
-      RUBOCOP_CACHE_ROOT: tmp/rubocop
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-
-      - name: Prepare RuboCop cache
-        uses: actions/cache@v4
+    services:
+      postgres:
+        image: postgres:15
         env:
-          DEPENDENCIES_HASH: ${{ hashFiles('.ruby-version', '**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock') }}
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: swing_long_trader_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/swing_long_trader_test
+      DHANHQ_CLIENT_ID: test_client_id
+      DHANHQ_ACCESS_TOKEN: test_access_token
+      TELEGRAM_BOT_TOKEN: test_bot_token
+      TELEGRAM_CHAT_ID: test_chat_id
+      OPENAI_API_KEY: test_openai_key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
         with:
-          path: ${{ env.RUBOCOP_CACHE_ROOT }}
-          key: rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-${{ github.ref_name == github.event.repository.default_branch && github.run_id || 'default' }}
-          restore-keys: |
-            rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-
+          ruby-version: 3.3
+          bundler-cache: true
 
-      - name: Lint code for consistent style
-        run: bin/rubocop -f github
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
 
+      - name: Setup database
+        run: |
+          bundle exec rails db:create
+          bundle exec rails db:schema:load
+
+      - name: Run tests
+        run: bundle exec rails test
+
+      - name: Run RuboCop
+        run: bundle exec rubocop
+
+      - name: Run Brakeman
+        run: bundle exec brakeman --no-pager
+
+      - name: Run Bundler Audit
+        run: bundle exec bundler-audit check --update

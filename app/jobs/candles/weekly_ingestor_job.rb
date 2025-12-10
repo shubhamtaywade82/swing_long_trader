@@ -2,6 +2,8 @@
 
 module Candles
   class WeeklyIngestorJob < ApplicationJob
+    include JobLogging
+
     queue_as :default
 
     def perform(instruments: nil, weeks_back: nil)

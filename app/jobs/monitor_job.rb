@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class MonitorJob < ApplicationJob
+  include JobLogging
+
   queue_as :default
 
   def perform
