@@ -406,23 +406,23 @@
 ## 📱 PHASE 11 — Telegram Notifier & Alert Formatting
 
 ### Implementation
-- [ ] Create `app/services/telegram/notifier.rb` (if not exists)
-- [ ] Create message templates/builders
-- [ ] Implement daily candidate list message
-- [ ] Implement swing signal alert message
-- [ ] Implement exit alert message
-- [ ] Implement P&L/portfolio snapshot message
-- [ ] Implement exception/error alert message
-- [ ] Format messages with emojis and structure
+- [x] Create `app/services/telegram/notifier.rb`
+- [x] Create `app/services/telegram/alert_formatter.rb` (message templates/builders)
+- [x] Implement daily candidate list message
+- [x] Implement swing signal alert message
+- [x] Implement exit alert message
+- [x] Implement P&L/portfolio snapshot message
+- [x] Implement exception/error alert message
+- [x] Format messages with emojis and structure
 - [ ] Test message rendering
 
 ### Alert Types
-- [ ] Daily candidate list (top 10)
-- [ ] Signal alert (entry/SL/TP/RR details)
-- [ ] Exit alert (exit condition triggered)
-- [ ] Weekly P&L snapshot (optional)
-- [ ] Job failure alerts
-- [ ] API error alerts
+- [x] Daily candidate list (top 10)
+- [x] Signal alert (entry/SL/TP/RR details)
+- [x] Exit alert (exit condition triggered)
+- [x] Weekly P&L snapshot (optional)
+- [x] Job failure alerts
+- [x] API error alerts
 
 ### Tests
 - [ ] Unit test message rendering
@@ -468,17 +468,17 @@
 - [ ] Verify SolidQueue tables exist
 
 ### Jobs to Create
-- [ ] Create `app/jobs/candles/daily_ingestor_job.rb`
-- [ ] Create `app/jobs/candles/weekly_ingestor_job.rb`
-- [ ] Create `app/jobs/candles/intraday_fetcher_job.rb`
-- [ ] Create `app/jobs/screeners/swing_screener_job.rb`
-- [ ] Create `app/jobs/screeners/ai_ranker_job.rb`
-- [ ] Create `app/jobs/strategies/swing_analysis_job.rb`
-- [ ] Create `app/jobs/strategies/swing_entry_monitor_job.rb`
-- [ ] Create `app/jobs/strategies/swing_exit_monitor_job.rb`
-- [ ] Create `app/jobs/notifier_job.rb`
-- [ ] Create `app/jobs/monitor_job.rb` (health checks)
-- [ ] Create `app/jobs/executor_job.rb` (optional, order placement)
+- [x] Create `app/jobs/candles/daily_ingestor_job.rb`
+- [x] Create `app/jobs/candles/weekly_ingestor_job.rb`
+- [ ] Create `app/jobs/candles/intraday_fetcher_job.rb` (optional - on-demand)
+- [x] Create `app/jobs/screeners/swing_screener_job.rb`
+- [x] Create `app/jobs/screeners/ai_ranker_job.rb`
+- [x] Create `app/jobs/strategies/swing_analysis_job.rb`
+- [ ] Create `app/jobs/strategies/swing_entry_monitor_job.rb` (optional - for live trading)
+- [ ] Create `app/jobs/strategies/swing_exit_monitor_job.rb` (optional - for live trading)
+- [ ] Create `app/jobs/notifier_job.rb` (optional - can use Telegram::Notifier directly)
+- [x] Create `app/jobs/monitor_job.rb` (health checks)
+- [ ] Create `app/jobs/executor_job.rb` (optional, order placement - Phase 12)
 
 ### Scheduling
 - [ ] Create `config/recurring.yml` with job schedules
@@ -491,10 +491,10 @@
 - [ ] Configure nightly maintenance jobs
 
 ### Monitoring & Alerts
-- [ ] Add job failure hooks (alert to Telegram)
-- [ ] Monitor job queue length
-- [ ] Configure retry strategies
-- [ ] Add job duration tracking
+- [x] Add job failure hooks (alert to Telegram) - implemented in all jobs
+- [ ] Monitor job queue length - can be added to MonitorJob
+- [ ] Configure retry strategies - SolidQueue default retry
+- [ ] Add job duration tracking - can be added to MonitorJob
 
 ### Tests
 - [ ] Test job enqueueing
