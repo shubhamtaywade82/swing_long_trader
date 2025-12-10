@@ -30,6 +30,26 @@ gem "solid_cache"
 gem "solid_queue"
 gem "solid_cable"
 
+# Core dependencies for trading system
+gem "concurrent-ruby"
+gem "ruby-technical-analysis"
+gem "technical-analysis"
+
+# Bulk database operations
+gem "activerecord-import"
+
+# CSV support (built-in, but explicit for clarity)
+gem "csv", require: false
+
+# DhanHQ Ruby client
+gem "DhanHQ", git: "https://github.com/shubhamtaywade82/dhanhq-client.git", branch: "main"
+
+# Telegram bot for notifications
+gem "telegram-bot-ruby", "~> 0.19"
+
+# CORS support for API
+gem "rack-cors"
+
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false
 
@@ -45,6 +65,9 @@ gem "image_processing", "~> 1.2"
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
+
+  # Environment variables
+  gem "dotenv-rails"
 
   # Audits gems for known security defects (use config/bundler-audit.yml to ignore issues)
   gem "bundler-audit", require: false
