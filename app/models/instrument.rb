@@ -59,11 +59,15 @@ require "bigdecimal"
 
 class Instrument < ApplicationRecord
   include InstrumentHelpers
+  include CandleLoader
 
   # Removed scalper-specific associations:
   # - derivatives (options/futures tracking)
   # - position_trackers (scalper position tracking)
   # - watchlist_items (WebSocket watchlist)
+
+  # Candle data associations
+  has_many :candle_series_records, dependent: :destroy
 
   scope :enabled, -> { where(enabled: true) }
 

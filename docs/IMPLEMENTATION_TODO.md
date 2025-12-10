@@ -140,7 +140,11 @@
 ## 📈 PHASE 6 — Indicators & SMC Modules
 
 ### Indicator Integration
-- [ ] Verify all indicators work with CandleSeries model
+- [x] Create `app/services/candles/loader.rb` (load candles from DB to CandleSeries)
+- [x] Create `app/models/concerns/candle_loader.rb` (Instrument helper methods)
+- [x] Include CandleLoader in Instrument model
+- [x] Create `lib/tasks/indicators.rake` (test tasks for all indicators)
+- [ ] Verify all indicators work with CandleSeries model (run test tasks)
 - [ ] Test EMA calculation
 - [ ] Test RSI calculation
 - [ ] Test Supertrend calculation
