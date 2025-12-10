@@ -115,17 +115,18 @@
 ## 📊 PHASE 5 — Candle Ingestion Architecture
 
 ### Services to Create
-- [ ] Create `app/services/candles/daily_ingestor.rb`
-- [ ] Create `app/services/candles/weekly_ingestor.rb`
-- [ ] Create `app/services/candles/intraday_fetcher.rb`
-- [ ] Create `app/services/candles/ingestor.rb` (helper for upsert logic)
+- [x] Create `app/services/candles/daily_ingestor.rb`
+- [x] Create `app/services/candles/weekly_ingestor.rb`
+- [x] Create `app/services/candles/intraday_fetcher.rb`
+- [x] Create `app/services/candles/ingestor.rb` (helper for upsert logic)
+- [x] Create `app/models/candle_series_record.rb` (ActiveRecord model)
 
 ### Implementation Tasks
-- [ ] Implement daily ingestor (fetch 1D candles, store in DB)
-- [ ] Implement weekly ingestor (fetch 1W candles, store in DB)
-- [ ] Implement intraday fetcher (fetch 15m/1h/2h, in-memory only)
-- [ ] Add deduplication logic (prevent duplicate candles)
-- [ ] Add caching for intraday data (Rails.cache with TTL)
+- [x] Implement daily ingestor (fetch 1D candles, store in DB)
+- [x] Implement weekly ingestor (fetch 1W candles, store in DB)
+- [x] Implement intraday fetcher (fetch 15m/1h/2h, in-memory only)
+- [x] Add deduplication logic (prevent duplicate candles)
+- [x] Add caching for intraday data (Rails.cache with TTL)
 - [ ] Test daily ingestion with sample instruments
 - [ ] Test weekly ingestion
 - [ ] Test intraday fetcher (verify no DB writes)

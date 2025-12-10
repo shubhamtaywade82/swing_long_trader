@@ -56,7 +56,7 @@ module Candles
       normalized_timestamp = normalize_timestamp(timestamp, timeframe)
 
       # Check if candle already exists
-      existing = CandleSeries.find_by(
+      existing = CandleSeriesRecord.find_by(
         instrument_id: instrument.id,
         timeframe: timeframe,
         timestamp: normalized_timestamp
@@ -78,7 +78,7 @@ module Candles
       end
 
       # Create new candle
-      CandleSeries.create!(
+      CandleSeriesRecord.create!(
         instrument_id: instrument.id,
         timeframe: timeframe,
         timestamp: normalized_timestamp,
