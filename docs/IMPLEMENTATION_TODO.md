@@ -99,10 +99,13 @@
 
 - [x] Modify `InstrumentsImporter` to skip derivatives
 - [x] Update `instruments.rake` to remove derivative references
-- [ ] Create universe CSV folder: `config/universe/csv/`
-- [ ] Create `lib/tasks/universe.rake` for building master whitelist
-- [ ] Run `rails universe:build` to generate `config/universe/master_universe.yml`
+- [x] Create universe CSV folder: `config/universe/csv/`
+- [x] Create `lib/tasks/universe.rake` for building master whitelist
+- [x] Create `.env.example` template
+- [x] Run `bundle install` (install required gems)
+- [ ] Run `rails universe:build` to generate `config/universe/master_universe.yml` (optional - if using universe filtering)
 - [ ] Update importer to use universe whitelist (if needed)
+- [ ] Create `.env` file with DhanHQ credentials
 - [ ] Test import: `rails instruments:import`
 - [ ] Verify import: `rails instruments:status`
 - [ ] Write RSpec test for importer with sample CSV fixture
