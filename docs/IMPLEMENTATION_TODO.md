@@ -210,21 +210,21 @@
 ## 🎯 PHASE 8 — Strategy Engine & Signal Builder
 
 ### Services to Create
-- [ ] Create `app/services/strategies/swing/engine.rb`
-- [ ] Create `app/services/strategies/swing/signal_builder.rb`
-- [ ] Create `app/services/strategies/swing/evaluator.rb`
-- [ ] Create `app/services/strategies/long_term/evaluator.rb`
+- [x] Create `app/services/strategies/swing/engine.rb`
+- [x] Create `app/services/strategies/swing/signal_builder.rb`
+- [x] Create `app/services/strategies/swing/evaluator.rb`
+- [x] Create `app/services/strategies/long_term/evaluator.rb`
 
 ### Swing Engine Implementation
-- [ ] Accept instrument + multi-timeframe candles
-- [ ] Validate SMC structure
-- [ ] Compute entry price (breakout/retest logic)
-- [ ] Compute stop loss (structure-based, ATR-based)
-- [ ] Compute take profit (risk-reward & ATR)
-- [ ] Calculate position size (risk-based)
-- [ ] Calculate confidence score
-- [ ] Estimate holding days
-- [ ] Return standard signal hash format
+- [x] Accept instrument + multi-timeframe candles
+- [x] Compute entry price (breakout/retest logic)
+- [x] Compute stop loss (structure-based, ATR-based)
+- [x] Compute take profit (risk-reward & ATR)
+- [x] Calculate position size (risk-based)
+- [x] Calculate confidence score
+- [x] Estimate holding days
+- [x] Return standard signal hash format
+- [ ] Validate SMC structure (optional - Phase 6)
 
 ### Signal Format
 - [ ] Define signal hash structure:
@@ -253,15 +253,16 @@
 ## 🤖 PHASE 9 — OpenAI Integration
 
 ### Implementation
-- [ ] Create `app/services/openai/client.rb` wrapper
-- [ ] Create `app/services/strategies/swing/ai_evaluator.rb`
-- [ ] Build compact JSON-friendly prompt
-- [ ] Request JSON response format from model
-- [ ] Implement safe JSON parsing with fallback
-- [ ] Add response caching (DB or Redis, 24h TTL)
-- [ ] Implement rate limiting (top 50/day)
-- [ ] Add token usage tracking
-- [ ] Add cost monitoring/alerting
+- [x] Create `app/services/openai/client.rb` wrapper
+- [x] Create `app/services/strategies/swing/ai_evaluator.rb`
+- [x] Build compact JSON-friendly prompt
+- [x] Request JSON response format from model
+- [x] Implement safe JSON parsing with fallback
+- [x] Add response caching (Rails.cache, 24h TTL)
+- [x] Implement rate limiting (50 calls/day)
+- [x] Add token usage tracking
+- [x] Add ruby-openai gem to Gemfile
+- [ ] Add cost monitoring/alerting (optional enhancement)
 
 ### Tests
 - [ ] Mock OpenAI responses with WebMock
@@ -276,12 +277,12 @@
 
 ### Core Backtesting Infrastructure
 - [ ] Create `app/services/backtesting/engine.rb` (main backtesting orchestrator)
-- [ ] Create `app/services/backtesting/portfolio.rb` (virtual portfolio manager)
-- [ ] Create `app/services/backtesting/position.rb` (virtual position tracker)
+- [x] Create `app/services/backtesting/portfolio.rb` (virtual portfolio manager)
+- [x] Create `app/services/backtesting/position.rb` (virtual position tracker)
 - [ ] Create `app/services/backtesting/result_analyzer.rb` (performance metrics)
-- [ ] Create `app/models/backtest_run.rb` (store backtest results)
-- [ ] Create `db/migrate/YYYYMMDDHHMMSS_create_backtest_runs.rb` migration
-- [ ] Create `db/migrate/YYYYMMDDHHMMSS_create_backtest_positions.rb` migration
+- [x] Create `app/models/backtest_run.rb` (store backtest results)
+- [x] Create `db/migrate/20251212000001_create_backtest_runs.rb` migration
+- [x] Create `db/migrate/20251212000002_create_backtest_positions.rb` migration
 
 ### Backtest Data Management
 - [ ] Create `app/services/backtesting/data_loader.rb` (load historical candles)

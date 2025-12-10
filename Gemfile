@@ -47,6 +47,9 @@ gem "DhanHQ", git: "https://github.com/shubhamtaywade82/dhanhq-client.git", bran
 # Telegram bot for notifications
 gem "telegram-bot-ruby", "~> 0.19"
 
+# OpenAI API client
+gem "ruby-openai", "~> 8.0"
+
 # CORS support for API
 gem "rack-cors"
 

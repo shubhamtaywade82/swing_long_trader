@@ -124,9 +124,9 @@ module Screeners
     def call_openai(prompt)
       return nil unless openai_api_key
 
-      require 'openai' unless defined?(OpenAI)
+      require 'ruby/openai' unless defined?(Ruby::OpenAI)
 
-      client = OpenAI::Client.new(access_token: openai_api_key)
+      client = Ruby::OpenAI::Client.new(access_token: openai_api_key)
       response = client.chat(
         parameters: {
           model: @model,
