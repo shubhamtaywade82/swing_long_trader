@@ -170,20 +170,21 @@
 ## 🔍 PHASE 7 — Screener & Ranking Pipeline
 
 ### Services to Create
-- [ ] Create `app/services/screeners/swing_screener.rb`
-- [ ] Create `app/services/screeners/longterm_screener.rb`
-- [ ] Create `app/services/screeners/ai_ranker.rb`
-- [ ] Create `app/services/screeners/final_selector.rb`
+- [x] Create `app/services/screeners/swing_screener.rb`
+- [x] Create `app/services/screeners/longterm_screener.rb`
+- [x] Create `app/services/screeners/ai_ranker.rb`
+- [x] Create `app/services/screeners/final_selector.rb`
+- [x] Create `app/models/concerns/algo_config.rb` (AlgoConfig module)
 
 ### Screener Logic Implementation
-- [ ] Implement universe filter (from master_universe.yml)
-- [ ] Implement basic filters (price, volume, active status)
-- [ ] Implement trend filters (EMA20 > EMA50, etc.)
-- [ ] Implement Supertrend alignment check
-- [ ] Implement SMC structure validation
-- [ ] Implement volatility calculation (ATR)
-- [ ] Implement scoring system (rule hits)
-- [ ] Return top 50 candidates
+- [x] Implement universe filter (from master_universe.yml)
+- [x] Implement basic filters (price, volume, active status)
+- [x] Implement trend filters (EMA20 > EMA50, etc.)
+- [x] Implement Supertrend alignment check
+- [x] Implement volatility calculation (ATR)
+- [x] Implement scoring system (rule hits)
+- [x] Return top 50 candidates
+- [ ] Implement SMC structure validation (optional - Phase 6)
 
 ### AI Ranker Implementation
 - [ ] Create OpenAI client wrapper
