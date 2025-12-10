@@ -285,21 +285,22 @@
 - [x] Create `db/migrate/20251212000002_create_backtest_positions.rb` migration
 
 ### Backtest Data Management
-- [ ] Create `app/services/backtesting/data_loader.rb` (load historical candles)
-- [ ] Implement date range selection (from_date, to_date)
-- [ ] Implement instrument filtering (universe or specific symbols)
-- [ ] Add data validation (ensure sufficient candles for indicators)
-- [ ] Handle missing data gracefully (skip or interpolate)
+- [x] Create `app/services/backtesting/data_loader.rb` (load historical candles)
+- [x] Implement date range selection (from_date, to_date)
+- [x] Implement instrument filtering (universe or specific symbols)
+- [x] Add data validation (ensure sufficient candles for indicators)
+- [ ] Handle missing data gracefully (skip or interpolate) - basic skip implemented
 
 ### Swing Trading Backtesting
-- [ ] Create `app/services/backtesting/swing_backtester.rb`
-- [ ] Implement walk-forward backtesting (avoid look-ahead bias)
-- [ ] Implement entry signal detection (use historical candles only)
-- [ ] Implement exit signal detection (SL, TP, trailing stop)
-- [ ] Implement position sizing (risk-based, fixed, or percentage)
-- [ ] Track entry/exit timestamps and prices
-- [ ] Calculate P&L per trade
-- [ ] Calculate holding period per trade
+- [x] Create `app/services/backtesting/swing_backtester.rb`
+- [x] Implement walk-forward backtesting (avoid look-ahead bias)
+- [x] Implement entry signal detection (use historical candles only)
+- [x] Implement exit signal detection (SL, TP)
+- [x] Implement position sizing (risk-based from signal)
+- [x] Track entry/exit timestamps and prices
+- [x] Calculate P&L per trade
+- [x] Calculate holding period per trade
+- [ ] Implement trailing stop (optional enhancement)
 - [ ] Handle partial fills and slippage simulation (optional)
 
 ### Long-Term Trading Backtesting
@@ -311,20 +312,21 @@
 - [ ] Calculate portfolio-level metrics
 
 ### Performance Metrics & Analysis
-- [ ] Calculate total return (%)
-- [ ] Calculate annualized return
-- [ ] Calculate maximum drawdown
-- [ ] Calculate Sharpe ratio
-- [ ] Calculate Sortino ratio
-- [ ] Calculate win rate (%)
-- [ ] Calculate average win/loss ratio
-- [ ] Calculate profit factor
-- [ ] Calculate number of trades
-- [ ] Calculate average holding period
-- [ ] Calculate best/worst trade
-- [ ] Calculate consecutive wins/losses
-- [ ] Generate equity curve data
-- [ ] Generate monthly returns breakdown
+- [x] Create `app/services/backtesting/result_analyzer.rb`
+- [x] Calculate total return (%)
+- [x] Calculate annualized return
+- [x] Calculate maximum drawdown
+- [x] Calculate Sharpe ratio
+- [x] Calculate Sortino ratio
+- [x] Calculate win rate (%)
+- [x] Calculate average win/loss ratio
+- [x] Calculate profit factor
+- [x] Calculate number of trades
+- [x] Calculate average holding period
+- [x] Calculate best/worst trade
+- [x] Calculate consecutive wins/losses
+- [ ] Generate equity curve data (needs portfolio integration)
+- [ ] Generate monthly returns breakdown (needs portfolio integration)
 - [ ] Generate trade distribution analysis
 
 ### Backtest Configuration
@@ -348,11 +350,12 @@
 - [ ] Create visualization data (JSON for charts)
 
 ### Rake Tasks
-- [ ] Create `lib/tasks/backtest.rake`
-- [ ] Implement `rails backtest:swing[from_date,to_date]` task
+- [x] Create `lib/tasks/backtest.rake`
+- [x] Implement `rails backtest:swing[from_date,to_date]` task
+- [x] Implement `rails backtest:list` task
+- [x] Implement `rails backtest:show[run_id]` task
 - [ ] Implement `rails backtest:long_term[from_date,to_date]` task
 - [ ] Implement `rails backtest:compare[strategy1,strategy2]` task
-- [ ] Implement `rails backtest:report[run_id]` task
 - [ ] Implement `rails backtest:export[run_id]` task
 
 ### Walk-Forward Analysis

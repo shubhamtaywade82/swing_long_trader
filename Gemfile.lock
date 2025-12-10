@@ -173,6 +173,7 @@ GEM
     erubi (1.13.1)
     et-orbi (1.4.0)
       tzinfo
+    event_stream_parser (1.0.0)
     eventmachine (1.2.7)
     faraday (1.10.4)
       faraday-em_http (~> 1.0)
@@ -398,6 +399,10 @@ GEM
       rubocop (>= 1.72)
       rubocop-performance (>= 1.24)
       rubocop-rails (>= 2.30)
+    ruby-openai (8.3.0)
+      event_stream_parser (>= 0.3.0, < 2.0.0)
+      faraday (>= 1)
+      faraday-multipart (>= 1)
     ruby-progressbar (1.13.0)
     ruby-technical-analysis (1.0.4)
     ruby-vips (2.3.0)
@@ -503,6 +508,7 @@ DEPENDENCIES
   rack-cors
   rails (~> 8.1.1)
   rubocop-rails-omakase
+  ruby-openai (~> 8.0)
   ruby-technical-analysis
   solid_cable
   solid_cache

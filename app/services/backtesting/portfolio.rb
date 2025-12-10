@@ -47,8 +47,11 @@ module Backtesting
       position
     end
 
-    def update_equity_curve(date)
-      open_value = @positions.values.sum { |pos| pos.current_value }
+    def update_equity_curve(date, current_prices = {})
+      open_value = @positions.values.sum do |pos|
+        current_price = current_prices[pos.instrument_id] || pos.entry_price
+        pos.current_value(current_price)
+      end
       equity = @current_capital + open_value
       @equity_curve << { date: date, equity: equity }
     end
@@ -59,8 +62,11 @@ module Backtesting
       ((@current_capital - @initial_capital) / @initial_capital * 100).round(2)
     end
 
-    def current_equity
-      open_value = @positions.values.sum { |pos| pos.current_value }
+    def current_equity(current_prices = {})
+      open_value = @positions.values.sum do |pos|
+        current_price = current_prices[pos.instrument_id] || pos.entry_price
+        pos.current_value(current_price)
+      end
       @current_capital + open_value
     end
   end

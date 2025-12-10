@@ -29,8 +29,9 @@ module Backtesting
       @exit_date.present?
     end
 
-    def current_value(current_price)
-      current_price * @quantity
+    def current_value(current_price = nil)
+      price = current_price || @exit_price || @entry_price
+      price * @quantity
     end
 
     def calculate_pnl(current_price = nil)
