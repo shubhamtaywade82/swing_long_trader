@@ -1,0 +1,250 @@
+# config/algo.yml
+# Swing + Long-Term Trading Configuration
+# Modified from AlgoScalperAPI - removed all scalper-specific config
+
+# ============================================
+# SWING TRADING CONFIGURATION
+# ============================================
+swing_trading:
+  enabled: true
+
+  universe:
+    indices:
+      - NIFTY
+      - BANKNIFTY
+      - SENSEX
+    stocks: [] # Add stock symbols if trading stocks (e.g., ["RELIANCE", "TCS", "INFY"])
+
+  screening:
+    min_volume: 1000000 # Minimum daily volume
+    min_price: 50 # Minimum price
+    max_price: 50000 # Maximum price
+    exclude_penny_stocks: true
+    min_market_cap: 1000 # Minimum market cap in crores (optional filter)
+
+  indicators:
+    - type: supertrend
+      enabled: true
+      period: 10
+      multiplier: 3.0
+    - type: adx
+      enabled: true
+      period: 14
+      threshold: 25
+    - type: rsi
+      enabled: true
+      period: 14
+      oversold: 30
+      overbought: 70
+    - type: macd
+      enabled: true
+      fast_period: 12
+      slow_period: 26
+      signal_period: 9
+    - type: trend_duration
+      enabled: false # Optional - enable if using trend duration analysis
+      hma_length: 20
+      trend_length: 5
+      samples: 10
+
+  strategy:
+    confirmation_mode: majority # all, majority, weighted, any
+    min_confidence: 0.7 # Minimum confidence score (0.0-1.0)
+    trend_filters:
+      use_ema20: true
+      use_ema50: true
+      use_ema200: true
+    entry_conditions:
+      require_volume_confirmation: true
+      min_volume_spike: 1.5 # 1.5x average volume
+      require_trend_alignment: true
+    exit_conditions:
+      profit_target_pct: 15.0 # Take profit at 15%
+      stop_loss_pct: 8.0 # Stop loss at 8%
+      trailing_stop_pct: 5.0 # Trailing stop distance
+
+  ai_ranking:
+    enabled: true
+    model: gpt-4o-mini # OpenAI model for ranking
+    max_candidates: 20
+    factors:
+      - technical_strength
+      - volume_profile
+      - trend_alignment
+      - risk_reward
+      - momentum
+    temperature: 0.3 # Lower temperature for more consistent rankings
+
+# ============================================
+# LONG-TERM TRADING CONFIGURATION
+# ============================================
+long_term_trading:
+  enabled: true
+  holding_period_days: 30 # Minimum holding period in days
+  rebalance_frequency: weekly # weekly, monthly
+  max_positions: 10 # Maximum number of concurrent positions
+
+  strategy:
+    entry_conditions:
+      require_weekly_trend: true
+      require_monthly_trend: true
+      min_momentum_score: 0.6
+    exit_conditions:
+      profit_target_pct: 30.0 # Take profit at 30%
+      stop_loss_pct: 15.0 # Stop loss at 15%
+      trailing_stop_pct: 10.0 # Trailing stop distance
+
+# ============================================
+# CANDLE INGESTION CONFIGURATION
+# ============================================
+candles:
+  daily:
+    enabled: true
+    fetch_time: "07:30" # IST - Time to fetch daily candles
+    timeframes:
+      - "1D"
+    instruments:
+      - type: equity
+        enabled: true
+      - type: index
+        enabled: true
+
+  weekly:
+    enabled: true
+    fetch_time: "07:30" # IST - Time to fetch weekly candles (typically Monday)
+    timeframes:
+      - "1W"
+    instruments:
+      - type: equity
+        enabled: true
+      - type: index
+        enabled: true
+
+  intraday:
+    enabled: true
+    fetch_on_demand: true # Don't store, fetch when needed for analysis
+    timeframes:
+      - "15" # 15 minutes
+      - "60" # 1 hour
+      - "120" # 2 hours
+    cache_duration_minutes: 5 # Cache intraday data for 5 minutes
+
+# ============================================
+# INDICATOR CONFIGURATION
+# ============================================
+indicators:
+  # Global indicator settings
+  default_timeframe: "1D" # Default timeframe for indicator calculations
+
+  # Supertrend configuration
+  supertrend:
+    period: 10
+    multiplier: 3.0
+    atr_period: 14
+
+  # ADX configuration
+  adx:
+    period: 14
+    min_strength: 25 # Minimum ADX strength for trend confirmation
+
+  # RSI configuration
+  rsi:
+    period: 14
+    oversold: 30
+    overbought: 70
+
+  # MACD configuration
+  macd:
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+
+  # Trend Duration configuration
+  trend_duration:
+    hma_length: 20
+    trend_length: 5
+    samples: 10
+
+# ============================================
+# NOTIFICATIONS CONFIGURATION
+# ============================================
+notifications:
+  telegram:
+    enabled: true
+    chat_id: <%= ENV['TELEGRAM_CHAT_ID'] %>
+    bot_token: <%= ENV['TELEGRAM_BOT_TOKEN'] %>
+    notify_entry: true
+    notify_exit: true
+    notify_signals: true
+    notify_screener_results: true
+    notify_errors: true
+    pnl_update_interval_seconds: 3600 # Update PnL every hour
+    notify_pnl_milestones: true
+    pnl_milestones: [5, 10, 15, 20, 30, 50] # PnL percentage milestones
+
+# ============================================
+# DHANHQ CONFIGURATION
+# ============================================
+dhanhq:
+  client_id: <%= ENV['DHANHQ_CLIENT_ID'] || ENV['CLIENT_ID'] %>
+  access_token: <%= ENV['DHANHQ_ACCESS_TOKEN'] || ENV['ACCESS_TOKEN'] %>
+  api_base_url: "https://api.dhan.co"
+  timeout_seconds: 30
+  retry_attempts: 3
+  retry_delay_seconds: 2
+
+# ============================================
+# RISK MANAGEMENT
+# ============================================
+risk:
+  # Position sizing
+  max_position_size_pct: 10.0 # Maximum 10% of capital per position
+  max_total_exposure_pct: 50.0 # Maximum 50% total capital in positions
+
+  # Stop loss and take profit
+  default_stop_loss_pct: 8.0
+  default_take_profit_pct: 15.0
+
+  # Daily limits
+  daily_loss_limit_pct: 5.0 # Stop trading if daily loss exceeds 5%
+  daily_profit_target_pct: 10.0 # Optional: Take profits if daily target reached
+
+  # Trailing stop
+  trailing_stop:
+    enabled: true
+    activation_profit_pct: 5.0 # Activate trailing stop after 5% profit
+    distance_pct: 5.0 # Maintain 5% distance below peak
+
+# ============================================
+# DATA FRESHNESS & CACHING
+# ============================================
+data_freshness:
+  # Candle data caching
+  daily_candle_cache_hours: 24 # Cache daily candles for 24 hours
+  weekly_candle_cache_hours: 168 # Cache weekly candles for 1 week
+
+  # Market data caching
+  ohlc_cache_duration_minutes: 5
+  disable_ohlc_caching: false
+
+  # Instrument data caching
+  instrument_cache_duration_hours: 24
+
+# ============================================
+# FEATURE FLAGS
+# ============================================
+feature_flags:
+  enable_ai_ranking: true
+  enable_swing_screener: true
+  enable_long_term_screener: true
+  enable_paper_trading: false # Set to true for paper trading mode
+  enable_backtesting: false # Set to true to enable backtesting mode
+
+# ============================================
+# PAPER TRADING (Optional)
+# ============================================
+paper_trading:
+  enabled: false
+  initial_balance: 100000 # Starting balance in rupees
+  simulate_slippage: true
+  slippage_pct: 0.1 # 0.1% slippage simulation
