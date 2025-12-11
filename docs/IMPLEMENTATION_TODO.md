@@ -25,7 +25,7 @@
 - [x] Add core gems to Gemfile (solid_queue, pg, etc.)
 - [x] Add trading-specific gems (DhanHQ, telegram-bot-ruby, technical-analysis)
 - [x] Run `bundle install`
-- [x] Initialize RSpec (if using)
+- [x] Initialize RSpec with rspec-rails
 - [x] Create `.env.example` template
 - [x] Verify `rails server` starts
 - [x] Verify `rails console` loads
@@ -109,7 +109,7 @@
 - [ ] Create `.env` file with DhanHQ credentials (copy from .env.example)
 - [ ] Test import: `rails instruments:import`
 - [ ] Verify import: `rails instruments:status`
-- [ ] Write RSpec test for importer with sample CSV fixture
+- [ ] Write RSpec test for importer with sample CSV fixture (use VCR cassette for API calls)
 
 ---
 
@@ -133,8 +133,9 @@
 - [ ] Test intraday fetcher (verify no DB writes)
 
 ### Tests
-- [x] Write integration tests for ingestors (use VCR/WebMock)
-- [x] Write unit tests for dedup and upsert logic (in ingestor_test.rb)
+- [x] Write integration tests for ingestors (use VCR cassettes for DhanHQ API responses)
+- [x] Write unit tests for dedup and upsert logic (in ingestor_spec.rb)
+- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
 ---
 
@@ -163,8 +164,9 @@
 - [ ] Keep SMC functions pure (accept candle arrays)
 
 ### Tests
-- [x] Write unit tests for each indicator with static fixtures (test/services/indicators/indicator_test.rb)
+- [x] Write unit tests for each indicator with static fixtures (spec/services/indicators/indicator_spec.rb)
 - [ ] Write unit tests for SMC components (optional - Phase 6)
+- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
 ---
 
@@ -202,9 +204,10 @@
 - [x] Return ranked candidates with metadata (includes summary, rank, combined_score)
 
 ### Tests
-- [x] Write unit tests for screener logic with fixture candles (swing_screener_test.rb)
-- [ ] Write integration test (screener + AI with mocked OpenAI) - needs OpenAI mocking
-- [x] Test final selector logic (final_selector_test.rb)
+- [x] Write unit tests for screener logic with fixture candles (swing_screener_spec.rb)
+- [ ] Write integration test (screener + AI with mocked OpenAI using WebMock/VCR cassettes)
+- [x] Test final selector logic (final_selector_spec.rb)
+- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
 ---
 
@@ -246,9 +249,10 @@
   ```
 
 ### Tests
-- [x] Write unit tests for signal builder with known candle series (signal_builder_test.rb)
+- [x] Write unit tests for signal builder with known candle series (signal_builder_spec.rb)
 - [ ] Test entry/SL/TP calculations - needs more comprehensive test data
 - [ ] Test position sizing logic - needs more comprehensive test data
+- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
 ---
 
@@ -267,11 +271,12 @@
 - [ ] Add cost monitoring/alerting (optional enhancement)
 
 ### Tests
-- [x] Mock OpenAI responses with WebMock (test/services/openai/client_test.rb)
+- [x] Mock OpenAI responses with WebMock/VCR cassettes (spec/services/openai/client_spec.rb)
 - [x] Test JSON parsing and fallback logic
 - [x] Test caching behavior
 - [x] Test rate limiting
 - [x] Test cost calculation
+- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
 ---
 
@@ -396,12 +401,13 @@
 - [ ] Write unit tests for backtesting engine - needs comprehensive test data
 - [x] Write unit tests for portfolio manager (portfolio logic tested in backtester)
 - [x] Write unit tests for position tracker (position logic tested in backtester)
-- [x] Write unit tests for result analyzer (result_analyzer_test.rb)
-- [x] Write unit tests for data loader (data_loader_test.rb)
-- [ ] Write integration tests with sample historical data - needs VCR cassettes
+- [x] Write unit tests for result analyzer (result_analyzer_spec.rb)
+- [x] Write unit tests for data loader (data_loader_spec.rb)
+- [ ] Write integration tests with sample historical data - use VCR cassettes for API responses
 - [ ] Test walk-forward logic (no look-ahead bias) - manual verification needed
-- [x] Test performance metrics calculations (result_analyzer_test.rb)
+- [x] Test performance metrics calculations (result_analyzer_spec.rb)
 - [ ] Test edge cases (no trades, all losses, all wins) - needs more test cases
+- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
 ### Documentation
 - [x] Document backtesting methodology (docs/BACKTESTING.md)
@@ -434,8 +440,9 @@
 - [x] API error alerts
 
 ### Tests
-- [x] Unit test message rendering (test/services/telegram/alert_formatter_test.rb)
-- [ ] End-to-end integration test with sandbox Telegram bot (requires Telegram bot setup)
+- [x] Unit test message rendering (spec/services/telegram/alert_formatter_spec.rb)
+- [ ] End-to-end integration test with sandbox Telegram bot (use VCR cassette for Telegram API calls)
+- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
 ---
 
@@ -462,10 +469,11 @@
 - [ ] Test circuit breaker
 
 ### Tests
-- [ ] Use WebMock to stub Dhan API
+- [ ] Use WebMock/VCR cassettes to stub Dhan API responses
 - [ ] Test order payloads
 - [ ] Test idempotency logic
 - [ ] Test risk limits
+- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
 ---
 
@@ -506,10 +514,11 @@
 - [x] Add job duration tracking - added to MonitorJob (check_job_duration) and JobLogging concern
 
 ### Tests
-- [x] Test job enqueueing (test/jobs/application_job_test.rb)
-- [x] Test job execution (test/jobs/application_job_test.rb, test/jobs/monitor_job_test.rb)
+- [x] Test job enqueueing (spec/jobs/application_job_spec.rb)
+- [x] Test job execution (spec/jobs/application_job_spec.rb, spec/jobs/monitor_job_spec.rb)
 - [ ] Test job retry logic - SolidQueue handles automatically
-- [x] Test job failure handling (test/jobs/application_job_test.rb)
+- [x] Test job failure handling (spec/jobs/application_job_spec.rb)
+- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
 ---
 
@@ -523,7 +532,7 @@
 - [x] Write unit tests for Candles::Ingestor service
 - [x] Write unit tests for jobs (application_job_test.rb, monitor_job_test.rb, daily_ingestor_job_test.rb)
 - [ ] Write unit tests for all other services (screeners, strategies, etc.)
-- [ ] Write unit tests for all other models (BacktestRun, BacktestPosition, etc.)
+- [x] Write unit tests for all other models (BacktestRun, BacktestPosition, Setting) - test/models/backtest_run_test.rb, test/models/backtest_position_test.rb, test/models/setting_test.rb
 - [x] Write integration tests with mocked Dhan responses (candles_ingestion_test.rb)
 - [x] Write integration tests with mocked OpenAI responses (openai/client_test.rb)
 - [x] Write contract tests for Telegram messages (test/contracts/telegram_messages_test.rb)
@@ -534,8 +543,8 @@
 - [x] Create `.github/workflows/ci.yml`
 - [x] Configure `bundle install` in CI
 - [x] Configure `rails db:create db:schema:load RAILS_ENV=test`
-- [x] Configure `rails test` test run
-- [x] Configure RuboCop checks
+- [x] Configure `bundle exec rspec` test run (replacing `rails test`)
+- [x] Configure RuboCop checks (including rubocop-rspec)
 - [x] Configure Brakeman security scan
 - [x] Configure Bundler Audit
 - [ ] Set up deployment pipeline (on main merge)
@@ -544,11 +553,14 @@
 - [ ] Configure SolidQueue worker restart on deploy
 
 ### QA Checklist
-- [ ] All tests pass locally
-- [ ] All tests pass in CI
-- [ ] No RuboCop violations
+- [ ] All RSpec tests pass locally (`bundle exec rspec`)
+- [ ] All RSpec tests pass in CI
+- [ ] Database Cleaner properly resets database between examples
+- [ ] VCR cassettes are recorded and committed for all external API calls
+- [ ] WebMock stubs are properly configured for all HTTP requests
+- [ ] No RuboCop violations (including rubocop-rspec)
 - [ ] No Brakeman security issues
-- [ ] Code coverage meets threshold
+- [ ] Code coverage meets threshold (>80%)
 
 ---
 
@@ -651,7 +663,7 @@
 
 ## 📝 Quick Deliverables Checklist
 
-- [x] Create repo + gems + RSpec
+- [x] Create repo + gems + RSpec + Database Cleaner + WebMock + VCR
 - [x] Copy models, indicators, Dhan client, OpenAI & Telegram wrappers
 - [ ] Add `config/universe/csv` and `lib/tasks/universe.rake`
 - [ ] Run `rails universe:build`
@@ -670,7 +682,7 @@
 - [ ] **Validate backtest results and performance metrics**
 - [ ] Add SolidQueue, schedule jobs with cron/whenever
 - [ ] Monitor jobs
-- [ ] Implement tests & CI
+- [ ] Implement RSpec tests with Database Cleaner, WebMock, and VCR cassettes & CI
 - [ ] Run controlled manual trading for 30 trades
 - [ ] Consider auto-exec (after manual validation)
 
