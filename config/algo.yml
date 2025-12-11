@@ -194,6 +194,16 @@ dhanhq:
   retry_delay_seconds: 2
 
 # ============================================
+# OPENAI CONFIGURATION
+# ============================================
+openai:
+  cost_monitoring:
+    enabled: true
+    daily_threshold: 10.0 # Alert if daily cost exceeds $10
+    weekly_threshold: 50.0 # Alert if weekly cost exceeds $50
+    monthly_threshold: 200.0 # Alert if monthly cost exceeds $200
+
+# ============================================
 # RISK MANAGEMENT
 # ============================================
 risk:

@@ -12,7 +12,8 @@ class MonitorJob < ApplicationJob
       telegram: check_telegram,
       candle_freshness: check_candle_freshness,
       job_queue: check_job_queue,
-      job_duration: check_job_duration
+      job_duration: check_job_duration,
+      openai_cost: check_openai_cost
     }
 
     failed_checks = checks.select { |_k, v| !v[:healthy] }
@@ -113,6 +114,66 @@ class MonitorJob < ApplicationJob
     { healthy: healthy, message: message }
   rescue StandardError => e
     { healthy: false, message: e.message }
+  end
+
+  def check_openai_cost
+    return { healthy: true, message: 'OpenAI not configured' } unless ENV['OPENAI_API_KEY'].present?
+
+    cost_config = AlgoConfig.fetch([:openai, :cost_monitoring]) || {}
+    return { healthy: true, message: 'Cost monitoring disabled' } unless cost_config[:enabled]
+
+    today = Date.today
+    daily_cost = Metrics::Tracker.get_openai_daily_cost(today)
+
+    # Get thresholds
+    daily_threshold = cost_config[:daily_threshold] || 10.0
+    weekly_threshold = cost_config[:weekly_threshold] || 50.0
+    monthly_threshold = cost_config[:monthly_threshold] || 200.0
+
+    # Calculate weekly and monthly costs
+    week_start = today.beginning_of_week
+    weekly_cost = calculate_weekly_cost(week_start, today)
+    month_start = today.beginning_of_month
+    monthly_cost = calculate_monthly_cost(month_start, today)
+
+    # Check thresholds
+    warnings = []
+    if daily_cost >= daily_threshold
+      warnings << "Daily: $#{daily_cost.round(4)} >= $#{daily_threshold}"
+    end
+    if weekly_cost >= weekly_threshold
+      warnings << "Weekly: $#{weekly_cost.round(4)} >= $#{weekly_threshold}"
+    end
+    if monthly_cost >= monthly_threshold
+      warnings << "Monthly: $#{monthly_cost.round(4)} >= $#{monthly_threshold}"
+    end
+
+    healthy = warnings.empty?
+    message = if warnings.any?
+                warnings.join(', ')
+              else
+                "Daily: $#{daily_cost.round(4)}, Weekly: $#{weekly_cost.round(4)}, Monthly: $#{monthly_cost.round(4)}"
+              end
+
+    { healthy: healthy, message: message }
+  rescue StandardError => e
+    { healthy: false, message: e.message }
+  end
+
+  def calculate_weekly_cost(week_start, current_date)
+    total = 0.0
+    (week_start..current_date).each do |date|
+      total += Metrics::Tracker.get_openai_daily_cost(date)
+    end
+    total
+  end
+
+  def calculate_monthly_cost(month_start, current_date)
+    total = 0.0
+    (month_start..current_date).each do |date|
+      total += Metrics::Tracker.get_openai_daily_cost(date)
+    end
+    total
   end
 
   def solid_queue_installed?

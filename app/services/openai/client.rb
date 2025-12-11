@@ -149,10 +149,14 @@ module OpenAI
         if cost > 0
           cost_key = "openai_cost:#{today}"
           cost_today = Rails.cache.read(cost_key) || 0.0
-          Rails.cache.write(cost_key, cost_today + cost, expires_in: 1.day)
+          new_total = cost_today + cost
+          Rails.cache.write(cost_key, new_total, expires_in: 1.day)
 
           # Track in metrics
           Metrics::Tracker.track_openai_cost(cost) if defined?(Metrics::Tracker)
+
+          # Check cost thresholds and alert if exceeded
+          check_cost_thresholds(new_total, today)
         end
       end
     end
@@ -177,6 +181,76 @@ module OpenAI
       output_cost = (completion_tokens / 1_000_000.0) * model_pricing[:output]
 
       (input_cost + output_cost).round(6)
+    end
+
+    def check_cost_thresholds(daily_cost, date)
+      # Get cost thresholds from config
+      cost_config = AlgoConfig.fetch([:openai, :cost_monitoring]) || {}
+      return unless cost_config[:enabled]
+
+      daily_threshold = cost_config[:daily_threshold] || 10.0
+      weekly_threshold = cost_config[:weekly_threshold] || 50.0
+      monthly_threshold = cost_config[:monthly_threshold] || 200.0
+
+      alerts = []
+
+      # Check daily threshold
+      if daily_cost >= daily_threshold
+        # Only alert once per day per threshold
+        alert_key = "openai_cost_alert:daily:#{date}"
+        unless Rails.cache.exist?(alert_key)
+          alerts << "Daily cost threshold exceeded: $#{daily_cost.round(4)} >= $#{daily_threshold}"
+          Rails.cache.write(alert_key, true, expires_in: 1.day)
+        end
+      end
+
+      # Check weekly threshold
+      week_start = date.beginning_of_week
+      weekly_cost = calculate_weekly_cost(week_start, date)
+      if weekly_cost >= weekly_threshold
+        alert_key = "openai_cost_alert:weekly:#{week_start}"
+        unless Rails.cache.exist?(alert_key)
+          alerts << "Weekly cost threshold exceeded: $#{weekly_cost.round(4)} >= $#{weekly_threshold}"
+          Rails.cache.write(alert_key, true, expires_in: 1.week)
+        end
+      end
+
+      # Check monthly threshold
+      month_start = date.beginning_of_month
+      monthly_cost = calculate_monthly_cost(month_start, date)
+      if monthly_cost >= monthly_threshold
+        alert_key = "openai_cost_alert:monthly:#{month_start}"
+        unless Rails.cache.exist?(alert_key)
+          alerts << "Monthly cost threshold exceeded: $#{monthly_cost.round(4)} >= $#{monthly_threshold}"
+          Rails.cache.write(alert_key, true, expires_in: 1.month)
+        end
+      end
+
+      # Send alerts if any thresholds exceeded
+      if alerts.any?
+        message = "💰 OpenAI Cost Alert\n\n" + alerts.join("\n")
+        Telegram::Notifier.send_error_alert(message, context: 'OpenAI::Client') if defined?(Telegram::Notifier)
+      end
+    rescue StandardError => e
+      Rails.logger.warn("[OpenAI::Client] Cost threshold check failed: #{e.message}")
+    end
+
+    def calculate_weekly_cost(week_start, current_date)
+      total = 0.0
+      (week_start..current_date).each do |date|
+        cost_key = "openai_cost:#{date.to_s}"
+        total += Rails.cache.read(cost_key) || 0.0
+      end
+      total
+    end
+
+    def calculate_monthly_cost(month_start, current_date)
+      total = 0.0
+      (month_start..current_date).each do |date|
+        cost_key = "openai_cost:#{date.to_s}"
+        total += Rails.cache.read(cost_key) || 0.0
+      end
+      total
     end
   end
 end

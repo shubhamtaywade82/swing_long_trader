@@ -268,7 +268,7 @@
 - [x] Implement rate limiting (50 calls/day)
 - [x] Add token usage tracking
 - [x] Add ruby-openai gem to Gemfile
-- [ ] Add cost monitoring/alerting (optional enhancement)
+- [x] Add cost monitoring/alerting (optional enhancement) - Implemented in OpenAI::Client and MonitorJob with configurable thresholds
 
 ### Tests
 - [x] Mock OpenAI responses with WebMock/VCR cassettes (spec/services/openai/client_spec.rb)
