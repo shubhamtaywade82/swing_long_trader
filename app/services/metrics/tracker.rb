@@ -3,6 +3,32 @@
 module Metrics
   # Tracks system metrics for observability
   class Tracker
+    # Track order placement
+    def self.track_order_placed(order)
+      date = Date.today
+      key = "orders.placed.#{date.strftime('%Y-%m-%d')}"
+      current = Setting.fetch_i(key, 0)
+      Setting.put(key, current + 1)
+    end
+
+    # Track order failure
+    def self.track_order_failed(order)
+      date = Date.today
+      key = "orders.failed.#{date.strftime('%Y-%m-%d')}"
+      current = Setting.fetch_i(key, 0)
+      Setting.put(key, current + 1)
+    end
+
+    # Get order counts for a date
+    def self.get_orders_placed(date = Date.today)
+      key = "orders.placed.#{date.strftime('%Y-%m-%d')}"
+      Setting.fetch_i(key, 0)
+    end
+
+    def self.get_orders_failed(date = Date.today)
+      key = "orders.failed.#{date.strftime('%Y-%m-%d')}"
+      Setting.fetch_i(key, 0)
+    end
     def self.track_dhan_api_call
       today = Date.today.to_s
       key = "metrics:dhan_api_calls:#{today}"

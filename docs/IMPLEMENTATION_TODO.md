@@ -582,7 +582,7 @@
 - [x] Configure structured logging (Rails logger with context)
 - [x] Log job start/finish events (JobLogging concern)
 - [x] Log alert send events (in Telegram::Notifier)
-- [ ] Log order request/response events (Phase 12)
+- [x] Log order request/response events (Phase 12) - Added comprehensive logging in Dhan::Orders
 - [x] Log API call events (Dhan, OpenAI) - via Metrics::Tracker
 
 ### Metrics
@@ -594,12 +594,12 @@
 - [x] Track job durations
 - [x] Track failed job counts
 - [x] Create `lib/tasks/metrics.rake` for viewing metrics
-- [ ] Track P&L (if executing - Phase 12)
+- [x] Track P&L (if executing - Phase 12) - Created Metrics::PnlTracker with daily/weekly/monthly tracking
 
 ### Alerts
 - [x] Configure Telegram alerts for job failures (JobLogging concern)
 - [x] Configure alerts for API rate limits (429 errors) - in error handlers
-- [ ] Configure alerts for order failures (Phase 12)
+- [x] Configure alerts for order failures (Phase 12) - Added Telegram alerts for order failures in Dhan::Orders
 - [x] Configure alerts for high error rates (MonitorJob)
 - [ ] Test all alert types (manual testing required)
 

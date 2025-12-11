@@ -98,17 +98,31 @@ module Dhan
       # Build order payload
       payload = build_order_payload
 
+      # Log order request
+      log_order_request(order, payload)
+
       # Place order via DhanHQ API
       response = client.place_order(payload)
+
+      # Log order response
+      log_order_response(order, response)
 
       # Update order record with response
       update_order_from_response(order, response)
 
       if response['status'] == 'success'
+        # Track order placement in metrics
+        Metrics::Tracker.track_order_placed(order)
+
         { success: true, order: order, dhan_response: response }
       else
         error_msg = response['message'] || 'Order placement failed'
         order.update(status: 'rejected', error_message: error_msg, dhan_response: response.to_json)
+
+        # Track order failure and send alert
+        Metrics::Tracker.track_order_failed(order)
+        send_order_failure_alert(order, error_msg)
+
         { success: false, error: error_msg, order: order }
       end
     rescue StandardError => e
@@ -181,9 +195,28 @@ module Dhan
           error_message: error_msg,
           dhan_response: { error: error_msg, backtrace: error.backtrace.first(5) }.to_json
         )
+
+        # Track order failure and send alert
+        Metrics::Tracker.track_order_failed(order)
+        send_order_failure_alert(order, error_msg)
       end
 
       { success: false, error: error_msg, order: order }
+    end
+
+    def send_order_failure_alert(order, error_msg)
+      return unless AlgoConfig.fetch([:notifications, :telegram, :notify_errors])
+
+      message = "❌ <b>Order Failed</b>\n\n"
+      message += "Symbol: #{order.symbol}\n"
+      message += "Type: #{order.transaction_type} #{order.order_type}\n"
+      message += "Quantity: #{order.quantity}\n"
+      message += "Order ID: #{order.client_order_id}\n"
+      message += "Error: #{error_msg}"
+
+      Telegram::Notifier.send_error_alert(message, context: 'Order Failure')
+    rescue StandardError => e
+      Rails.logger.error("[Dhan::Orders] Failed to send order failure alert: #{e.message}")
     end
 
     def get_dhan_client
@@ -202,6 +235,38 @@ module Dhan
     def generate_client_order_id
       timestamp = Time.current.to_i.to_s[-6..]
       "#{@transaction_type[0]}-#{@instrument.security_id}-#{timestamp}"
+    end
+
+    def log_order_request(order, payload)
+      Rails.logger.info(
+        "[Dhan::Orders] Order Request: " \
+        "client_order_id=#{order.client_order_id}, " \
+        "symbol=#{order.symbol}, " \
+        "type=#{order.transaction_type} #{order.order_type}, " \
+        "quantity=#{order.quantity}, " \
+        "price=#{order.price || 'Market'}, " \
+        "trigger_price=#{order.trigger_price || 'N/A'}, " \
+        "payload=#{payload.to_json}"
+      )
+    end
+
+    def log_order_response(order, response)
+      if response['status'] == 'success'
+        Rails.logger.info(
+          "[Dhan::Orders] Order Response (SUCCESS): " \
+          "client_order_id=#{order.client_order_id}, " \
+          "dhan_order_id=#{response['orderId']}, " \
+          "exchange_order_id=#{response['exchangeOrderId']}, " \
+          "response=#{response.to_json}"
+        )
+      else
+        Rails.logger.error(
+          "[Dhan::Orders] Order Response (FAILED): " \
+          "client_order_id=#{order.client_order_id}, " \
+          "error=#{response['message'] || 'Unknown error'}, " \
+          "response=#{response.to_json}"
+        )
+      end
     end
   end
 end
