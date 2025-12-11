@@ -130,6 +130,11 @@ module Strategies
       end
 
       def place_entry_order
+        # Check if paper trading is enabled
+        if Rails.configuration.x.paper_trading.enabled
+          return execute_paper_trade
+        end
+
         # Determine order type (MARKET for swing trading)
         order_type = 'MARKET' # Swing trading typically uses market orders
 
@@ -175,6 +180,33 @@ module Strategies
         send_order_notification(result) unless @dry_run
 
         result
+      end
+
+      def execute_paper_trade
+        log_info("Executing paper trade (paper trading mode enabled)")
+        result = PaperTrading::Executor.execute(@signal)
+
+        if result[:success]
+          {
+            success: true,
+            order: result[:position],
+            paper_trade: true,
+            message: result[:message]
+          }
+        else
+          {
+            success: false,
+            error: result[:error],
+            paper_trade: true
+          }
+        end
+      rescue StandardError => e
+        log_error("Paper trade execution failed: #{e.message}")
+        {
+          success: false,
+          error: "Paper trade failed: #{e.message}",
+          paper_trade: true
+        }
       end
 
       def create_pending_approval_order(order_type, transaction_type, order_value)
