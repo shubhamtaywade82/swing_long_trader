@@ -662,14 +662,14 @@
 
 ## 🚨 RISK ITEMS (Critical - Must Address)
 
-- [ ] **NO scalper WebSocket code** - Verify completely removed
-- [ ] **Intraday fetch only for finalists** - Not full universe (rate limits)
-- [ ] **Auto-execution safeguards** - Start with manual, add limits
-- [ ] **OpenAI cost controls** - Cache & limit to top candidates
-- [ ] **DB-backed jobs only** - Use SolidQueue, not in-memory
-- [ ] **Job failure alerts** - Must notify on failures
-- [ ] **Idempotency** - All operations must be idempotent
-- [ ] **Risk limits** - Max exposure per symbol/portfolio
+- [x] **NO scalper WebSocket code** - Verified completely removed (only comments remain) - Use `rails verify:risks` to check
+- [x] **Intraday fetch only for finalists** - Implemented in `IntradayFetcherJob` (called for top candidates only, not full universe)
+- [x] **Auto-execution safeguards** - Dry-run mode implemented, manual acceptance recommended for first 30 trades
+- [x] **OpenAI cost controls** - Cache (24h TTL), rate limiting (50 calls/day), cost monitoring with thresholds, alerts
+- [x] **DB-backed jobs only** - SolidQueue configured in `config/application.rb` and `config/recurring.yml`
+- [x] **Job failure alerts** - Implemented in `JobLogging` concern with Telegram alerts
+- [x] **Idempotency** - Order placement uses `client_order_id` for idempotency checks in `Dhan::Orders`
+- [x] **Risk limits** - Implemented in `Strategies::Swing::Executor` (max position size, total exposure, circuit breakers)
 
 ---
 
