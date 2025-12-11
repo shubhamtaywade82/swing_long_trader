@@ -165,7 +165,7 @@
 
 ### Tests
 - [x] Write unit tests for each indicator with static fixtures (spec/services/indicators/indicator_spec.rb)
-- [ ] Write unit tests for SMC components (optional - Phase 6)
+- [x] Write unit tests for SMC components (optional - Phase 6) - spec/services/smc/*_spec.rb (BOS, CHOCH, MitigationBlock, OrderBlock, FairValueGap)
 - [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---
