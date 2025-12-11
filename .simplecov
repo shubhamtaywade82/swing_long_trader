@@ -3,10 +3,7 @@
 
 SimpleCov.configure do
   # Output format
-  formatter SimpleCov::Formatter::MultiFormatter.new([
-    SimpleCov::Formatter::SimpleFormatter,
-    SimpleCov::Formatter::HTMLFormatter
-  ])
+  formatter SimpleCov::Formatter::HTMLFormatter
 
   # Coverage directory
   coverage_dir 'coverage'
@@ -24,9 +21,5 @@ SimpleCov.configure do
 
   # Minimum coverage percentage
   minimum_coverage 80
-
-  # Refuse to exit with non-zero status when minimum coverage is not met
-  # Set to false to allow tests to pass even if coverage is below threshold
-  refuse_coverage_drop false
 end
 
