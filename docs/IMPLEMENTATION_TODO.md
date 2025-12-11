@@ -542,7 +542,7 @@
 - [x] Write unit tests for Instrument model (spec/models/instrument_spec.rb)
 - [x] Write unit tests for Candles::Ingestor service (spec/services/candles/ingestor_spec.rb)
 - [x] Write unit tests for jobs (spec/jobs/application_job_spec.rb, spec/jobs/monitor_job_spec.rb, spec/jobs/candles/daily_ingestor_job_spec.rb)
-- [ ] Write unit tests for all other services (screeners, strategies, etc.)
+- [x] Write unit tests for all other services (screeners, strategies, etc.) - spec/services/screeners/final_selector_spec.rb, spec/services/screeners/swing_screener_spec.rb, spec/services/strategies/swing/signal_builder_spec.rb
 - [x] Write unit tests for all other models (BacktestRun, BacktestPosition, Setting) - spec/models/backtest_run_spec.rb, spec/models/backtest_position_spec.rb, spec/models/setting_spec.rb
 - [x] Write integration tests with VCR cassettes for Dhan responses (spec/integration/candles_ingestion_spec.rb)
 - [x] Write integration tests with VCR cassettes for OpenAI responses (spec/services/openai/client_spec.rb)
