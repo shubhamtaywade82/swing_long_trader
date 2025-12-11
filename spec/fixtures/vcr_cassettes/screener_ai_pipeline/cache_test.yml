@@ -1,0 +1,84 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.dhan.co/v2/marketfeed/ltp
+    body:
+      encoding: UTF-8
+      string: '{"NSE_EQ":[11536]}'
+    headers:
+      User-Agent:
+      - Faraday v1.10.4
+      Content-Type:
+      - application/json
+      Accept:
+      - application/json
+      Access-Token:
+      - "<DHANHQ_ACCESS_TOKEN>"
+      Client-Id:
+      - "<DHANHQ_CLIENT_ID>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Thu, 11 Dec 2025 18:32:49 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '70'
+      Connection:
+      - keep-alive
+      Content-Security-Policy:
+      - frame-ancestors 'none'
+      X-Frame-Options:
+      - SAMEORIGIN
+    body:
+      encoding: UTF-8
+      string: '{"data":{"NSE_EQ":{"11536":{"last_price":3191.9}}},"status":"success"}'
+  recorded_at: Thu, 11 Dec 2025 18:32:49 GMT
+- request:
+    method: post
+    uri: https://api.dhan.co/v2/marketfeed/ltp
+    body:
+      encoding: UTF-8
+      string: '{"NSE_EQ":[11536]}'
+    headers:
+      User-Agent:
+      - Faraday v1.10.4
+      Content-Type:
+      - application/json
+      Accept:
+      - application/json
+      Access-Token:
+      - "<DHANHQ_ACCESS_TOKEN>"
+      Client-Id:
+      - "<DHANHQ_CLIENT_ID>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 429
+      message: Too Many Requests
+    headers:
+      Date:
+      - Thu, 11 Dec 2025 18:32:49 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '110'
+      Connection:
+      - keep-alive
+      Content-Security-Policy:
+      - frame-ancestors 'none'
+      X-Frame-Options:
+      - SAMEORIGIN
+    body:
+      encoding: UTF-8
+      string: '{"data":{"805":"Too many requests. Further requests may result in the
+        user being blocked."},"status":"failed"}'
+  recorded_at: Thu, 11 Dec 2025 18:32:49 GMT
+recorded_with: VCR 6.3.1
