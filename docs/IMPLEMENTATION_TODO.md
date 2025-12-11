@@ -526,8 +526,8 @@
 - [ ] Write unit tests for all other models (BacktestRun, BacktestPosition, etc.)
 - [x] Write integration tests with mocked Dhan responses (candles_ingestion_test.rb)
 - [x] Write integration tests with mocked OpenAI responses (openai/client_test.rb)
-- [ ] Write contract tests for Telegram messages
-- [ ] Write smoke tests for rake tasks
+- [x] Write contract tests for Telegram messages (test/contracts/telegram_messages_test.rb)
+- [x] Write smoke tests for rake tasks (test/smoke/rake_tasks_test.rb)
 - [ ] Achieve >80% code coverage
 
 ### CI/CD Setup
