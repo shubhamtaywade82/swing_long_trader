@@ -374,6 +374,15 @@ See [Environment Setup Guide](ENV_SETUP.md) for complete list:
 - `rails test:risk:circuit_breakers` - Test circuit breakers
 - `rails test:risk:all` - Run all risk tests
 
+**Test Runner:**
+- `rails test:all` - Run all tests and code quality checks (RSpec, RuboCop, Brakeman, Coverage)
+- `rails test:rspec` - Run RSpec tests only
+- `rails test:rubocop` - Run RuboCop only
+- `rails test:brakeman` - Run Brakeman only
+- `rails test:coverage` - Check code coverage
+- `rails test:verify_infrastructure` - Verify test infrastructure (VCR, WebMock, Database Cleaner)
+- `rails test:list` - List all test files
+
 **Monitoring:**
 - `rails metrics:daily` - Show daily metrics
 - `rails metrics:weekly` - Show weekly metrics
