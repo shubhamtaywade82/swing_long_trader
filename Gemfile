@@ -82,12 +82,13 @@ group :development, :test do
   gem "rubocop-rails-omakase", require: false
 
   # Testing
-  gem "minitest", "~> 5.18"
-  gem "minitest-rails"
+  gem "rspec-rails", "~> 7.0"
+  gem "database_cleaner-active_record", "~> 2.2"
   gem "webmock", "~> 3.18"
   gem "vcr", "~> 6.2"
   gem "factory_bot_rails", "~> 6.4"
   gem "shoulda-matchers", "~> 6.0"
+  gem "rubocop-rspec", require: false
 end
 
 group :development do

@@ -535,8 +535,8 @@
 - [x] Configure VCR in spec/support/vcr.rb (filter sensitive data, set cassette directory)
 - [x] Configure WebMock in spec/support/webmock.rb (disable net connect, allow localhost)
 - [x] Create factories for Instrument and CandleSeriesRecord (FactoryBot)
-- [ ] Create VCR cassettes directory structure (spec/fixtures/vcr_cassettes/)
-- [ ] Document VCR cassette naming conventions
+- [x] Create VCR cassettes directory structure (spec/fixtures/vcr_cassettes/)
+- [x] Document VCR cassette naming conventions (docs/VCR_CASSETTE_NAMING.md)
 
 ### Test Coverage
 - [x] Write unit tests for Instrument model (spec/models/instrument_spec.rb)
