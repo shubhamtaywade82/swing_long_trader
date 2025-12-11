@@ -167,7 +167,7 @@ class Instrument < ApplicationRecord
 
     { last_price: data["last_price"], oc: filtered_data }
   rescue StandardError => e
-    error_info = Concerns::DhanhqErrorHandler.handle_dhanhq_error(
+    error_info = DhanhqErrorHandler.handle_dhanhq_error(
       e,
       context: "fetch_option_chain(Instrument #{security_id}, expiry: #{expiry})"
     )
