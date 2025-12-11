@@ -403,7 +403,7 @@
 - [x] Write unit tests for position tracker (position logic tested in backtester)
 - [x] Write unit tests for result analyzer (result_analyzer_spec.rb)
 - [x] Write unit tests for data loader (data_loader_spec.rb)
-- [ ] Write integration tests with sample historical data - use VCR cassettes for API responses
+- [x] Write integration tests with sample historical data - Created backtesting_integration_spec.rb with VCR support
 - [ ] Test walk-forward logic (no look-ahead bias) - manual verification needed
 - [x] Test performance metrics calculations (result_analyzer_spec.rb)
 - [x] Test edge cases (no trades, all losses, all wins) - Added comprehensive edge case tests in swing_backtester_spec.rb
