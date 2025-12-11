@@ -184,7 +184,7 @@ production:
   daily_candle_ingestion:
     class: Candles::DailyIngestorJob
     schedule: "0 7:30 * * *" # 07:30 IST daily
-  
+
   swing_screener:
     class: Screeners::SwingScreenerJob
     schedule: "0 7:40 * * 1-5" # 07:40 IST weekdays
