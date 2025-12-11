@@ -27,15 +27,19 @@ RSpec.describe 'Candles Ingestion', type: :integration do
         }
       ]
 
-      # Stub the historical_ohlc method
-      allow(instrument).to receive(:historical_ohlc).and_return(mock_candles)
+      # Stub the historical_ohlc method on any instance (since find_each reloads the instrument)
+      allow_any_instance_of(Instrument).to receive(:historical_ohlc).with(
+        from_date: anything,
+        to_date: anything,
+        oi: false
+      ).and_return(mock_candles)
 
       result = Candles::DailyIngestor.call(
         instruments: Instrument.where(id: instrument.id),
         days_back: 2
       )
 
-      expect(result[:success]).to be > 0
+      expect(result[:success]).to be > 0, "Expected success > 0, got: #{result.inspect}"
       expect(CandleSeriesRecord.where(instrument: instrument, timeframe: '1D').count).to eq(2)
     end
   end
@@ -67,7 +71,11 @@ RSpec.describe 'Candles Ingestion', type: :integration do
         }
       end
 
-      allow(instrument).to receive(:historical_ohlc).and_return(mock_daily)
+      allow_any_instance_of(Instrument).to receive(:historical_ohlc).with(
+        from_date: anything,
+        to_date: anything,
+        oi: false
+      ).and_return(mock_daily)
 
       result = Candles::WeeklyIngestor.call(
         instruments: Instrument.where(id: instrument.id),

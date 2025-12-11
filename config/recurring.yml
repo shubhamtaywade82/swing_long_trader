@@ -15,38 +15,38 @@
 #     schedule: at 5am every day
 
 production:
-  # Daily candle ingestion - 07:30 IST daily
+  # Daily candle ingestion - 07:30 IST daily (cron: 30 7 * * *)
   daily_candle_ingestion:
     class: Candles::DailyIngestorJob
-    schedule: at 7:30am every day
+    schedule: "30 7 * * *"
     queue: default
     priority: 0
 
-  # Weekly candle ingestion - 07:30 IST Monday
+  # Weekly candle ingestion - 07:30 IST Monday (cron: 30 7 * * 1)
   weekly_candle_ingestion:
     class: Candles::WeeklyIngestorJob
-    schedule: at 7:30am on Monday
+    schedule: "30 7 * * 1"
     queue: default
     priority: 0
 
-  # Swing screener - 07:40 IST weekdays (Monday-Friday)
+  # Swing screener - 07:40 IST weekdays Monday-Friday (cron: 40 7 * * 1-5)
   swing_screener:
     class: Screeners::SwingScreenerJob
-    schedule: at 7:40am on weekdays
+    schedule: "40 7 * * 1-5"
     queue: default
     priority: 0
 
-  # Monitor job - Every 30 minutes during market hours (9:00 AM - 3:30 PM IST, weekdays)
+  # Monitor job - Every 30 minutes during market hours 9:00 AM - 3:30 PM IST, weekdays (cron: */30 9-15 * * 1-5)
   monitor_job:
     class: MonitorJob
-    schedule: every 30 minutes from 9:00am to 3:30pm on weekdays
+    schedule: "*/30 9-15 * * 1-5"
     queue: default
     priority: 1
 
-  # Clean finished SolidQueue jobs - Every hour at minute 12
+  # Clean finished SolidQueue jobs - Every hour at minute 12 (cron: 12 * * * *)
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
-    schedule: every hour at minute 12
+    schedule: "12 * * * *"
     priority: 2
 
   # Optional: Intraday fetcher (commented out - on-demand only)
@@ -74,29 +74,29 @@ development:
   # Same as production for development testing
   daily_candle_ingestion:
     class: Candles::DailyIngestorJob
-    schedule: at 7:30am every day
+    schedule: "30 7 * * *"
     queue: default
     priority: 0
 
   weekly_candle_ingestion:
     class: Candles::WeeklyIngestorJob
-    schedule: at 7:30am on Monday
+    schedule: "30 7 * * 1"
     queue: default
     priority: 0
 
   swing_screener:
     class: Screeners::SwingScreenerJob
-    schedule: at 7:40am on weekdays
+    schedule: "40 7 * * 1-5"
     queue: default
     priority: 0
 
   monitor_job:
     class: MonitorJob
-    schedule: every 30 minutes from 9:00am to 3:30pm on weekdays
+    schedule: "*/30 9-15 * * 1-5"
     queue: default
     priority: 1
 
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
-    schedule: every hour at minute 12
+    schedule: "12 * * * *"
     priority: 2
