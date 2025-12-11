@@ -377,12 +377,12 @@
 - [x] Compare in-sample vs out-of-sample results
 
 ### Parameter Optimization (Optional)
-- [ ] Create `app/services/backtesting/optimizer.rb`
-- [ ] Implement grid search for strategy parameters
-- [ ] Implement genetic algorithm optimization (optional)
-- [ ] Implement parameter sensitivity analysis
-- [ ] Avoid overfitting (use out-of-sample validation)
-- [ ] Store optimization results
+- [x] Create `app/services/backtesting/optimizer.rb`
+- [x] Implement grid search for strategy parameters
+- [ ] Implement genetic algorithm optimization (optional - complex, can be added later)
+- [x] Implement parameter sensitivity analysis
+- [x] Avoid overfitting (use walk-forward analysis with out-of-sample validation)
+- [ ] Store optimization results (can be saved to database or file)
 
 ### Monte Carlo Simulation (Optional)
 - [ ] Create `app/services/backtesting/monte_carlo.rb`
@@ -393,7 +393,7 @@
 
 ### Integration with Strategy Engine
 - [x] Integrate backtester with `Strategies::Swing::Engine` (SwingBacktester uses Engine.call)
-- [ ] Integrate backtester with `Strategies::LongTerm::Evaluator` (requires LongTermBacktester)
+- [x] Integrate backtester with `Strategies::LongTerm::Evaluator` (LongTermBacktester uses Evaluator.call)
 - [x] Use same signal generation logic as live trading (uses Strategies::Swing::Engine)
 - [ ] Ensure backtest signals match live signals (validation) - manual testing required
 
