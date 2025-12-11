@@ -385,11 +385,11 @@
 - [ ] Store optimization results (can be saved to database or file)
 
 ### Monte Carlo Simulation (Optional)
-- [ ] Create `app/services/backtesting/monte_carlo.rb`
-- [ ] Implement trade sequence randomization
-- [ ] Calculate probability distributions
-- [ ] Generate confidence intervals
-- [ ] Analyze worst-case scenarios
+- [x] Create `app/services/backtesting/monte_carlo.rb`
+- [x] Implement trade sequence randomization
+- [x] Calculate probability distributions
+- [x] Generate confidence intervals
+- [x] Analyze worst-case scenarios
 
 ### Integration with Strategy Engine
 - [x] Integrate backtester with `Strategies::Swing::Engine` (SwingBacktester uses Engine.call)
