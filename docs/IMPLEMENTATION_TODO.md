@@ -487,15 +487,15 @@
 ### Jobs to Create
 - [x] Create `app/jobs/candles/daily_ingestor_job.rb`
 - [x] Create `app/jobs/candles/weekly_ingestor_job.rb`
-- [ ] Create `app/jobs/candles/intraday_fetcher_job.rb` (optional - on-demand)
+- [x] Create `app/jobs/candles/intraday_fetcher_job.rb` (optional - on-demand)
 - [x] Create `app/jobs/screeners/swing_screener_job.rb`
 - [x] Create `app/jobs/screeners/ai_ranker_job.rb`
 - [x] Create `app/jobs/strategies/swing_analysis_job.rb`
-- [ ] Create `app/jobs/strategies/swing_entry_monitor_job.rb` (optional - for live trading)
-- [ ] Create `app/jobs/strategies/swing_exit_monitor_job.rb` (optional - for live trading)
-- [ ] Create `app/jobs/notifier_job.rb` (optional - can use Telegram::Notifier directly)
+- [x] Create `app/jobs/strategies/swing_entry_monitor_job.rb` (optional - for live trading)
+- [x] Create `app/jobs/strategies/swing_exit_monitor_job.rb` (optional - for live trading)
+- [x] Create `app/jobs/notifier_job.rb` (optional - can use Telegram::Notifier directly)
 - [x] Create `app/jobs/monitor_job.rb` (health checks)
-- [ ] Create `app/jobs/executor_job.rb` (optional, order placement - Phase 12)
+- [x] Create `app/jobs/executor_job.rb` (optional, order placement - Phase 12)
 
 ### Scheduling
 - [x] Create `config/recurring.yml` with job schedules
