@@ -64,13 +64,19 @@ namespace :backtest do
     puts "📊 Testing with #{instruments.size} instruments..."
     puts ""
 
+    # Get trailing stop config (optional)
+    swing_config = AlgoConfig.fetch(:swing_trading) || {}
+    exit_config = swing_config.dig(:strategy, :exit_conditions) || {}
+    trailing_stop_pct = exit_config[:trailing_stop_pct]
+
     # Run backtest
     result = Backtesting::SwingBacktester.call(
       instruments: instruments,
       from_date: from_date,
       to_date: to_date,
       initial_capital: initial_capital,
-      risk_per_trade: 2.0
+      risk_per_trade: 2.0,
+      trailing_stop_pct: trailing_stop_pct
     )
 
     unless result[:success]

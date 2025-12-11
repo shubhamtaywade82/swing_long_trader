@@ -13,7 +13,7 @@ module Backtesting
       @equity_curve = [{ date: nil, equity: @initial_capital }]
     end
 
-    def open_position(instrument_id:, entry_date:, entry_price:, quantity:, direction:, stop_loss:, take_profit:)
+    def open_position(instrument_id:, entry_date:, entry_price:, quantity:, direction:, stop_loss:, take_profit:, trailing_stop_pct: nil, trailing_stop_amount: nil)
       cost = entry_price * quantity
       return false if cost > @current_capital
 
@@ -24,7 +24,9 @@ module Backtesting
         quantity: quantity,
         direction: direction,
         stop_loss: stop_loss,
-        take_profit: take_profit
+        take_profit: take_profit,
+        trailing_stop_pct: trailing_stop_pct,
+        trailing_stop_amount: trailing_stop_amount
       )
 
       @positions[instrument_id] = position

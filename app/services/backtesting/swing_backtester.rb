@@ -3,22 +3,26 @@
 module Backtesting
   # Swing trading backtester
   class SwingBacktester < ApplicationService
-    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0)
+    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0, trailing_stop_pct: nil, trailing_stop_amount: nil)
       new(
         instruments: instruments,
         from_date: from_date,
         to_date: to_date,
         initial_capital: initial_capital,
-        risk_per_trade: risk_per_trade
+        risk_per_trade: risk_per_trade,
+        trailing_stop_pct: trailing_stop_pct,
+        trailing_stop_amount: trailing_stop_amount
       ).call
     end
 
-    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0)
+    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0, trailing_stop_pct: nil, trailing_stop_amount: nil)
       @instruments = instruments
       @from_date = from_date
       @to_date = to_date
       @initial_capital = initial_capital
       @risk_per_trade = risk_per_trade
+      @trailing_stop_pct = trailing_stop_pct
+      @trailing_stop_amount = trailing_stop_amount
       @portfolio = Portfolio.new(initial_capital: @initial_capital)
       @positions = []
     end
@@ -125,7 +129,9 @@ module Backtesting
         quantity: quantity,
         direction: direction,
         stop_loss: stop_loss,
-        take_profit: take_profit
+        take_profit: take_profit,
+        trailing_stop_pct: @trailing_stop_pct,
+        trailing_stop_amount: @trailing_stop_amount
       )
 
       return unless success

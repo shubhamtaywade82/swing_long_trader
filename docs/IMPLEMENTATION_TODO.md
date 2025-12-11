@@ -309,7 +309,7 @@
 - [x] Track entry/exit timestamps and prices
 - [x] Calculate P&L per trade
 - [x] Calculate holding period per trade
-- [ ] Implement trailing stop (optional enhancement)
+- [x] Implement trailing stop (optional enhancement) - Added trailing stop support with percentage or fixed amount, tracks highest/lowest price, updates stop loss dynamically
 - [ ] Handle partial fills and slippage simulation (optional)
 
 ### Long-Term Trading Backtesting

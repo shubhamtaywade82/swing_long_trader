@@ -4,19 +4,24 @@ module Backtesting
   # Virtual position tracker for backtesting
   class Position
     attr_reader :instrument_id, :entry_date, :entry_price, :quantity, :direction, :stop_loss, :take_profit
-    attr_accessor :exit_date, :exit_price, :exit_reason
+    attr_accessor :exit_date, :exit_price, :exit_reason, :trailing_stop_pct, :trailing_stop_amount
 
-    def initialize(instrument_id:, entry_date:, entry_price:, quantity:, direction:, stop_loss:, take_profit:)
+    def initialize(instrument_id:, entry_date:, entry_price:, quantity:, direction:, stop_loss:, take_profit:, trailing_stop_pct: nil, trailing_stop_amount: nil)
       @instrument_id = instrument_id
       @entry_date = entry_date
       @entry_price = entry_price.to_f
       @quantity = quantity.to_i
       @direction = direction.to_sym
+      @initial_stop_loss = stop_loss.to_f
       @stop_loss = stop_loss.to_f
       @take_profit = take_profit.to_f
+      @trailing_stop_pct = trailing_stop_pct
+      @trailing_stop_amount = trailing_stop_amount
       @exit_date = nil
       @exit_price = nil
       @exit_reason = nil
+      @highest_price = entry_price.to_f # Track highest price for long positions
+      @lowest_price = entry_price.to_f  # Track lowest price for short positions
     end
 
     def close(exit_date:, exit_price:, exit_reason:)
@@ -65,11 +70,16 @@ module Backtesting
     def check_exit(current_price, current_date)
       return nil if closed?
 
-      # Check stop loss
+      # Update trailing stop if enabled
+      update_trailing_stop(current_price) if trailing_stop_enabled?
+
+      # Check stop loss (may have been updated by trailing stop)
       if @direction == :long && current_price <= @stop_loss
-        return { exit_price: @stop_loss, exit_reason: 'stop_loss' }
+        reason = (@stop_loss != @initial_stop_loss) ? 'trailing_stop' : 'stop_loss'
+        return { exit_price: @stop_loss, exit_reason: reason }
       elsif @direction == :short && current_price >= @stop_loss
-        return { exit_price: @stop_loss, exit_reason: 'stop_loss' }
+        reason = (@stop_loss != @initial_stop_loss) ? 'trailing_stop' : 'stop_loss'
+        return { exit_price: @stop_loss, exit_reason: reason }
       end
 
       # Check take profit
@@ -80,6 +90,47 @@ module Backtesting
       end
 
       nil
+    end
+
+    def update_trailing_stop(current_price)
+      return unless trailing_stop_enabled?
+
+      case @direction
+      when :long
+        # Update highest price if current price is higher
+        @highest_price = [@highest_price, current_price].max
+
+        # Calculate new trailing stop
+        new_stop = if @trailing_stop_pct
+                     @highest_price * (1 - @trailing_stop_pct / 100.0)
+                   elsif @trailing_stop_amount
+                     @highest_price - @trailing_stop_amount
+                   else
+                     @stop_loss
+                   end
+
+        # Only move stop loss up (never down)
+        @stop_loss = [new_stop, @stop_loss].max
+      when :short
+        # Update lowest price if current price is lower
+        @lowest_price = [@lowest_price, current_price].min
+
+        # Calculate new trailing stop
+        new_stop = if @trailing_stop_pct
+                     @lowest_price * (1 + @trailing_stop_pct / 100.0)
+                   elsif @trailing_stop_amount
+                     @lowest_price + @trailing_stop_amount
+                   else
+                     @stop_loss
+                   end
+
+        # Only move stop loss down (never up)
+        @stop_loss = [new_stop, @stop_loss].min
+      end
+    end
+
+    def trailing_stop_enabled?
+      @trailing_stop_pct.present? || @trailing_stop_amount.present?
     end
 
     def holding_days(current_date = nil)
