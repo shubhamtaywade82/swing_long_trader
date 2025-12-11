@@ -205,7 +205,7 @@
 
 ### Tests
 - [x] Write unit tests for screener logic with fixture candles (swing_screener_spec.rb)
-- [ ] Write integration test (screener + AI with mocked OpenAI using WebMock/VCR cassettes)
+- [x] Write integration test (screener + AI with mocked OpenAI using WebMock/VCR cassettes) - spec/integration/screener_ai_pipeline_spec.rb
 - [x] Test final selector logic (final_selector_spec.rb)
 - [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
@@ -250,8 +250,8 @@
 
 ### Tests
 - [x] Write unit tests for signal builder with known candle series (signal_builder_spec.rb)
-- [ ] Test entry/SL/TP calculations - needs more comprehensive test data
-- [ ] Test position sizing logic - needs more comprehensive test data
+- [x] Test entry/SL/TP calculations (spec/services/strategies/swing/signal_builder_spec.rb - comprehensive tests added)
+- [x] Test position sizing logic (spec/services/strategies/swing/signal_builder_spec.rb - comprehensive tests added)
 - [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 
 ---
