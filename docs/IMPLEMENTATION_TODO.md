@@ -617,7 +617,7 @@
 - [x] Document how to add instruments
 - [x] Document how to debug SolidQueue jobs
 - [x] Document environment variables
-- [ ] Document API endpoints (if any) - N/A (no API endpoints yet)
+- [x] Document API endpoints (if any) - N/A (no API endpoints yet) - Rails API mode, no REST endpoints needed
 
 ---
 
