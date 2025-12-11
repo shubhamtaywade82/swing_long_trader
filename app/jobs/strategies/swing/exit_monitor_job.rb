@@ -163,4 +163,3 @@ module Strategies
     end
   end
 end
-
