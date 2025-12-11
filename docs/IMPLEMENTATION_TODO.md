@@ -313,12 +313,12 @@
 - [x] Handle partial fills and slippage simulation (optional) - Implemented slippage and commission handling in Portfolio, applied to entry/exit prices, tracked separately in results
 
 ### Long-Term Trading Backtesting
-- [ ] Create `app/services/backtesting/long_term_backtester.rb`
-- [ ] Implement weekly/monthly rebalancing logic
-- [ ] Implement position holding for minimum period (30+ days)
-- [ ] Implement exit conditions (profit target, stop loss, time-based)
-- [ ] Track portfolio composition over time
-- [ ] Calculate portfolio-level metrics
+- [x] Create `app/services/backtesting/long_term_backtester.rb`
+- [x] Implement weekly/monthly rebalancing logic
+- [x] Implement position holding for minimum period (30+ days)
+- [x] Implement exit conditions (profit target, stop loss, time-based)
+- [x] Track portfolio composition over time
+- [x] Calculate portfolio-level metrics
 
 ### Performance Metrics & Analysis
 - [x] Create `app/services/backtesting/result_analyzer.rb`
