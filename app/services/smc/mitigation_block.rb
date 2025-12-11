@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SMC
+module Smc
   # Mitigation Block Detection
   # Mitigation blocks are areas where price previously rejected, indicating potential support/resistance
   class MitigationBlock

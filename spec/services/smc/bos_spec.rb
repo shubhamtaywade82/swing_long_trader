@@ -3,7 +3,7 @@
 require 'rails_helper'
 require_relative '../../../app/services/smc/bos'
 
-RSpec.describe SMC::BOS do
+RSpec.describe Smc::Bos do
   describe '.detect' do
     context 'with insufficient candles' do
       it 'returns nil for nil input' do

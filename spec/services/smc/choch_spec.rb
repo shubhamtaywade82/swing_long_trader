@@ -3,7 +3,7 @@
 require 'rails_helper'
 require_relative '../../../app/services/smc/choch'
 
-RSpec.describe SMC::CHOCH do
+RSpec.describe Smc::Choch do
   describe '.detect' do
     context 'with insufficient candles' do
       it 'returns nil for nil input' do

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SMC
+module Smc
   # SMC Structure Validator
   # Validates market structure using Smart Money Concepts
   class StructureValidator

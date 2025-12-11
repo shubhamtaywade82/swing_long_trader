@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SMC
+module Smc
   # Order Block Detection
   # Order blocks are the last opposing candle before a strong move, indicating institutional orders
   class OrderBlock

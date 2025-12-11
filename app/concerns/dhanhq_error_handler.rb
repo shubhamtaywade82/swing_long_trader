@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-module Concerns
-  # Handles DhanHQ API errors, especially authentication/token expiry
-  module DhanhqErrorHandler
-    extend ActiveSupport::Concern
+# Handles DhanHQ API errors, especially authentication/token expiry
+module DhanhqErrorHandler
+  extend ActiveSupport::Concern
 
     # Error codes that indicate token expiry
     TOKEN_EXPIRY_CODES = %w[DH-901 401].freeze
@@ -105,4 +104,3 @@ module Concerns
       end
     end
   end
-end

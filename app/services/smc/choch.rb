@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-module SMC
+module Smc
   # Change of Character (CHOCH) Detection
   # CHOCH occurs when market structure changes from bullish to bearish or vice versa
-  class CHOCH
+  class Choch
     # Detect CHOCH in candle array
     # @param candles [Array<Candle>] Array of candles
     # @param lookback [Integer] Number of candles to analyze (default: 20)

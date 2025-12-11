@@ -163,7 +163,7 @@ module Strategies
                       :long # Default
                     end
 
-        SMC::StructureValidator.validate(
+        Smc::StructureValidator.validate(
           @daily_series.candles,
           direction: direction,
           config: smc_config

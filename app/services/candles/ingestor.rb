@@ -57,22 +57,15 @@ module Candles
       # Check if candle already exists
       # For daily candles, normalize existing timestamps to beginning_of_day for comparison
       if timeframe == '1D'
-        # Use date comparison to handle any timestamp within the same day
-        # First try exact match, then fall back to date comparison
-        existing = CandleSeriesRecord.find_by(
+        # Use range query to handle timestamp precision differences (microseconds, etc.)
+        # The normalized timestamp should be at the beginning of the day
+        day_start = normalized_timestamp.beginning_of_day
+        day_end = normalized_timestamp.end_of_day
+        # Use range syntax which is more reliable for timestamp comparisons
+        existing = CandleSeriesRecord.where(
           instrument_id: instrument.id,
-          timeframe: timeframe,
-          timestamp: normalized_timestamp
-        )
-
-        # If not found, try date-based comparison
-        unless existing
-          target_date = normalized_timestamp.to_date
-          existing = CandleSeriesRecord.where(
-            instrument_id: instrument.id,
-            timeframe: timeframe
-          ).where('DATE(timestamp) = ?', target_date).first
-        end
+          timeframe: timeframe
+        ).where(timestamp: day_start..day_end).first
       else
         existing = CandleSeriesRecord.find_by(
           instrument_id: instrument.id,

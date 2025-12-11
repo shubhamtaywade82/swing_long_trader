@@ -34,7 +34,7 @@ namespace :verify do
       'Strategies::Swing::Executor',
       'Dhan::Orders',
       'Orders::Approval',
-      'OpenAI::Client',
+      'Openai::Service',
       'Telegram::Notifier'
     ]
     missing_services = services.reject { |s| Object.const_defined?(s.split('::').inject(Object) { |o, c| o.const_get(c) }) rescue false }
@@ -83,12 +83,12 @@ namespace :verify do
     # 5. Check SMC Services
     puts "\n5. Checking SMC Components..."
     smc_services = [
-      'SMC::BOS',
-      'SMC::CHOCH',
-      'SMC::OrderBlock',
-      'SMC::FairValueGap',
-      'SMC::MitigationBlock',
-      'SMC::StructureValidator'
+      'Smc::Bos',
+      'Smc::Choch',
+      'Smc::OrderBlock',
+      'Smc::FairValueGap',
+      'Smc::MitigationBlock',
+      'Smc::StructureValidator'
     ]
     missing_smc = smc_services.reject { |s| Object.const_defined?(s.split('::').inject(Object) { |o, c| o.const_get(c) }) rescue false }
     if missing_smc.empty?

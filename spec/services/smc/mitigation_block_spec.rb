@@ -3,7 +3,7 @@
 require 'rails_helper'
 require_relative '../../../app/services/smc/mitigation_block'
 
-RSpec.describe SMC::MitigationBlock do
+RSpec.describe Smc::MitigationBlock do
   describe '.detect' do
     context 'with insufficient candles' do
       it 'returns empty array for nil input' do

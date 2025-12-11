@@ -94,11 +94,11 @@ This document outlines manual verification steps that require user action and ca
 2. Test SMC components:
    ```ruby
    # Test BOS detection
-   bos_result = SMC::BOS.detect(daily_series.candles)
+   bos_result = Smc::Bos.detect(daily_series.candles)
    puts bos_result
 
    # Test CHOCH detection
-   choch_result = SMC::CHOCH.detect(daily_series.candles)
+   choch_result = Smc::Choch.detect(daily_series.candles)
    puts choch_result
 
    # Test Order Block detection

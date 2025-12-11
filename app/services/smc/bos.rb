@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-module SMC
+module Smc
   # Break of Structure (BOS) Detection
   # BOS occurs when price breaks a previous swing high (bullish) or swing low (bearish)
-  class BOS
+  class Bos
     # Detect BOS in candle array
     # @param candles [Array<Candle>] Array of candles
     # @param lookback [Integer] Number of candles to look back for swing points (default: 20)

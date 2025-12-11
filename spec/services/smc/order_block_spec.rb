@@ -3,7 +3,7 @@
 require 'rails_helper'
 require_relative '../../../app/services/smc/order_block'
 
-RSpec.describe SMC::OrderBlock do
+RSpec.describe Smc::OrderBlock do
   describe '.detect' do
     context 'with insufficient candles' do
       it 'returns empty array for nil input' do

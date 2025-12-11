@@ -3,7 +3,7 @@
 require 'rails_helper'
 require_relative '../../../app/services/smc/fair_value_gap'
 
-RSpec.describe SMC::FairValueGap do
+RSpec.describe Smc::FairValueGap do
   describe '.detect' do
     context 'with insufficient candles' do
       it 'returns empty array for nil input' do

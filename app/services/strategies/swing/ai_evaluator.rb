@@ -20,7 +20,7 @@ module Strategies
         prompt = build_prompt
 
         # Call OpenAI
-        result = OpenAI::Client.call(
+        result = Openai::Service.call(
           prompt: prompt,
           model: @config[:model] || 'gpt-4o-mini',
           temperature: @config[:temperature] || 0.3

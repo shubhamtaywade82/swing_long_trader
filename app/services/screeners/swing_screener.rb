@@ -259,7 +259,7 @@ module Screeners
                     :long # Default
                   end
 
-      SMC::StructureValidator.validate(
+      Smc::StructureValidator.validate(
         series.candles,
         direction: direction,
         config: smc_config

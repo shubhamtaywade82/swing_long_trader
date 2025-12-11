@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-module OpenAI
-  class Client < ApplicationService
+module Openai
+  class Service < ApplicationService
     MAX_CALLS_PER_DAY = 50
     DEFAULT_MODEL = 'gpt-4o-mini'
     DEFAULT_TEMPERATURE = 0.3
@@ -52,7 +52,7 @@ module OpenAI
         cached: false
       }
     rescue StandardError => e
-      Rails.logger.error("[OpenAI::Client] Error: #{e.message}")
+      Rails.logger.error("[Openai::Service] Error: #{e.message}")
       { success: false, error: e.message }
     end
 
@@ -91,7 +91,7 @@ module OpenAI
         }
       }
     rescue StandardError => e
-      Rails.logger.error("[OpenAI::Client] API error: #{e.message}")
+      Rails.logger.error("[Openai::Service] API error: #{e.message}")
       nil
     end
 
@@ -229,10 +229,10 @@ module OpenAI
       # Send alerts if any thresholds exceeded
       if alerts.any?
         message = "💰 OpenAI Cost Alert\n\n" + alerts.join("\n")
-        Telegram::Notifier.send_error_alert(message, context: 'OpenAI::Client') if defined?(Telegram::Notifier)
+        Telegram::Notifier.send_error_alert(message, context: 'Openai::Service') if defined?(Telegram::Notifier)
       end
     rescue StandardError => e
-      Rails.logger.warn("[OpenAI::Client] Cost threshold check failed: #{e.message}")
+      Rails.logger.warn("[Openai::Service] Cost threshold check failed: #{e.message}")
     end
 
     def calculate_weekly_cost(week_start, current_date)

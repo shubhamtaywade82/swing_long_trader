@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module SMC
+module Smc
   # Fair Value Gap (FVG) Detection
   # FVG is a gap between three candles where the middle candle doesn't overlap with the outer candles
   class FairValueGap
