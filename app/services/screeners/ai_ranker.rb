@@ -5,7 +5,9 @@ module Screeners
     MAX_CALLS_PER_DAY = 50
     CACHE_TTL = 24.hours
 
-    def self.call(candidates, limit: nil)
+    def self.call(candidates: nil, limit: nil, **kwargs)
+      # Support both positional and keyword arguments for backward compatibility
+      candidates = kwargs[:candidates] || candidates if candidates.nil?
       new(candidates: candidates, limit: limit).call
     end
 

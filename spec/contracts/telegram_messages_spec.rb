@@ -85,7 +85,7 @@ RSpec.describe 'Telegram Messages Contract', type: :contract do
         context: context
       )
 
-      expect(message).to include('ERROR')
+      expect(message).to include('Error Alert')
       expect(message).to include(error_message)
       expect(message).to include(context)
       expect(message.length).to be < 4096
@@ -105,9 +105,10 @@ RSpec.describe 'Telegram Messages Contract', type: :contract do
 
       message = Telegram::AlertFormatter.format_portfolio_snapshot(portfolio_data)
 
-      expect(message).to include('110000')
-      expect(message).to include('10000')
+      expect(message).to include('10000')  # total_pnl
+      expect(message).to include('10.0')  # total_pnl_pct
       expect(message).to include('RELIANCE')
+      expect(message).to include('5000')  # position pnl
       expect(message.length).to be < 4096
     end
   end

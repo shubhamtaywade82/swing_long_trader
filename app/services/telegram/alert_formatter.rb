@@ -93,7 +93,8 @@ module Telegram
       symbol = signal[:symbol] || 'N/A'
       entry_price = signal[:entry_price] || 0
       pnl_value = pnl.to_f
-      pnl_pct = entry_price > 0 ? ((pnl_value / (entry_price * signal[:qty])) * 100).round(2) : 0
+      qty = signal[:qty] || 1
+      pnl_pct = entry_price > 0 ? ((pnl_value / (entry_price * qty)) * 100).round(2) : 0
 
       emoji = if pnl_value.positive?
                 '✅'

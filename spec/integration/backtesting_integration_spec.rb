@@ -319,7 +319,7 @@ RSpec.describe 'Backtesting Integration', type: :integration do
       expect(result[:success]).to be true
       expect(result[:windows]).to be_an(Array)
       expect(result[:windows].size).to be > 0
-      expect(result[:aggregated_results]).to be_present
+      expect(result[:aggregated]).to be_present
     end
   end
 

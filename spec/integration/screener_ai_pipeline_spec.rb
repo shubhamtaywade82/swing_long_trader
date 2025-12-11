@@ -148,12 +148,33 @@ RSpec.describe 'Screener + AI Ranking Pipeline Integration', type: :integration 
     end
 
     it 'caches AI ranking results' do
+      # Clear cache to ensure fresh test
+      Rails.cache.clear
+
+      # Ensure AI ranking is enabled
+      allow(AlgoConfig).to receive(:fetch).and_call_original
+      allow(AlgoConfig).to receive(:fetch).with([:swing_trading, :ai_ranking]).and_return({ enabled: true })
+
       screener_candidates = Screeners::SwingScreener.call(
         instruments: instruments,
         limit: 10
       )
 
       next if screener_candidates.empty?
+
+      # Stub OpenAI API response
+      stub_request(:post, 'https://api.openai.com/v1/chat/completions')
+        .to_return(
+          status: 200,
+          body: {
+            choices: [{
+              message: {
+                content: JSON.generate([{ symbol: screener_candidates.first[:symbol], ai_score: 85.0, reasoning: 'Test' }])
+              }
+            }]
+          }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
 
       # First call
       ranked1 = Screeners::AIRanker.call(
