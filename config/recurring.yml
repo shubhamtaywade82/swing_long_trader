@@ -1,135 +1,102 @@
-# Recurring Jobs Configuration for Swing Trading System
-# SolidQueue uses this file for scheduling recurring jobs
+# frozen_string_literal: true
 
-production: &production
+# SolidQueue recurring jobs configuration
+# Schedule format: "minute hour day month weekday" (cron-like)
+# IST timezone (UTC+5:30) - adjust times accordingly
+# Examples:
+#   periodic_cleanup:
+#     class: CleanSoftDeletedRecordsJob
+#     queue: background
+#     args: [ 1000, { batch_size: 500 } ]
+#     schedule: every hour
+#   periodic_cleanup_with_command:
+#     command: "SoftDeletedRecord.due.delete_all"
+#     priority: 2
+#     schedule: at 5am every day
+
+production:
+  # Daily candle ingestion - 07:30 IST daily
   daily_candle_ingestion:
     class: Candles::DailyIngestorJob
-    schedule: "0 7:30 * * *" # 07:30 IST daily
+    schedule: at 7:30am every day
     queue: default
-    args: []
+    priority: 0
 
+  # Weekly candle ingestion - 07:30 IST Monday
   weekly_candle_ingestion:
     class: Candles::WeeklyIngestorJob
-    schedule: "0 7:30 * * 1" # 07:30 IST every Monday
+    schedule: at 7:30am on Monday
     queue: default
-    args: []
+    priority: 0
 
+  # Swing screener - 07:40 IST weekdays (Monday-Friday)
   swing_screener:
     class: Screeners::SwingScreenerJob
-    schedule: "0 7:40 * * 1-5" # 07:40 IST weekdays only
+    schedule: at 7:40am on weekdays
     queue: default
-    args: []
+    priority: 0
 
-  monitor_health:
+  # Monitor job - Every 30 minutes during market hours (9:00 AM - 3:30 PM IST, weekdays)
+  monitor_job:
     class: MonitorJob
-    schedule: "*/30 * * * *" # Every 30 minutes
+    schedule: every 30 minutes from 9:00am to 3:30pm on weekdays
     queue: default
-    args: []
+    priority: 1
 
-  # Optional: Intraday fetcher for top candidates (07:45 IST weekdays)
-  # Uncomment to enable on-demand intraday data fetching
-  # intraday_fetcher:
-  #   class: Candles::IntradayFetcherJob
-  #   schedule: "0 7:45 * * 1-5" # 07:45 IST weekdays only
-  #   queue: default
-  #   args: []
-
-  # Optional: Swing entry monitor (07:50 IST weekdays)
-  # Monitors entry conditions and places orders
-  # Uncomment to enable automated order placement
-  # swing_entry_monitor:
-  #   class: Strategies::Swing::EntryMonitorJob
-  #   schedule: "0 7:50 * * 1-5" # 07:50 IST weekdays only
-  #   queue: default
-  #   args: []
-
-  # Optional: Swing exit monitor (every 15 minutes during market hours)
-  # Monitors exit conditions for open positions
-  # Uncomment to enable automated exit monitoring
-  # swing_exit_monitor:
-  #   class: Strategies::Swing::ExitMonitorJob
-  #   schedule: "*/15 9-15 * * 1-5" # Every 15 minutes, 9 AM to 3:30 PM IST weekdays
-  #   queue: default
-  #   args: []
-
-  # Optional: Process approved orders (every 5 minutes during market hours)
-  # Processes orders that have been approved and are waiting to be placed
-  # Uncomment to enable automatic processing of approved orders
-  # process_approved_orders:
-  #   class: Orders::ProcessApprovedJob
-  #   schedule: "*/5 9-15 * * 1-5" # Every 5 minutes, 9 AM to 3:30 PM IST weekdays
-  #   queue: default
-  #   args: []
-
-  # Optional: Nightly maintenance (23:00 IST daily)
-  # Cleanup old jobs, archive data, etc.
-  # Uncomment to enable nightly maintenance
-  # nightly_maintenance:
-  #   class: MonitorJob
-  #   schedule: "0 23:0 * * *" # 23:00 IST daily
-  #   queue: default
-  #   args: []
-
-development:
-  # Cleanup finished jobs
+  # Clean finished SolidQueue jobs - Every hour at minute 12
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
+    priority: 2
 
-  # Daily candle ingestion at 07:30 IST
-  daily_candle_ingestion:
-    class_name: Candles::DailyIngestorJob
-    queue_name: default
-    schedule: at 7:30am every day
-
-  # Weekly candle ingestion at 07:30 IST every Monday
-  weekly_candle_ingestion:
-    class_name: Candles::WeeklyIngestorJob
-    queue_name: default
-    schedule: at 7:30am every Monday
-
-  # Swing screener at 07:40 IST weekdays only
-  swing_screener:
-    class_name: Screeners::SwingScreenerJob
-    queue_name: default
-    schedule: at 7:40am every weekday
-
-  # Health monitoring every 30 minutes
-  monitor_health:
-    class_name: MonitorJob
-    queue_name: default
-    schedule: every 30 minutes
-
-  # Optional: Intraday fetcher for top candidates (07:45 IST weekdays)
-  # Uncomment to enable on-demand intraday data fetching
+  # Optional: Intraday fetcher (commented out - on-demand only)
   # intraday_fetcher:
-  #   class_name: Candles::IntradayFetcherJob
-  #   queue_name: default
-  #   schedule: at 7:45am every weekday
+  #   class: Candles::IntradayFetcherJob
+  #   schedule: at 7:45am on weekdays
+  #   queue: default
+  #   priority: 0
 
-  # Optional: Swing entry monitor (07:50 IST weekdays)
-  # Monitors entry conditions and places orders
-  # Uncomment to enable automated order placement
+  # Optional: Swing entry monitor (commented out - for live trading)
   # swing_entry_monitor:
-  #   class_name: Strategies::Swing::EntryMonitorJob
-  #   queue_name: default
-  #   schedule: at 7:50am every weekday
+  #   class: Strategies::SwingEntryMonitorJob
+  #   schedule: every 30 minutes from 9:00am to 3:30pm on weekdays
+  #   queue: default
+  #   priority: 1
 
-  # Optional: Swing exit monitor (every 15 minutes during market hours)
-  # Monitors exit conditions for open positions
-  # Uncomment to enable automated exit monitoring
+  # Optional: Swing exit monitor (commented out - for live trading)
   # swing_exit_monitor:
-  #   class_name: Strategies::Swing::ExitMonitorJob
-  #   queue_name: default
-  #   schedule: every 15 minutes from 9am to 3:30pm on weekdays
+  #   class: Strategies::SwingExitMonitorJob
+  #   schedule: every 30 minutes from 9:00am to 3:30pm on weekdays
+  #   queue: default
+  #   priority: 1
 
-  # Optional: Nightly maintenance (23:00 IST daily)
-  # Cleanup old jobs, archive data, etc.
-  # Uncomment to enable nightly maintenance
-  # nightly_maintenance:
-  #   class_name: MonitorJob
-  #   queue_name: default
-  #   schedule: at 11:00pm every day
+development:
+  # Same as production for development testing
+  daily_candle_ingestion:
+    class: Candles::DailyIngestorJob
+    schedule: at 7:30am every day
+    queue: default
+    priority: 0
 
-test:
-  # No recurring jobs in test environment
+  weekly_candle_ingestion:
+    class: Candles::WeeklyIngestorJob
+    schedule: at 7:30am on Monday
+    queue: default
+    priority: 0
+
+  swing_screener:
+    class: Screeners::SwingScreenerJob
+    schedule: at 7:40am on weekdays
+    queue: default
+    priority: 0
+
+  monitor_job:
+    class: MonitorJob
+    schedule: every 30 minutes from 9:00am to 3:30pm on weekdays
+    queue: default
+    priority: 1
+
+  clear_solid_queue_finished_jobs:
+    command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
+    schedule: every hour at minute 12
+    priority: 2
