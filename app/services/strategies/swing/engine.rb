@@ -23,6 +23,12 @@ module Strategies
         entry_check = check_entry_conditions
         return { success: false, error: entry_check[:error] } unless entry_check[:allowed]
 
+        # Validate SMC structure (optional)
+        smc_validation = validate_smc_structure
+        if smc_validation && !smc_validation[:valid]
+          return { success: false, error: "SMC validation failed: #{smc_validation[:reasons].join(', ')}" }
+        end
+
         # Build signal
         signal = SignalBuilder.call(
           instrument: @instrument,
@@ -39,14 +45,19 @@ module Strategies
           return { success: false, error: "Confidence too low: #{signal[:confidence]} < #{min_confidence * 100}" }
         end
 
+        metadata = {
+          evaluated_at: Time.current,
+          candles_analyzed: @daily_series.candles.size,
+          weekly_available: @weekly_series.present?
+        }
+
+        # Add SMC validation to metadata if available
+        metadata[:smc_validation] = smc_validation if smc_validation
+
         {
           success: true,
           signal: signal,
-          metadata: {
-            evaluated_at: Time.current,
-            candles_analyzed: @daily_series.candles.size,
-            weekly_available: @weekly_series.present?
-          }
+          metadata: metadata
         }
       end
 
@@ -134,6 +145,31 @@ module Strategies
         }
       rescue StandardError => e
         Rails.logger.warn("[Strategies::Swing::Engine] Supertrend failed: #{e.message}")
+        nil
+      end
+
+      def validate_smc_structure
+        # Only validate if SMC is enabled in config
+        smc_config = @config[:smc_validation] || {}
+        return nil unless smc_config[:enabled]
+
+        # Determine expected direction from indicators
+        indicators = calculate_indicators
+        direction = if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish
+                      :long
+                    elsif indicators[:supertrend] && indicators[:supertrend][:direction] == :bearish
+                      :short
+                    else
+                      :long # Default
+                    end
+
+        SMC::StructureValidator.validate(
+          @daily_series.candles,
+          direction: direction,
+          config: smc_config
+        )
+      rescue StandardError => e
+        Rails.logger.warn("[Strategies::Swing::Engine] SMC validation failed: #{e.message}")
         nil
       end
     end

@@ -81,13 +81,16 @@ module Screeners
       # Calculate score based on filters
       score = calculate_score(daily_series, indicators)
 
+      # Validate SMC structure (optional)
+      smc_validation = validate_smc_structure(daily_series, indicators)
+
       # Build candidate hash
       {
         instrument_id: instrument.id,
         symbol: instrument.symbol_name,
         score: score,
         indicators: indicators,
-        metadata: build_metadata(instrument, daily_series, indicators)
+        metadata: build_metadata(instrument, daily_series, indicators, smc_validation)
       }
     end
 
@@ -220,8 +223,8 @@ module Screeners
       max_score > 0 ? (score / max_score * 100).round(2) : 0.0
     end
 
-    def build_metadata(instrument, series, indicators)
-      {
+    def build_metadata(instrument, series, indicators, smc_validation = nil)
+      metadata = {
         ltp: instrument.ltp,
         candles_count: series.candles.size,
         latest_timestamp: series.candles.last&.timestamp,
@@ -229,6 +232,41 @@ module Screeners
         volatility: calculate_volatility(series, indicators),
         momentum: calculate_momentum(series, indicators)
       }
+
+      # Add SMC validation if available
+      if smc_validation
+        metadata[:smc_validation] = {
+          valid: smc_validation[:valid],
+          score: smc_validation[:score],
+          reasons: smc_validation[:reasons]
+        }
+      end
+
+      metadata
+    end
+
+    def validate_smc_structure(series, indicators)
+      # Only validate if SMC is enabled in config
+      smc_config = @strategy_config[:smc_validation] || {}
+      return nil unless smc_config[:enabled]
+
+      # Determine expected direction from indicators
+      direction = if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish
+                    :long
+                  elsif indicators[:supertrend] && indicators[:supertrend][:direction] == :bearish
+                    :short
+                  else
+                    :long # Default
+                  end
+
+      SMC::StructureValidator.validate(
+        series.candles,
+        direction: direction,
+        config: smc_config
+      )
+    rescue StandardError => e
+      Rails.logger.warn("[Screeners::SwingScreener] SMC validation failed: #{e.message}")
+      nil
     end
 
     def check_trend_alignment(indicators)

@@ -187,7 +187,7 @@
 - [x] Implement volatility calculation (ATR)
 - [x] Implement scoring system (rule hits)
 - [x] Return top 50 candidates
-- [ ] Implement SMC structure validation (optional - Phase 6)
+- [x] Implement SMC structure validation (optional - Phase 6) - app/services/smc/structure_validator.rb, integrated into SwingScreener and Swing::Engine
 
 ### AI Ranker Implementation
 - [x] Create OpenAI client wrapper (app/services/openai/client.rb)
