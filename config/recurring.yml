@@ -26,6 +26,41 @@ production: &production
     queue: default
     args: []
 
+  # Optional: Intraday fetcher for top candidates (07:45 IST weekdays)
+  # Uncomment to enable on-demand intraday data fetching
+  # intraday_fetcher:
+  #   class: Candles::IntradayFetcherJob
+  #   schedule: "0 7:45 * * 1-5" # 07:45 IST weekdays only
+  #   queue: default
+  #   args: []
+
+  # Optional: Swing entry monitor (07:50 IST weekdays)
+  # Monitors entry conditions and places orders
+  # Uncomment to enable automated order placement
+  # swing_entry_monitor:
+  #   class: Strategies::Swing::EntryMonitorJob
+  #   schedule: "0 7:50 * * 1-5" # 07:50 IST weekdays only
+  #   queue: default
+  #   args: []
+
+  # Optional: Swing exit monitor (every 15 minutes during market hours)
+  # Monitors exit conditions for open positions
+  # Uncomment to enable automated exit monitoring
+  # swing_exit_monitor:
+  #   class: Strategies::Swing::ExitMonitorJob
+  #   schedule: "*/15 9-15 * * 1-5" # Every 15 minutes, 9 AM to 3:30 PM IST weekdays
+  #   queue: default
+  #   args: []
+
+  # Optional: Nightly maintenance (23:00 IST daily)
+  # Cleanup old jobs, archive data, etc.
+  # Uncomment to enable nightly maintenance
+  # nightly_maintenance:
+  #   class: MonitorJob
+  #   schedule: "0 23:0 * * *" # 23:00 IST daily
+  #   queue: default
+  #   args: []
+
 development:
   # Cleanup finished jobs
   clear_solid_queue_finished_jobs:
@@ -55,6 +90,37 @@ development:
     class_name: MonitorJob
     queue_name: default
     schedule: every 30 minutes
+
+  # Optional: Intraday fetcher for top candidates (07:45 IST weekdays)
+  # Uncomment to enable on-demand intraday data fetching
+  # intraday_fetcher:
+  #   class_name: Candles::IntradayFetcherJob
+  #   queue_name: default
+  #   schedule: at 7:45am every weekday
+
+  # Optional: Swing entry monitor (07:50 IST weekdays)
+  # Monitors entry conditions and places orders
+  # Uncomment to enable automated order placement
+  # swing_entry_monitor:
+  #   class_name: Strategies::Swing::EntryMonitorJob
+  #   queue_name: default
+  #   schedule: at 7:50am every weekday
+
+  # Optional: Swing exit monitor (every 15 minutes during market hours)
+  # Monitors exit conditions for open positions
+  # Uncomment to enable automated exit monitoring
+  # swing_exit_monitor:
+  #   class_name: Strategies::Swing::ExitMonitorJob
+  #   queue_name: default
+  #   schedule: every 15 minutes from 9am to 3:30pm on weekdays
+
+  # Optional: Nightly maintenance (23:00 IST daily)
+  # Cleanup old jobs, archive data, etc.
+  # Uncomment to enable nightly maintenance
+  # nightly_maintenance:
+  #   class_name: MonitorJob
+  #   queue_name: default
+  #   schedule: at 11:00pm every day
 
 test:
   # No recurring jobs in test environment

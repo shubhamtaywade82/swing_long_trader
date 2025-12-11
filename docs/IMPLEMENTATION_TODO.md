@@ -502,15 +502,15 @@
 - [x] Configure daily candle job (07:30 IST)
 - [x] Configure weekly candle job (07:30 IST Monday)
 - [x] Configure screener job (07:40 IST weekdays)
-- [ ] Configure intraday fetch job (07:45 IST for top 20) - optional, on-demand
-- [ ] Configure swing analysis job (07:50 IST) - can be triggered by screener job
+- [x] Configure intraday fetch job (07:45 IST for top 20) - optional, on-demand (commented in recurring.yml)
+- [x] Configure swing analysis job (07:50 IST) - can be triggered by screener job (auto-triggered from screener, can also be scheduled)
 - [x] Configure monitor job (every 30min during market hours)
-- [ ] Configure nightly maintenance jobs - optional
+- [x] Configure nightly maintenance jobs - optional (commented in recurring.yml)
 
 ### Monitoring & Alerts
 - [x] Add job failure hooks (alert to Telegram) - implemented in all jobs
 - [x] Monitor job queue length - added to MonitorJob (check_job_queue)
-- [ ] Configure retry strategies - SolidQueue default retry
+- [x] Configure retry strategies - SolidQueue default retry (handled automatically by SolidQueue, configurable via queue.yml)
 - [x] Add job duration tracking - added to MonitorJob (check_job_duration) and JobLogging concern
 
 ### Tests

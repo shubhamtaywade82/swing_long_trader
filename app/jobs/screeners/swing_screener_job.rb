@@ -16,6 +16,13 @@ module Screeners
         Telegram::Notifier.send_daily_candidates(candidates.first(10))
       end
 
+      # Optionally trigger swing analysis job for top candidates
+      if candidates.any? && AlgoConfig.fetch([:swing_trading, :strategy, :auto_analyze])
+        candidate_ids = candidates.first(20).map { |c| c[:instrument_id] }
+        Strategies::Swing::AnalysisJob.perform_later(candidate_ids)
+        Rails.logger.info("[Screeners::SwingScreenerJob] Triggered analysis job for #{candidate_ids.size} candidates")
+      end
+
       candidates
     rescue StandardError => e
       Rails.logger.error("[Screeners::SwingScreenerJob] Failed: #{e.message}")
