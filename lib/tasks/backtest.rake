@@ -470,6 +470,115 @@ namespace :backtest do
     puts "   📊 Visualization JSON: #{viz_file}"
   end
 
+  desc 'List optimization runs'
+  task list_optimizations: :environment do
+    runs = OptimizationRun.recent.limit(20)
+
+    if runs.empty?
+      puts 'No optimization runs found.'
+      exit 0
+    end
+
+    puts "\n=== Optimization Runs (Recent 20) ===\n\n"
+    puts format('%-6s %-12s %-10s %-15s %-12s %-10s %-8s', 'ID', 'Strategy', 'Metric', 'Date Range', 'Combinations', 'Best Score', 'Status')
+    puts '-' * 85
+
+    runs.each do |run|
+      best_metrics = run.best_metrics_hash
+      best_score = best_metrics[run.optimization_metric.to_sym] || best_metrics[run.optimization_metric] || 0
+      date_range = "#{run.start_date} to #{run.end_date}"
+
+      puts format('%-6s %-12s %-10s %-15s %-12s %-10.2f %-8s',
+        run.id,
+        run.strategy_type,
+        run.optimization_metric,
+        date_range,
+        run.total_combinations_tested,
+        best_score,
+        run.status
+      )
+    end
+
+    puts "\nTotal optimization runs: #{OptimizationRun.count}"
+  end
+
+  desc 'Show optimization run details [run_id]'
+  task :show_optimization, [:run_id] => :environment do |_t, args|
+    run_id = args[:run_id]&.to_i
+
+    unless run_id
+      puts 'Usage: rails backtest:show_optimization[RUN_ID]'
+      exit 1
+    end
+
+    run = OptimizationRun.find_by(id: run_id)
+
+    unless run
+      puts "Optimization run ##{run_id} not found."
+      exit 1
+    end
+
+    puts "\n=== Optimization Run ##{run.id} ===\n\n"
+    puts "Strategy Type: #{run.strategy_type}"
+    puts "Date Range: #{run.start_date} to #{run.end_date}"
+    puts "Initial Capital: ₹#{run.initial_capital}"
+    puts "Optimization Metric: #{run.optimization_metric}"
+    puts "Walk-Forward: #{run.use_walk_forward ? 'Yes' : 'No'}"
+    puts "Total Combinations Tested: #{run.total_combinations_tested}"
+    puts "Status: #{run.status}"
+    puts "Created: #{run.created_at}"
+    puts "Updated: #{run.updated_at}"
+
+    if run.error_message
+      puts "\nError: #{run.error_message}"
+    end
+
+    best_params = run.best_parameters_hash
+    best_metrics = run.best_metrics_hash
+
+    if best_params.any?
+      puts "\n--- Best Parameters ---"
+      best_params.each do |key, value|
+        puts "  #{key}: #{value}"
+      end
+    end
+
+    if best_metrics.any?
+      puts "\n--- Best Metrics ---"
+      best_metrics.each do |key, value|
+        puts "  #{key}: #{value}"
+      end
+    end
+
+    sensitivity = run.sensitivity_analysis_hash
+    if sensitivity.any?
+      puts "\n--- Sensitivity Analysis ---"
+      sensitivity.each do |param, data|
+        puts "\n  #{param}:"
+        if data.is_a?(Hash)
+          data.each do |k, v|
+            puts "    #{k}: #{v}"
+          end
+        else
+          puts "    #{data}"
+        end
+      end
+    end
+
+    top_results = run.top_n_results(5)
+    if top_results.any?
+      puts "\n--- Top 5 Parameter Combinations ---"
+      top_results.each_with_index do |result, index|
+        params = result['parameters'] || result[:parameters] || {}
+        score = result['score'] || result[:score] || 0
+        puts "\n  #{index + 1}. Score: #{score.round(2)}"
+        params.each do |key, value|
+          puts "     #{key}: #{value}"
+        end
+      end
+    end
+  end
+
   desc 'Compare two backtest runs [run_id1] [run_id2]'
   task :compare, [:run_id1, :run_id2] => :environment do |_t, args|
     run_id1 = args[:run_id1]&.to_i

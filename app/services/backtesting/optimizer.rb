@@ -4,7 +4,7 @@ module Backtesting
   # Parameter optimization using grid search
   # Uses walk-forward analysis to avoid overfitting
   class Optimizer < ApplicationService
-    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, parameter_ranges: {}, optimization_metric: :sharpe_ratio, use_walk_forward: true, backtester_class: SwingBacktester)
+    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, parameter_ranges: {}, optimization_metric: :sharpe_ratio, use_walk_forward: true, backtester_class: SwingBacktester, save_to_db: false)
       new(
         instruments: instruments,
         from_date: from_date,
