@@ -194,12 +194,12 @@
 - [x] Add error handling for non-JSON responses
 - [x] Implement caching (avoid duplicate AI calls)
 - [x] Add rate limiting (max 50 calls/day)
-- [ ] Add cost monitoring (token usage tracked, cost calculation optional)
+- [x] Add cost monitoring (token usage tracked, cost calculation implemented)
 
 ### Final Selector
-- [ ] Combine screener score + AI score
-- [ ] Select top 5-10 for swing trading
-- [ ] Return ranked candidates with metadata
+- [x] Combine screener score + AI score (60% screener + 40% AI for swing)
+- [x] Select top 5-10 for swing trading (configurable limit)
+- [x] Return ranked candidates with metadata (includes summary, rank, combined_score)
 
 ### Tests
 - [x] Write unit tests for screener logic with fixture candles (swing_screener_test.rb)
@@ -228,7 +228,7 @@
 - [ ] Validate SMC structure (optional - Phase 6)
 
 ### Signal Format
-- [ ] Define signal hash structure:
+- [x] Define signal hash structure (implemented in SignalBuilder#call):
   ```ruby
   {
     instrument_id: Integer,
@@ -240,7 +240,8 @@
     rr: Decimal,
     qty: Integer,
     confidence: Float,
-    holding_days_estimate: Integer
+    holding_days_estimate: Integer,
+    metadata: Hash (includes ATR, EMAs, supertrend, risk_amount)
   }
   ```
 
@@ -266,9 +267,11 @@
 - [ ] Add cost monitoring/alerting (optional enhancement)
 
 ### Tests
-- [ ] Mock OpenAI responses with WebMock
-- [ ] Test JSON parsing and fallback logic
-- [ ] Test caching behavior
+- [x] Mock OpenAI responses with WebMock (test/services/openai/client_test.rb)
+- [x] Test JSON parsing and fallback logic
+- [x] Test caching behavior
+- [x] Test rate limiting
+- [x] Test cost calculation
 
 ---
 
@@ -280,7 +283,7 @@
 - [x] Create `app/services/backtesting/swing_backtester.rb` (main backtesting orchestrator)
 - [x] Create `app/services/backtesting/portfolio.rb` (virtual portfolio manager)
 - [x] Create `app/services/backtesting/position.rb` (virtual position tracker)
-- [ ] Create `app/services/backtesting/result_analyzer.rb` (performance metrics)
+- [x] Create `app/services/backtesting/result_analyzer.rb` (performance metrics)
 - [x] Create `app/models/backtest_run.rb` (store backtest results)
 - [x] Create `db/migrate/20251212000001_create_backtest_runs.rb` migration
 - [x] Create `db/migrate/20251212000002_create_backtest_positions.rb` migration

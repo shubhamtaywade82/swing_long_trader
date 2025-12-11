@@ -6,10 +6,13 @@ namespace :metrics do
     date = ENV['DATE'] ? Date.parse(ENV['DATE']) : Date.today
     stats = Metrics::Tracker.get_daily_stats(date)
 
+    openai_cost = Metrics::Tracker.get_openai_daily_cost(date)
+
     puts "📊 Daily Metrics for #{date}"
     puts "=" * 60
     puts "DhanHQ API Calls: #{stats[:dhan_api_calls]}"
     puts "OpenAI API Calls: #{stats[:openai_api_calls]}"
+    puts "OpenAI Cost: $#{openai_cost.round(4)}"
     puts "Candidates Found: #{stats[:candidate_count]}"
     puts "Signals Generated: #{stats[:signal_count]}"
     puts "Failed Jobs: #{stats[:failed_jobs]}"
@@ -26,6 +29,7 @@ namespace :metrics do
 
     total_dhan = 0
     total_openai = 0
+    total_openai_cost = 0.0
     total_candidates = 0
     total_signals = 0
     total_failed = 0
@@ -34,6 +38,7 @@ namespace :metrics do
       stats = Metrics::Tracker.get_daily_stats(date)
       total_dhan += stats[:dhan_api_calls]
       total_openai += stats[:openai_api_calls]
+      total_openai_cost += Metrics::Tracker.get_openai_daily_cost(date)
       total_candidates += stats[:candidate_count]
       total_signals += stats[:signal_count]
       total_failed += stats[:failed_jobs]
@@ -41,6 +46,7 @@ namespace :metrics do
 
     puts "Total DhanHQ API Calls: #{total_dhan}"
     puts "Total OpenAI API Calls: #{total_openai}"
+    puts "Total OpenAI Cost: $#{total_openai_cost.round(4)}"
     puts "Total Candidates: #{total_candidates}"
     puts "Total Signals: #{total_signals}"
     puts "Total Failed Jobs: #{total_failed}"

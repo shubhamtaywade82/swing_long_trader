@@ -17,6 +17,18 @@ module Metrics
       Rails.cache.write(key, count + 1, expires_in: 2.days)
     end
 
+    def self.track_openai_cost(cost)
+      today = Date.today.to_s
+      key = "metrics:openai_cost:#{today}"
+      total_cost = Rails.cache.read(key) || 0.0
+      Rails.cache.write(key, total_cost + cost, expires_in: 2.days)
+    end
+
+    def self.get_openai_daily_cost(date = Date.today)
+      date_str = date.to_s
+      Rails.cache.read("metrics:openai_cost:#{date_str}") || 0.0
+    end
+
     def self.track_candidate_count(count)
       today = Date.today.to_s
       key = "metrics:candidate_count:#{today}"
