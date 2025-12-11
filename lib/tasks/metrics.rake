@@ -16,6 +16,18 @@ namespace :metrics do
     puts "Candidates Found: #{stats[:candidate_count]}"
     puts "Signals Generated: #{stats[:signal_count]}"
     puts "Failed Jobs: #{stats[:failed_jobs]}"
+
+    # Order metrics
+    orders_placed = Metrics::Tracker.get_orders_placed(date)
+    orders_failed = Metrics::Tracker.get_orders_failed(date)
+    puts "\nOrders:"
+    puts "  Placed: #{orders_placed}"
+    puts "  Failed: #{orders_failed}"
+
+    # P&L metrics
+    daily_pnl = Metrics::PnlTracker.get_daily_pnl(date)
+    puts "\nP&L:"
+    puts "  Daily: ₹#{daily_pnl.round(2)}"
     puts "=" * 60
   end
 
@@ -50,6 +62,18 @@ namespace :metrics do
     puts "Total Candidates: #{total_candidates}"
     puts "Total Signals: #{total_signals}"
     puts "Total Failed Jobs: #{total_failed}"
+
+    # Order metrics
+    week_orders_placed = (start_date..end_date).sum { |d| Metrics::Tracker.get_orders_placed(d) }
+    week_orders_failed = (start_date..end_date).sum { |d| Metrics::Tracker.get_orders_failed(d) }
+    puts "\nOrders (Week):"
+    puts "  Placed: #{week_orders_placed}"
+    puts "  Failed: #{week_orders_failed}"
+
+    # P&L metrics
+    weekly_pnl = Metrics::PnlTracker.get_weekly_pnl(start_date)
+    puts "\nP&L:"
+    puts "  Weekly: ₹#{weekly_pnl.round(2)}"
     puts "=" * 60
   end
 end
