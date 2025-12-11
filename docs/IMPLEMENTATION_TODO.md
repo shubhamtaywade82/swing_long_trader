@@ -331,7 +331,7 @@
 - [x] Calculate consecutive wins/losses
 - [x] Generate equity curve data (implemented in ReportGenerator)
 - [x] Generate monthly returns breakdown (implemented in ReportGenerator)
-- [ ] Generate trade distribution analysis
+- [x] Generate trade distribution analysis (in ReportGenerator)
 
 ### Backtest Configuration
 - [x] Create `app/services/backtesting/config.rb` (backtest parameters)
@@ -359,9 +359,9 @@
 - [x] Implement `rails backtest:swing[from_date,to_date]` task
 - [x] Implement `rails backtest:list` task
 - [x] Implement `rails backtest:show[run_id]` task
-- [ ] Implement `rails backtest:long_term[from_date,to_date]` task
-- [ ] Implement `rails backtest:compare[strategy1,strategy2]` task
-- [ ] Implement `rails backtest:export[run_id]` task
+- [ ] Implement `rails backtest:long_term[from_date,to_date]` task (requires LongTermBacktester)
+- [x] Implement `rails backtest:compare[run_id1,run_id2]` task
+- [x] Implement `rails backtest:export[run_id]` task
 
 ### Walk-Forward Analysis
 - [ ] Create `app/services/backtesting/walk_forward.rb`
@@ -387,10 +387,10 @@
 - [ ] Analyze worst-case scenarios
 
 ### Integration with Strategy Engine
-- [ ] Integrate backtester with `Strategies::Swing::Engine`
-- [ ] Integrate backtester with `Strategies::LongTerm::Evaluator`
-- [ ] Use same signal generation logic as live trading
-- [ ] Ensure backtest signals match live signals (validation)
+- [x] Integrate backtester with `Strategies::Swing::Engine` (SwingBacktester uses Engine.call)
+- [ ] Integrate backtester with `Strategies::LongTerm::Evaluator` (requires LongTermBacktester)
+- [x] Use same signal generation logic as live trading (uses Strategies::Swing::Engine)
+- [ ] Ensure backtest signals match live signals (validation) - manual testing required
 
 ### Tests
 - [ ] Write unit tests for backtesting engine - needs comprehensive test data

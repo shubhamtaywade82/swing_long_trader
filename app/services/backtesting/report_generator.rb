@@ -125,6 +125,9 @@ module Backtesting
 
         Monthly Returns:
         #{format_monthly_returns(metrics['monthly_returns'] || {})}
+
+        Trade Distribution:
+        #{format_trade_distribution(calculate_trade_distribution)}
       METRICS
     end
 
@@ -241,6 +244,42 @@ module Backtesting
       monthly_returns.map do |month, data|
         "  #{month}: #{data[:return_pct]}% (₹#{data[:pnl]})"
       end.join("\n")
+    end
+
+    def format_trade_distribution(distribution)
+      return 'No trade distribution data' if distribution.empty?
+
+      lines = []
+
+      if distribution[:by_direction]
+        lines << "  By Direction:"
+        distribution[:by_direction].each do |direction, count|
+          lines << "    #{direction}: #{count}"
+        end
+      end
+
+      if distribution[:by_exit_reason]
+        lines << "  By Exit Reason:"
+        distribution[:by_exit_reason].each do |reason, count|
+          lines << "    #{reason}: #{count}"
+        end
+      end
+
+      if distribution[:by_holding_period]
+        lines << "  By Holding Period:"
+        distribution[:by_holding_period].each do |period, count|
+          lines << "    #{period}: #{count}"
+        end
+      end
+
+      if distribution[:pnl_distribution]
+        lines << "  By P&L Distribution:"
+        distribution[:pnl_distribution].each do |range, count|
+          lines << "    #{range}: #{count}"
+        end
+      end
+
+      lines.join("\n")
     end
   end
 end

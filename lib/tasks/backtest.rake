@@ -1,5 +1,46 @@
 # frozen_string_literal: true
 
+# Helper methods for backtest tasks
+module BacktestHelpers
+  def self.format_comparison_row(metric, value1, value2)
+    "  #{metric.ljust(25)} | Run 1: #{value1.rjust(15)} | Run 2: #{value2.rjust(15)}"
+  end
+
+  def self.determine_winner(run1, run2)
+    # Compare multiple metrics
+    score1 = 0
+    score2 = 0
+
+    # Total return
+    score1 += 1 if run1.total_return > run2.total_return
+    score2 += 1 if run2.total_return > run1.total_return
+
+    # Sharpe ratio
+    score1 += 1 if run1.sharpe_ratio > run2.sharpe_ratio
+    score2 += 1 if run2.sharpe_ratio > run1.sharpe_ratio
+
+    # Win rate
+    score1 += 1 if run1.win_rate > run2.win_rate
+    score2 += 1 if run2.win_rate > run1.win_rate
+
+    # Profit factor
+    score1 += 1 if run1.profit_factor > run2.profit_factor
+    score2 += 1 if run2.profit_factor > run1.profit_factor
+
+    # Max drawdown (lower is better)
+    score1 += 1 if run1.max_drawdown < run2.max_drawdown
+    score2 += 1 if run2.max_drawdown < run1.max_drawdown
+
+    if score1 > score2
+      "Run 1 (ID: #{run1.id})"
+    elsif score2 > score1
+      "Run 2 (ID: #{run2.id})"
+    else
+      "Tie (both runs perform similarly)"
+    end
+  end
+end
+
 namespace :backtest do
   desc 'Run swing trading backtest [from_date] [to_date] [initial_capital]'
   task :swing, [:from_date, :to_date, :initial_capital] => :environment do |_t, args|
@@ -218,6 +259,105 @@ namespace :backtest do
     viz_file = output_dir.join("backtest_#{run_id}_visualization.json")
     File.write(viz_file, JSON.pretty_generate(report[:visualization_data]))
     puts "   Visualization: #{viz_file}"
+  end
+
+  desc 'Export backtest run to files [run_id]'
+  task :export, [:run_id] => :environment do |_t, args|
+    run_id = args[:run_id]&.to_i
+    unless run_id
+      puts 'Usage: rails backtest:export[run_id]'
+      exit 1
+    end
+
+    run = BacktestRun.find_by(id: run_id)
+    unless run
+      puts "❌ Backtest run #{run_id} not found"
+      exit 1
+    end
+
+    puts "📦 Exporting backtest run #{run_id}..."
+    puts ''
+
+    # Generate report (which creates all files)
+    report = Backtesting::ReportGenerator.generate(run)
+
+    output_dir = Rails.root.join('tmp/backtest_reports')
+    output_dir.mkpath
+
+    # Save all report formats
+    trades_file = output_dir.join("backtest_#{run_id}_trades.csv")
+    equity_file = output_dir.join("backtest_#{run_id}_equity_curve.csv")
+    summary_file = output_dir.join("backtest_#{run_id}_summary.txt")
+    metrics_file = output_dir.join("backtest_#{run_id}_metrics.txt")
+    viz_file = output_dir.join("backtest_#{run_id}_visualization.json")
+
+    File.write(trades_file, report[:trades_csv])
+    File.write(equity_file, report[:equity_curve_csv])
+    File.write(summary_file, report[:summary])
+    File.write(metrics_file, report[:metrics_report])
+    File.write(viz_file, JSON.pretty_generate(report[:visualization_data]))
+
+    puts "✅ Export complete! Files saved to: #{output_dir}"
+    puts ''
+    puts "   📄 Summary: #{summary_file}"
+    puts "   📊 Metrics: #{metrics_file}"
+    puts "   📈 Trades CSV: #{trades_file}"
+    puts "   📉 Equity Curve CSV: #{equity_file}"
+    puts "   📊 Visualization JSON: #{viz_file}"
+  end
+
+  desc 'Compare two backtest runs [run_id1] [run_id2]'
+  task :compare, [:run_id1, :run_id2] => :environment do |_t, args|
+    run_id1 = args[:run_id1]&.to_i
+    run_id2 = args[:run_id2]&.to_i
+
+    unless run_id1 && run_id2
+      puts 'Usage: rails backtest:compare[run_id1,run_id2]'
+      exit 1
+    end
+
+    run1 = BacktestRun.find_by(id: run_id1)
+    run2 = BacktestRun.find_by(id: run_id2)
+
+    unless run1 && run2
+      puts "❌ One or both backtest runs not found"
+      puts "   Run 1 (#{run_id1}): #{run1 ? 'Found' : 'Not found'}"
+      puts "   Run 2 (#{run_id2}): #{run2 ? 'Found' : 'Not found'}"
+      exit 1
+    end
+
+    puts "=" * 80
+    puts "📊 BACKTEST COMPARISON"
+    puts "=" * 80
+    puts ''
+    puts "Run 1 (ID: #{run_id1}): #{run1.start_date} to #{run1.end_date}"
+    puts "Run 2 (ID: #{run_id2}): #{run2.start_date} to #{run2.end_date}"
+    puts ''
+    puts "=" * 80
+    puts "PERFORMANCE METRICS"
+    puts "=" * 80
+    puts BacktestHelpers.format_comparison_row('Total Return', "#{run1.total_return}%", "#{run2.total_return}%")
+    puts BacktestHelpers.format_comparison_row('Annualized Return', "#{run1.annualized_return.round(2)}%", "#{run2.annualized_return.round(2)}%")
+    puts BacktestHelpers.format_comparison_row('Max Drawdown', "#{run1.max_drawdown}%", "#{run2.max_drawdown}%")
+    puts BacktestHelpers.format_comparison_row('Sharpe Ratio', run1.sharpe_ratio.round(4).to_s, run2.sharpe_ratio.round(4).to_s)
+    puts BacktestHelpers.format_comparison_row('Sortino Ratio', run1.sortino_ratio.round(4).to_s, run2.sortino_ratio.round(4).to_s)
+    puts ''
+    puts "=" * 80
+    puts "TRADE STATISTICS"
+    puts "=" * 80
+    puts BacktestHelpers.format_comparison_row('Total Trades', run1.total_trades.to_s, run2.total_trades.to_s)
+    puts BacktestHelpers.format_comparison_row('Win Rate', "#{run1.win_rate.round(2)}%", "#{run2.win_rate.round(2)}%")
+    puts BacktestHelpers.format_comparison_row('Profit Factor', run1.profit_factor.round(2).to_s, run2.profit_factor.round(2).to_s)
+    puts BacktestHelpers.format_comparison_row('Initial Capital', "₹#{run1.initial_capital.to_fs(:delimited)}", "₹#{run2.initial_capital.to_fs(:delimited)}")
+    puts BacktestHelpers.format_comparison_row('Final Capital', "₹#{run1.final_capital.to_fs(:delimited)}", "₹#{run2.final_capital.to_fs(:delimited)}")
+    puts ''
+    puts "=" * 80
+
+    # Determine winner
+    winner = BacktestHelpers.determine_winner(run1, run2)
+    puts ''
+    puts "🏆 Winner: #{winner}"
+    puts "=" * 80
   end
 end
 
