@@ -251,6 +251,20 @@ feature_flags:
   enable_backtesting: false # Set to true to enable backtesting mode
 
 # ============================================
+# BACKTESTING CONFIGURATION
+# ============================================
+backtesting:
+  # Trading costs
+  commission_rate: 0.0 # Commission rate as percentage (e.g., 0.1 for 0.1%)
+  slippage_pct: 0.0 # Slippage as percentage (e.g., 0.1 for 0.1% slippage)
+
+  # Partial fills (optional - not yet implemented)
+  # partial_fills:
+  #   enabled: false
+  #   min_fill_pct: 50.0 # Minimum 50% fill required
+  #   max_fill_pct: 100.0 # Maximum 100% fill
+
+# ============================================
 # PAPER TRADING (Optional)
 # ============================================
 paper_trading:

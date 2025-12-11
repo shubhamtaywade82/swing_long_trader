@@ -69,6 +69,11 @@ namespace :backtest do
     exit_config = swing_config.dig(:strategy, :exit_conditions) || {}
     trailing_stop_pct = exit_config[:trailing_stop_pct]
 
+    # Get commission and slippage config (optional, defaults to 0)
+    backtest_config = AlgoConfig.fetch(:backtesting) || {}
+    commission_rate = backtest_config[:commission_rate] || 0.0
+    slippage_pct = backtest_config[:slippage_pct] || 0.0
+
     # Run backtest
     result = Backtesting::SwingBacktester.call(
       instruments: instruments,
@@ -76,7 +81,9 @@ namespace :backtest do
       to_date: to_date,
       initial_capital: initial_capital,
       risk_per_trade: 2.0,
-      trailing_stop_pct: trailing_stop_pct
+      trailing_stop_pct: trailing_stop_pct,
+      commission_rate: commission_rate,
+      slippage_pct: slippage_pct
     )
 
     unless result[:success]
@@ -102,6 +109,11 @@ namespace :backtest do
     puts "❌ Losing Trades: #{results[:losing_trades]}"
     puts "📈 Profit Factor: #{results[:profit_factor]}"
     puts "📊 Avg Win/Loss Ratio: #{results[:avg_win_loss_ratio]}"
+    puts ""
+    puts "💰 Trading Costs:"
+    puts "   Commission: ₹#{results[:total_commission] || 0}"
+    puts "   Slippage: ₹#{results[:total_slippage] || 0}"
+    puts "   Total: ₹#{results[:total_trading_costs] || 0}"
     puts ""
     puts "⏳ Avg Holding Period: #{results[:avg_holding_period]} days"
     puts "🏆 Best Trade: ₹#{results[:best_trade][:pnl]} (#{results[:best_trade][:pnl_pct]}%)"

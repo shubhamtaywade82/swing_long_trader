@@ -310,7 +310,7 @@
 - [x] Calculate P&L per trade
 - [x] Calculate holding period per trade
 - [x] Implement trailing stop (optional enhancement) - Added trailing stop support with percentage or fixed amount, tracks highest/lowest price, updates stop loss dynamically
-- [ ] Handle partial fills and slippage simulation (optional)
+- [x] Handle partial fills and slippage simulation (optional) - Implemented slippage and commission handling in Portfolio, applied to entry/exit prices, tracked separately in results
 
 ### Long-Term Trading Backtesting
 - [ ] Create `app/services/backtesting/long_term_backtester.rb`

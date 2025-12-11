@@ -3,7 +3,7 @@
 module Backtesting
   # Swing trading backtester
   class SwingBacktester < ApplicationService
-    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0, trailing_stop_pct: nil, trailing_stop_amount: nil)
+    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0, trailing_stop_pct: nil, trailing_stop_amount: nil, commission_rate: 0.0, slippage_pct: 0.0)
       new(
         instruments: instruments,
         from_date: from_date,
@@ -11,11 +11,13 @@ module Backtesting
         initial_capital: initial_capital,
         risk_per_trade: risk_per_trade,
         trailing_stop_pct: trailing_stop_pct,
-        trailing_stop_amount: trailing_stop_amount
+        trailing_stop_amount: trailing_stop_amount,
+        commission_rate: commission_rate,
+        slippage_pct: slippage_pct
       ).call
     end
 
-    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0, trailing_stop_pct: nil, trailing_stop_amount: nil)
+    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0, trailing_stop_pct: nil, trailing_stop_amount: nil, commission_rate: 0.0, slippage_pct: 0.0)
       @instruments = instruments
       @from_date = from_date
       @to_date = to_date
@@ -23,7 +25,13 @@ module Backtesting
       @risk_per_trade = risk_per_trade
       @trailing_stop_pct = trailing_stop_pct
       @trailing_stop_amount = trailing_stop_amount
-      @portfolio = Portfolio.new(initial_capital: @initial_capital)
+      @config = Config.new(
+        initial_capital: @initial_capital,
+        risk_per_trade: @risk_per_trade,
+        commission_rate: commission_rate,
+        slippage_pct: slippage_pct
+      )
+      @portfolio = Portfolio.new(initial_capital: @initial_capital, config: @config)
       @positions = []
     end
 
@@ -57,6 +65,11 @@ module Backtesting
       )
 
       results = analyzer.analyze
+
+      # Add commission and slippage to results
+      results[:total_commission] = @portfolio.total_commission.round(2)
+      results[:total_slippage] = @portfolio.total_slippage.round(2)
+      results[:total_trading_costs] = (@portfolio.total_commission + @portfolio.total_slippage).round(2)
 
       {
         success: true,
