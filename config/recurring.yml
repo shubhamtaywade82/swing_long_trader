@@ -52,6 +52,15 @@ production: &production
   #   queue: default
   #   args: []
 
+  # Optional: Process approved orders (every 5 minutes during market hours)
+  # Processes orders that have been approved and are waiting to be placed
+  # Uncomment to enable automatic processing of approved orders
+  # process_approved_orders:
+  #   class: Orders::ProcessApprovedJob
+  #   schedule: "*/5 9-15 * * 1-5" # Every 5 minutes, 9 AM to 3:30 PM IST weekdays
+  #   queue: default
+  #   args: []
+
   # Optional: Nightly maintenance (23:00 IST daily)
   # Cleanup old jobs, archive data, etc.
   # Uncomment to enable nightly maintenance

@@ -47,9 +47,10 @@ module Orders
       # Send notification
       send_approval_notification(order)
 
-      # If order is still pending, it can now be placed
-      # (The executor will check approval status before placing)
-      { success: true, order: order, message: 'Order approved' }
+      # Enqueue job to process approved order
+      Orders::ProcessApprovedJob.perform_later(order_id: order.id)
+
+      { success: true, order: order, message: 'Order approved and queued for placement' }
     rescue StandardError => e
       Rails.logger.error("[Orders::Approval] Failed to approve order #{order.id}: #{e.message}")
       { success: false, error: e.message }

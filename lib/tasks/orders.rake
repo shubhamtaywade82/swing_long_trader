@@ -82,15 +82,49 @@ namespace :orders do
     pending_approval = Order.pending_approval.count
     approved = Order.approved.count
     rejected = Order.rejected.count
+    approved_not_placed = Order.approved.where(status: 'pending').count
 
     puts "\n📊 Order Approval Statistics:\n\n"
     puts "  Total orders: #{total}"
     puts "  Executed: #{executed}"
     puts "  Pending approval: #{pending_approval}"
     puts "  Approved: #{approved}"
+    puts "  Approved (not yet placed): #{approved_not_placed}"
     puts "  Rejected: #{rejected}"
     puts "\n  Progress: #{executed}/30 trades executed (#{30 - executed} remaining for manual approval)"
+
+    if approved_not_placed > 0
+      puts "\n  ⚠️  #{approved_not_placed} approved order(s) waiting to be placed"
+      puts "     Run: rails orders:process_approved"
+    end
+
     puts "\n"
+  end
+
+  desc 'Process approved orders that are waiting to be placed'
+  task process_approved: :environment do
+    approved_orders = Order.approved.where(status: 'pending').order(approved_at: :asc)
+
+    if approved_orders.empty?
+      puts "✅ No approved orders waiting to be placed"
+      exit 0
+    end
+
+    puts "\n📋 Processing #{approved_orders.count} approved order(s)...\n\n"
+
+    approved_orders.each do |order|
+      puts "Processing order #{order.id}: #{order.symbol} #{order.transaction_type} #{order.quantity}"
+      result = Orders::ProcessApprovedJob.new.perform(order_id: order.id)
+
+      if result[:success]
+        puts "  ✅ Order placed successfully"
+      else
+        puts "  ❌ Failed: #{result[:error]}"
+      end
+      puts
+    end
+
+    puts "✅ Processing complete\n\n"
   end
 end
 

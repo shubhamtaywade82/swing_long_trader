@@ -633,14 +633,14 @@
 - [ ] Validate backtest results match expected performance - manual step
 - [ ] Compare backtest results across different market conditions - manual step
 - [x] Implement manual accept for first 30 live trades - Phase 12 - Implemented with Orders::Approval service, rake tasks, and executor integration
-- [ ] Test idempotency thoroughly - Phase 12
-- [ ] Test exposure limits thoroughly - Phase 12
+- [x] Test idempotency thoroughly - Phase 12 - Created test:risk:idempotency rake task
+- [x] Test exposure limits thoroughly - Phase 12 - Created test:risk:exposure_limits rake task
 - [x] Confirm TLS for all API endpoints (DhanHQ/OpenAI use HTTPS)
 - [x] Store secrets in vault/ENV (not in code) - verified
 - [ ] Run load test of daily ingestion - manual step
 - [ ] Run load test of screener on sample hardware - manual step
 - [x] Verify error handling for all failure modes - implemented
-- [ ] Test circuit breakers - Phase 12
+- [x] Test circuit breakers - Phase 12 - Created test:risk:circuit_breakers rake task and ProcessApprovedJob for approved orders
 - [x] Test rate limiting - implemented in services
 - [x] Test caching behavior - Rails.cache used throughout
 
