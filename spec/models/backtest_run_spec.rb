@@ -96,7 +96,8 @@ RSpec.describe BacktestRun, type: :model do
       config = { initial_capital: 100_000, risk_per_trade: 2.0 }
       run = create(:backtest_run, config: config.to_json)
 
-      expect(run.config_hash).to eq(config)
+      # JSON.parse returns string keys
+      expect(run.config_hash).to eq(config.stringify_keys)
     end
 
     it 'returns empty hash for blank config' do
@@ -118,7 +119,8 @@ RSpec.describe BacktestRun, type: :model do
       results = { total_return: 15.5, win_rate: 55.0 }
       run = create(:backtest_run, results: results.to_json)
 
-      expect(run.results_hash).to eq(results)
+      # JSON.parse returns string keys
+      expect(run.results_hash).to eq(results.stringify_keys)
     end
 
     it 'returns empty hash for blank results' do

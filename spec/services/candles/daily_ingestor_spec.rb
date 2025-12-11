@@ -36,7 +36,7 @@ RSpec.describe Candles::DailyIngestor do
       it 'fetches and stores daily candles' do
         result = described_class.call(instruments: instruments, days_back: 2)
 
-        expect(result[:success]).to be > 0
+        expect(result[:success]).to eq(1) # Count of successful instruments
         expect(result[:processed]).to eq(1)
         expect(CandleSeriesRecord.where(instrument: instrument, timeframe: '1D').count).to eq(2)
       end

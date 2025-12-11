@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Strategies::Swing::Executor, type: :service do
-  let(:instrument) { create(:instrument, symbol_name: 'RELIANCE', security_id: '11536', exchange_segment: 'NSE_EQ') }
+  let(:instrument) { create(:instrument, symbol_name: 'RELIANCE', security_id: '11536', exchange: 'NSE', segment: 'E') }
   let(:signal) do
     {
       instrument_id: instrument.id,

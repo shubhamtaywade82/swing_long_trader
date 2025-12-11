@@ -2,18 +2,24 @@
 
 require 'rails_helper'
 
-RSpec.describe DailyIngestorJob, type: :job do
+RSpec.describe Candles::DailyIngestorJob, type: :job do
   describe 'job execution' do
     it 'enqueues job' do
       expect do
-        DailyIngestorJob.perform_later
-      end.to have_enqueued_job(DailyIngestorJob)
+        described_class.perform_later
+      end.to have_enqueued_job(described_class)
     end
 
     it 'calls DailyIngestor service' do
-      allow(Candles::DailyIngestor).to receive(:call).and_return({ processed: 10, errors: 0 })
+      allow(Candles::DailyIngestor).to receive(:call).and_return({
+        processed: 10,
+        success: 8,
+        failed: 2,
+        total_candles: 100,
+        errors: []
+      })
 
-      DailyIngestorJob.perform_now
+      described_class.perform_now
     end
 
     it 'handles service errors' do
@@ -21,7 +27,7 @@ RSpec.describe DailyIngestorJob, type: :job do
       allow(Telegram::Notifier).to receive(:send_error_alert).and_return(nil)
 
       expect do
-        DailyIngestorJob.perform_now
+        described_class.perform_now
       end.to raise_error(StandardError, 'API error')
     end
   end

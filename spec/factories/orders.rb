@@ -3,9 +3,9 @@
 FactoryBot.define do
   factory :order do
     association :instrument
-    client_order_id { "B-#{instrument.security_id}-#{Time.current.to_i.to_s[-6..]}" }
+    sequence(:client_order_id) { |n| "B-#{instrument.security_id}-#{Time.current.to_i.to_s[-6..]}-#{n}" }
     symbol { instrument.symbol_name }
-    exchange_segment { instrument.exchange_segment || 'NSE_EQ' }
+    exchange_segment { instrument.exchange_segment }
     security_id { instrument.security_id }
     product_type { 'EQUITY' }
     order_type { 'MARKET' }
@@ -67,7 +67,7 @@ FactoryBot.define do
 
   trait :sell_order do
     transaction_type { 'SELL' }
-    client_order_id { "S-#{instrument.security_id}-#{Time.current.to_i.to_s[-6..]}" }
+    sequence(:client_order_id) { |n| "S-#{instrument.security_id}-#{Time.current.to_i.to_s[-6..]}-#{n}" }
   end
 end
 

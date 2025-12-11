@@ -7,7 +7,6 @@ FactoryBot.define do
     exchange { 'NSE' }
     segment { 'E' }
     instrument_type { 'EQUITY' }
-    exchange_segment { 'NSE_EQ' }
     display_name { symbol_name }
     lot_size { 1 }
     tick_size { 0.05 }
@@ -16,7 +15,6 @@ FactoryBot.define do
   factory :index_instrument, parent: :instrument do
     segment { 'I' }
     instrument_type { 'INDEX' }
-    exchange_segment { 'IDX_I' }
     symbol_name { 'NIFTY' }
   end
 end

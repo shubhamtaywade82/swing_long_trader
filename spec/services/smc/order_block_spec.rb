@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
+require_relative '../../../app/services/smc/order_block'
 
 RSpec.describe SMC::OrderBlock do
   describe '.detect' do

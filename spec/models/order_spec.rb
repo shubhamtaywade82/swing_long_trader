@@ -3,13 +3,13 @@
 require 'rails_helper'
 
 RSpec.describe Order, type: :model do
-  let(:instrument) { create(:instrument, symbol_name: 'RELIANCE', security_id: '11536', exchange_segment: 'NSE_EQ') }
+  let(:instrument) { create(:instrument, symbol_name: 'RELIANCE', security_id: '11536', exchange: 'NSE', segment: 'E') }
   let(:order) do
     create(:order,
       instrument: instrument,
       client_order_id: 'B-11536-123456',
       symbol: 'RELIANCE',
-      exchange_segment: 'NSE_EQ',
+      exchange_segment: instrument.exchange_segment,
       security_id: '11536',
       product_type: 'EQUITY',
       order_type: 'MARKET',

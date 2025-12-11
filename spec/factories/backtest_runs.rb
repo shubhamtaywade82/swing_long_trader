@@ -12,7 +12,6 @@ FactoryBot.define do
     annualized_return { 6.2 }
     max_drawdown { 8.3 }
     sharpe_ratio { 1.2 }
-    sortino_ratio { 1.5 }
     win_rate { 55.0 }
     total_trades { 100 }
     config { { initial_capital: 100_000, risk_per_trade: 2.0 }.to_json }

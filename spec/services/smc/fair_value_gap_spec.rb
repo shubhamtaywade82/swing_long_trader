@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
+require_relative '../../../app/services/smc/fair_value_gap'
 
 RSpec.describe SMC::FairValueGap do
   describe '.detect' do

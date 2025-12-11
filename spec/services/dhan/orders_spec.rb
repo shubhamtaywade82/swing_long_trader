@@ -3,12 +3,12 @@
 require 'rails_helper'
 
 RSpec.describe Dhan::Orders, type: :service do
-  let(:instrument) { create(:instrument, symbol_name: 'RELIANCE', security_id: '11536', exchange_segment: 'NSE_EQ') }
+  let(:instrument) { create(:instrument, symbol_name: 'RELIANCE', security_id: '11536', exchange: 'NSE', segment: 'E') }
   let(:client_order_id) { "B-#{instrument.security_id}-#{Time.current.to_i.to_s[-6..]}" }
 
   describe '.place_order' do
     context 'with valid parameters' do
-      let(:dhan_client) { instance_double('DhanHQ::Client') }
+      let(:dhan_client) { double('DhanHQ::Client') }
       let(:success_response) do
         {
           'status' => 'success',
@@ -193,7 +193,7 @@ RSpec.describe Dhan::Orders, type: :service do
     end
 
     context 'with DhanHQ API errors' do
-      let(:dhan_client) { instance_double('DhanHQ::Client') }
+      let(:dhan_client) { double('DhanHQ::Client') }
       let(:error_response) do
         {
           'status' => 'error',

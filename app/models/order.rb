@@ -23,7 +23,7 @@ class Order < ApplicationRecord
   scope :recent, -> { order(created_at: :desc) }
   scope :requires_approval, -> { where(requires_approval: true, approved_at: nil, rejected_at: nil) }
   scope :approved, -> { where.not(approved_at: nil) }
-  scope :rejected, -> { where.not(rejected_at: nil) }
+  scope :rejected_for_approval, -> { where.not(rejected_at: nil) }
   scope :pending_approval, -> { where(requires_approval: true).where(approved_at: nil, rejected_at: nil) }
 
   def metadata_hash

@@ -4,7 +4,7 @@ require 'rails_helper'
 
 # Contract tests for Telegram message formatting
 # Ensures message structure and content meet Telegram API requirements
-RSpec.describe Contracts::TelegramMessages, type: :contract do
+RSpec.describe 'Telegram Messages Contract', type: :contract do
   describe 'daily candidates message' do
     it 'should be valid HTML' do
       candidates = [

@@ -2,8 +2,7 @@
 
 module Candles
   # Base helper for candle ingestion with deduplication and upsert logic
-  class Ingestor
-    include ApplicationService
+  class Ingestor < ApplicationService
 
     def self.upsert_candles(instrument:, timeframe:, candles_data:)
       new.upsert_candles(instrument: instrument, timeframe: timeframe, candles_data: candles_data)
@@ -56,11 +55,22 @@ module Candles
       normalized_timestamp = normalize_timestamp(timestamp, timeframe)
 
       # Check if candle already exists
-      existing = CandleSeriesRecord.find_by(
-        instrument_id: instrument.id,
-        timeframe: timeframe,
-        timestamp: normalized_timestamp
-      )
+      # For daily candles, normalize existing timestamps to beginning_of_day for comparison
+      if timeframe == '1D'
+        # Use date comparison to handle any timestamp within the same day
+        day_start = normalized_timestamp.beginning_of_day
+        day_end = normalized_timestamp.end_of_day
+        existing = CandleSeriesRecord.where(
+          instrument_id: instrument.id,
+          timeframe: timeframe
+        ).where(timestamp: day_start..day_end).first
+      else
+        existing = CandleSeriesRecord.find_by(
+          instrument_id: instrument.id,
+          timeframe: timeframe,
+          timestamp: normalized_timestamp
+        )
+      end
 
       if existing
         # Update if data differs (in case of corrections)
@@ -96,6 +106,8 @@ module Candles
 
     def normalize_timestamp(timestamp, timeframe)
       time = timestamp.is_a?(Time) ? timestamp : Time.zone.parse(timestamp.to_s)
+      # Use UTC for consistent normalization across timezones
+      time = time.utc if time.respond_to?(:utc)
       return time.beginning_of_day if timeframe == '1D'
       return time.beginning_of_week if timeframe == '1W'
 

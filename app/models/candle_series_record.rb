@@ -12,6 +12,7 @@ class CandleSeriesRecord < ApplicationRecord
   validates :timestamp, presence: true
   validates :open, :high, :low, :close, presence: true, numericality: true
   validates :volume, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validates :timestamp, uniqueness: { scope: %i[instrument_id timeframe], case_sensitive: true }
 
   scope :for_instrument, ->(instrument) { where(instrument_id: instrument.id) }
   scope :for_timeframe, ->(timeframe) { where(timeframe: timeframe) }

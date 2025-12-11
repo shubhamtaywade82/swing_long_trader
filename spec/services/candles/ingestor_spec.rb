@@ -38,12 +38,15 @@ RSpec.describe Candles::Ingestor, type: :service do
     end
 
     it 'skips duplicate candles' do
-      # Create existing candle
-      create(:daily_candle, instrument: instrument, timestamp: 1.day.ago, close: 100.0)
+      # Create existing candle with normalized timestamp (beginning of day)
+      # Use a fixed time to avoid timezone issues
+      base_time = Time.zone.parse('2024-12-10 14:30:00')
+      normalized_timestamp = base_time.beginning_of_day
+      create(:daily_candle, instrument: instrument, timestamp: normalized_timestamp, close: 100.0, open: 100.0, high: 105.0, low: 99.0, volume: 1_000_000)
 
       candles_data = [
         {
-          timestamp: 1.day.ago,
+          timestamp: base_time, # Will be normalized to beginning_of_day
           open: 100.0,
           high: 105.0,
           low: 99.0,

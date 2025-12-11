@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-RSpec.describe Indicators::Indicator, type: :service do
+RSpec.describe CandleSeries, type: :service do
   # Test data: Simple uptrend with known values
   def create_uptrend_candles
     series = CandleSeries.new(symbol: 'TEST', interval: '1D')

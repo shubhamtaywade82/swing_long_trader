@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
+require_relative '../../../app/services/smc/mitigation_block'
 
 RSpec.describe SMC::MitigationBlock do
   describe '.detect' do

@@ -27,9 +27,11 @@ RSpec.describe CandleSeriesRecord, type: :model do
     end
 
     it 'has unique timestamp per instrument and timeframe' do
-      create(:candle_series_record, instrument: instrument, timeframe: '1D', timestamp: 1.day.ago)
+      # Use normalized timestamp (beginning of day) to match database constraint
+      normalized_timestamp = 1.day.ago.beginning_of_day
+      create(:candle_series_record, instrument: instrument, timeframe: '1D', timestamp: normalized_timestamp)
 
-      duplicate = build(:candle_series_record, instrument: instrument, timeframe: '1D', timestamp: 1.day.ago)
+      duplicate = build(:candle_series_record, instrument: instrument, timeframe: '1D', timestamp: normalized_timestamp)
       expect(duplicate).not_to be_valid
     end
   end
