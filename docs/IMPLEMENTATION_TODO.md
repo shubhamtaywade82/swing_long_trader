@@ -429,7 +429,7 @@
 - [x] Implement P&L/portfolio snapshot message
 - [x] Implement exception/error alert message
 - [x] Format messages with emojis and structure
-- [ ] Test message rendering
+- [x] Test message rendering - Created integration tests with message validation
 
 ### Alert Types
 - [x] Daily candidate list (top 10)
@@ -441,7 +441,7 @@
 
 ### Tests
 - [x] Unit test message rendering (spec/services/telegram/alert_formatter_spec.rb)
-- [ ] End-to-end integration test with sandbox Telegram bot (use VCR cassette for Telegram API calls)
+- [x] End-to-end integration test with sandbox Telegram bot (use VCR cassette for Telegram API calls) - Created telegram_notifier_integration_spec.rb
 - [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---

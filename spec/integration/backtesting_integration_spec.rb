@@ -17,7 +17,7 @@ RSpec.describe 'Backtesting Integration', type: :integration do
           # Create realistic price movement (uptrend with some volatility)
           base_price = 2000.0 + (i * 2.0) # Uptrend
           volatility = rand(-10.0..10.0)
-          
+
           create(:candle_series_record,
             instrument: instrument,
             timeframe: '1D',
@@ -103,7 +103,7 @@ RSpec.describe 'Backtesting Integration', type: :integration do
 
           positions = result[:positions]
           expect(positions).to be_an(Array)
-          
+
           # If positions exist, verify structure
           if positions.any?
             position = positions.first
@@ -182,7 +182,7 @@ RSpec.describe 'Backtesting Integration', type: :integration do
           (0..199).each do |i|
             base_price = 3000.0 + (i * 1.5)
             volatility = rand(-8.0..8.0)
-            
+
             create(:candle_series_record,
               instrument: inst,
               timeframe: '1D',
@@ -271,7 +271,7 @@ RSpec.describe 'Backtesting Integration', type: :integration do
       (0..299).each do |i|
         base_price = 2000.0 + (i * 1.5)
         volatility = rand(-10.0..10.0)
-        
+
         create(:candle_series_record,
           instrument: instrument,
           timeframe: '1D',
