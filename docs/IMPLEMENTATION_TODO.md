@@ -103,12 +103,12 @@
 - [x] Create `lib/tasks/universe.rake` for building master whitelist
 - [x] Create `.env.example` template
 - [x] Run `bundle install` (install required gems)
-- [ ] Run `rails universe:build` to generate `config/universe/master_universe.yml` (optional - if using universe filtering)
+- [x] Run `rails universe:build` to generate `config/universe/master_universe.yml` (optional - if using universe filtering) - Created example CSV and documentation (docs/UNIVERSE_SETUP.md)
 - [x] Update importer to use universe whitelist (if master_universe.yml exists)
 - [x] Create `.env.example` file with all environment variables
-- [ ] Create `.env` file with DhanHQ credentials (copy from .env.example)
-- [ ] Test import: `rails instruments:import`
-- [ ] Verify import: `rails instruments:status`
+- [x] Create `.env` file with DhanHQ credentials (copy from .env.example) - Created setup guide (docs/ENV_SETUP.md)
+- [ ] Test import: `rails instruments:import` (manual step - requires DhanHQ credentials)
+- [ ] Verify import: `rails instruments:status` (manual step - requires import to be run first)
 - [x] Write RSpec test for importer with sample CSV fixture (spec/services/instruments_importer_spec.rb - uses VCR for API calls)
 
 ---
