@@ -195,3 +195,4 @@ Historical Data → Data Loader → Backtester → Portfolio → Result Analyzer
 - Health checks
 - Telegram alerts for critical events
 
+

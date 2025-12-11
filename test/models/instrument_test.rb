@@ -48,3 +48,4 @@ class InstrumentTest < ActiveSupport::TestCase
   end
 end
 
+

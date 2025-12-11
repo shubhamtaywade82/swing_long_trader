@@ -51,3 +51,4 @@ class CandleSeriesRecordTest < ActiveSupport::TestCase
   end
 end
 
+

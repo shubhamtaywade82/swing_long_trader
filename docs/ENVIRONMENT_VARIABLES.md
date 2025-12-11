@@ -64,3 +64,4 @@ RAILS_LOG_LEVEL=info                  # debug, info, warn, error
 - Rotate API keys regularly
 - Use secrets management in production (AWS Secrets Manager, etc.)
 
+
