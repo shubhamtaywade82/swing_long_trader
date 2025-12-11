@@ -7,9 +7,7 @@ RSpec.describe Order, type: :model do
   let(:order) do
     create(:order,
       instrument: instrument,
-      client_order_id: 'B-11536-123456',
       symbol: 'RELIANCE',
-      exchange_segment: instrument.exchange_segment,
       security_id: '11536',
       product_type: 'EQUITY',
       order_type: 'MARKET',
@@ -30,8 +28,9 @@ RSpec.describe Order, type: :model do
     end
 
     it 'requires unique client_order_id' do
-      create(:order, client_order_id: 'B-11536-123456', instrument: instrument)
-      order.client_order_id = 'B-11536-123456'
+      duplicate_id = "B-11536-#{SecureRandom.hex(6)}"
+      create(:order, client_order_id: duplicate_id, instrument: instrument)
+      order.client_order_id = duplicate_id
       expect(order).not_to be_valid
       expect(order.errors[:client_order_id]).to include('has already been taken')
     end

@@ -188,6 +188,65 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_000006) do
     t.index ["status"], name: "index_orders_on_status"
   end
 
+  create_table "paper_ledgers", force: :cascade do |t|
+    t.decimal "amount", precision: 15, scale: 2, null: false
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.text "meta"
+    t.bigint "paper_portfolio_id", null: false
+    t.bigint "paper_position_id"
+    t.string "reason", null: false
+    t.string "transaction_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["paper_portfolio_id", "created_at"], name: "index_paper_ledgers_on_paper_portfolio_id_and_created_at"
+    t.index ["paper_portfolio_id"], name: "index_paper_ledgers_on_paper_portfolio_id"
+    t.index ["paper_position_id"], name: "index_paper_ledgers_on_paper_position_id"
+    t.index ["reason"], name: "index_paper_ledgers_on_reason"
+  end
+
+  create_table "paper_portfolios", force: :cascade do |t|
+    t.decimal "available_capital", precision: 15, scale: 2, default: "0.0"
+    t.decimal "capital", precision: 15, scale: 2, default: "0.0", null: false
+    t.datetime "created_at", null: false
+    t.decimal "max_drawdown", precision: 15, scale: 2, default: "0.0"
+    t.text "metadata"
+    t.string "name", null: false
+    t.decimal "peak_equity", precision: 15, scale: 2, default: "0.0"
+    t.decimal "pnl_realized", precision: 15, scale: 2, default: "0.0"
+    t.decimal "pnl_unrealized", precision: 15, scale: 2, default: "0.0"
+    t.decimal "reserved_capital", precision: 15, scale: 2, default: "0.0"
+    t.decimal "total_equity", precision: 15, scale: 2, default: "0.0"
+    t.datetime "updated_at", null: false
+    t.index ["name"], name: "index_paper_portfolios_on_name", unique: true
+  end
+
+  create_table "paper_positions", force: :cascade do |t|
+    t.datetime "closed_at"
+    t.datetime "created_at", null: false
+    t.decimal "current_price", precision: 15, scale: 2, null: false
+    t.string "direction", null: false
+    t.decimal "entry_price", precision: 15, scale: 2, null: false
+    t.decimal "exit_price", precision: 15, scale: 2
+    t.string "exit_reason"
+    t.integer "holding_days", default: 0
+    t.bigint "instrument_id", null: false
+    t.text "metadata"
+    t.datetime "opened_at", null: false
+    t.bigint "paper_portfolio_id", null: false
+    t.decimal "pnl", precision: 15, scale: 2, default: "0.0"
+    t.decimal "pnl_pct", precision: 8, scale: 2, default: "0.0"
+    t.integer "quantity", null: false
+    t.decimal "sl", precision: 15, scale: 2
+    t.string "status", default: "open"
+    t.decimal "tp", precision: 15, scale: 2
+    t.datetime "updated_at", null: false
+    t.index ["instrument_id"], name: "index_paper_positions_on_instrument_id"
+    t.index ["paper_portfolio_id", "opened_at"], name: "index_paper_positions_on_paper_portfolio_id_and_opened_at"
+    t.index ["paper_portfolio_id"], name: "index_paper_positions_on_paper_portfolio_id"
+    t.index ["status", "paper_portfolio_id"], name: "index_paper_positions_on_status_and_paper_portfolio_id"
+    t.index ["status"], name: "index_paper_positions_on_status"
+  end
+
   create_table "settings", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "key", null: false
@@ -200,4 +259,8 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_000006) do
   add_foreign_key "backtest_positions", "instruments"
   add_foreign_key "candle_series", "instruments"
   add_foreign_key "orders", "instruments"
+  add_foreign_key "paper_ledgers", "paper_portfolios"
+  add_foreign_key "paper_ledgers", "paper_positions"
+  add_foreign_key "paper_positions", "instruments"
+  add_foreign_key "paper_positions", "paper_portfolios"
 end

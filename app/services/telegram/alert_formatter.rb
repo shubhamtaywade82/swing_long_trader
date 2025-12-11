@@ -55,7 +55,7 @@ module Telegram
     end
 
     def format_signal_alert(signal)
-      symbol = signal[:symbol] || 'N/A'
+      symbol = escape_html(signal[:symbol] || 'N/A')
       direction = signal[:direction] || :long
       entry_price = signal[:entry_price] || 0
       sl = signal[:sl] || 0
@@ -164,6 +164,18 @@ module Telegram
       message += "\n⏰ #{Time.current.strftime('%H:%M:%S IST')}"
 
       message
+    end
+
+    private
+
+    def escape_html(text)
+      return text if text.nil?
+      text.to_s
+          .gsub('&', '&amp;')
+          .gsub('<', '&lt;')
+          .gsub('>', '&gt;')
+          .gsub('"', '&quot;')
+          .gsub("'", '&#39;')
     end
   end
 end

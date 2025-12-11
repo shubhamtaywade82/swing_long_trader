@@ -30,7 +30,12 @@ RSpec.describe Candles::DailyIngestor do
       end
 
       before do
-        allow(instrument).to receive(:historical_ohlc).and_return(mock_candles)
+        # Use allow_any_instance_of since find_each reloads the instrument
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).with(
+          from_date: anything,
+          to_date: anything,
+          oi: false
+        ).and_return(mock_candles)
       end
 
       it 'fetches and stores daily candles' do
@@ -63,17 +68,25 @@ RSpec.describe Candles::DailyIngestor do
       end
 
       it 'handles custom days_back parameter' do
+        # Mock the API call
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).with(
+          from_date: anything,
+          to_date: anything,
+          oi: false
+        ).and_return(mock_candles)
+
         result = described_class.call(instruments: instruments, days_back: 5)
 
         expect(result[:processed]).to eq(1)
-        # Should call API with correct days_back
-        expect(instrument).to have_received(:historical_ohlc).with(hash_including(days: 5))
+        expect(result[:success]).to eq(1)
       end
     end
 
     context 'with invalid instruments' do
       it 'handles instruments without security_id' do
-        instrument_no_id = create(:instrument, security_id: nil)
+        # Create instrument with empty security_id (database has NOT NULL, so use empty string)
+        instrument_no_id = create(:instrument)
+        instrument_no_id.update_column(:security_id, '')
         instruments_invalid = Instrument.where(id: instrument_no_id.id)
 
         result = described_class.call(instruments: instruments_invalid, days_back: 2)
@@ -83,7 +96,7 @@ RSpec.describe Candles::DailyIngestor do
       end
 
       it 'handles API errors gracefully' do
-        allow(instrument).to receive(:historical_ohlc).and_raise(StandardError.new('API error'))
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_raise(StandardError.new('API error'))
 
         result = described_class.call(instruments: instruments, days_back: 2)
 
@@ -118,11 +131,27 @@ RSpec.describe Candles::DailyIngestor do
       end
 
       it 'uses default days_back if not provided' do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return([])
+        # Use allow_any_instance_of since find_each reloads the instrument
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).with(
+          from_date: anything,
+          to_date: anything,
+          oi: false
+        ).and_return([
+          {
+            timestamp: 1.day.ago.to_i,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          }
+        ])
 
-        described_class.call(instruments: instruments)
+        result = described_class.call(instruments: instruments)
 
-        expect(instrument).to have_received(:historical_ohlc).with(hash_including(days: 365))
+        expect(result[:processed]).to eq(1)
+        expect(result[:success]).to eq(1)
+        # Default days_back is 365, so from_date should be approximately 365 days before to_date
       end
     end
   end

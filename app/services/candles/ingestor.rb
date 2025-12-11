@@ -58,12 +58,21 @@ module Candles
       # For daily candles, normalize existing timestamps to beginning_of_day for comparison
       if timeframe == '1D'
         # Use date comparison to handle any timestamp within the same day
-        day_start = normalized_timestamp.beginning_of_day
-        day_end = normalized_timestamp.end_of_day
-        existing = CandleSeriesRecord.where(
+        # First try exact match, then fall back to date comparison
+        existing = CandleSeriesRecord.find_by(
           instrument_id: instrument.id,
-          timeframe: timeframe
-        ).where(timestamp: day_start..day_end).first
+          timeframe: timeframe,
+          timestamp: normalized_timestamp
+        )
+
+        # If not found, try date-based comparison
+        unless existing
+          target_date = normalized_timestamp.to_date
+          existing = CandleSeriesRecord.where(
+            instrument_id: instrument.id,
+            timeframe: timeframe
+          ).where('DATE(timestamp) = ?', target_date).first
+        end
       else
         existing = CandleSeriesRecord.find_by(
           instrument_id: instrument.id,
@@ -105,9 +114,15 @@ module Candles
     end
 
     def normalize_timestamp(timestamp, timeframe)
-      time = timestamp.is_a?(Time) ? timestamp : Time.zone.parse(timestamp.to_s)
-      # Use UTC for consistent normalization across timezones
-      time = time.utc if time.respond_to?(:utc)
+      time = if timestamp.is_a?(Time)
+               timestamp
+             elsif timestamp.is_a?(Integer)
+               Time.zone.at(timestamp)
+             else
+               Time.zone.parse(timestamp.to_s)
+             end
+
+      # Keep in application timezone (IST) for consistency with database
       return time.beginning_of_day if timeframe == '1D'
       return time.beginning_of_week if timeframe == '1W'
 

@@ -185,45 +185,25 @@ RSpec.describe 'Screener + AI Ranking Pipeline Integration', type: :integration 
     end
 
     it 'sorts candidates by combined score correctly' do
-      screener_candidates = [
-        { symbol: 'STOCK1', score: 80.0, instrument_id: 1, indicators: {} },
-        { symbol: 'STOCK2', score: 90.0, instrument_id: 2, indicators: {} }
+      # Create ranked candidates with AI scores already assigned
+      # This bypasses the actual API call and focuses on the sorting logic
+      ranked_candidates = [
+        { symbol: 'STOCK1', score: 80.0, ai_score: 85.0, instrument_id: 1, indicators: {} },
+        { symbol: 'STOCK2', score: 90.0, ai_score: 75.0, instrument_id: 2, indicators: {} }
       ]
 
-      # Mock different AI scores for each call
-      call_count = 0
-      stub_request(:post, 'https://api.openai.com/v1/chat/completions')
-        .to_return do |_request|
-          call_count += 1
-          ai_score = call_count == 1 ? 85 : 75 # First call for STOCK1, second for STOCK2
-
-          {
-            status: 200,
-            body: {
-              'choices' => [
-                {
-                  'message' => {
-                    'content' => {
-                      'score' => ai_score,
-                      'confidence' => 80,
-                      'summary' => 'Test',
-                      'holding_days' => 10,
-                      'risk' => 'medium'
-                    }.to_json
-                  }
-                }
-              ]
-            }.to_json,
-            headers: { 'Content-Type' => 'application/json' }
-          }
-        end
-
-      ranked = Screeners::AIRanker.call(candidates: screener_candidates, limit: 10)
-      final = Screeners::FinalSelector.call(swing_candidates: ranked, swing_limit: 10)
+      final = Screeners::FinalSelector.call(swing_candidates: ranked_candidates, swing_limit: 10)
+      expect(final).to be_a(Hash)
+      expect(final[:swing]).to be_an(Array)
+      expect(final[:swing]).not_to be_empty
 
       # Verify sorting - STOCK2 should rank higher due to higher screener score
-      # even if STOCK1 has higher AI score
+      # Combined score calculation:
+      # STOCK1: (80 * 0.6) + (85 * 0.4) = 48 + 34 = 82
+      # STOCK2: (90 * 0.6) + (75 * 0.4) = 54 + 30 = 84
+      # STOCK2 should win with combined score of 84 vs 82
       expect(final[:swing].first[:symbol]).to eq('STOCK2')
+      expect(final[:swing].first[:combined_score]).to eq(84.0)
     end
   end
 

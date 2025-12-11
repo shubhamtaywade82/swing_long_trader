@@ -47,9 +47,11 @@ module Screeners
       end
 
       # Sort by combined score
-      ranked.sort_by { |c| -c[:combined_score] }.first(@swing_limit).each_with_index do |candidate, index|
+      sorted = ranked.sort_by { |c| -c[:combined_score] }.first(@swing_limit)
+      sorted.each_with_index do |candidate, index|
         candidate[:rank] = index + 1
       end
+      sorted
     end
 
     def select_longterm_candidates

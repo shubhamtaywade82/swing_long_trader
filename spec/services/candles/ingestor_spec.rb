@@ -42,16 +42,29 @@ RSpec.describe Candles::Ingestor, type: :service do
       # Use a fixed time to avoid timezone issues
       base_time = Time.zone.parse('2024-12-10 14:30:00')
       normalized_timestamp = base_time.beginning_of_day
-      create(:daily_candle, instrument: instrument, timestamp: normalized_timestamp, close: 100.0, open: 100.0, high: 105.0, low: 99.0, volume: 1_000_000)
+
+      # Create the existing candle with exact values
+      existing_candle = create(:daily_candle,
+        instrument: instrument,
+        timestamp: normalized_timestamp,
+        close: 100.0,
+        open: 100.0,
+        high: 105.0,
+        low: 99.0,
+        volume: 1_000_000
+      )
+
+      # Reload to ensure we have the exact database values
+      existing_candle.reload
 
       candles_data = [
         {
-          timestamp: base_time, # Will be normalized to beginning_of_day
-          open: 100.0,
-          high: 105.0,
-          low: 99.0,
-          close: 100.0, # Same as existing
-          volume: 1_000_000
+          timestamp: base_time.to_i, # Pass as integer timestamp, will be normalized to beginning_of_day
+          open: existing_candle.open, # Use exact same values from database
+          high: existing_candle.high,
+          low: existing_candle.low,
+          close: existing_candle.close,
+          volume: existing_candle.volume
         }
       ]
 
@@ -62,7 +75,7 @@ RSpec.describe Candles::Ingestor, type: :service do
       )
 
       expect(result[:success]).to be true
-      expect(result[:skipped]).to eq(1)
+      expect(result[:skipped]).to eq(1), "Expected 1 skipped, got #{result.inspect}. Existing candle: #{existing_candle.inspect}"
       expect(CandleSeriesRecord.count).to eq(1) # Still only 1
     end
 
