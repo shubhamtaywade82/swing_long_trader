@@ -155,13 +155,13 @@
 - [x] Test ATR calculation (test exists)
 
 ### SMC Components (Optional)
-- [ ] Create `app/services/smc/` directory
-- [ ] Implement BOS (Break of Structure) detection
-- [ ] Implement CHOCH (Change of Character) detection
-- [ ] Implement mitigation blocks detection
-- [ ] Implement order-block detection
-- [ ] Implement fair value gaps detection
-- [ ] Keep SMC functions pure (accept candle arrays)
+- [x] Create `app/services/smc/` directory
+- [x] Implement BOS (Break of Structure) detection (app/services/smc/bos.rb)
+- [x] Implement CHOCH (Change of Character) detection (app/services/smc/choch.rb)
+- [x] Implement mitigation blocks detection (app/services/smc/mitigation_block.rb)
+- [x] Implement order-block detection (app/services/smc/order_block.rb)
+- [x] Implement fair value gaps detection (app/services/smc/fair_value_gap.rb)
+- [x] Keep SMC functions pure (accept candle arrays) - All functions are pure, no DB dependencies
 
 ### Tests
 - [x] Write unit tests for each indicator with static fixtures (spec/services/indicators/indicator_spec.rb)
