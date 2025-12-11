@@ -135,7 +135,7 @@
 ### Tests
 - [x] Write integration tests for ingestors (use VCR cassettes for DhanHQ API responses)
 - [x] Write unit tests for dedup and upsert logic (in ingestor_spec.rb)
-- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
+- [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---
 
@@ -166,7 +166,7 @@
 ### Tests
 - [x] Write unit tests for each indicator with static fixtures (spec/services/indicators/indicator_spec.rb)
 - [ ] Write unit tests for SMC components (optional - Phase 6)
-- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
+- [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---
 
@@ -207,7 +207,7 @@
 - [x] Write unit tests for screener logic with fixture candles (swing_screener_spec.rb)
 - [x] Write integration test (screener + AI with mocked OpenAI using WebMock/VCR cassettes) - spec/integration/screener_ai_pipeline_spec.rb
 - [x] Test final selector logic (final_selector_spec.rb)
-- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
+- [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---
 
@@ -252,7 +252,7 @@
 - [x] Write unit tests for signal builder with known candle series (signal_builder_spec.rb)
 - [x] Test entry/SL/TP calculations (spec/services/strategies/swing/signal_builder_spec.rb - comprehensive tests added)
 - [x] Test position sizing logic (spec/services/strategies/swing/signal_builder_spec.rb - comprehensive tests added)
-- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
+- [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---
 
@@ -276,7 +276,7 @@
 - [x] Test caching behavior
 - [x] Test rate limiting
 - [x] Test cost calculation
-- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
+- [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---
 
@@ -407,7 +407,7 @@
 - [ ] Test walk-forward logic (no look-ahead bias) - manual verification needed
 - [x] Test performance metrics calculations (result_analyzer_spec.rb)
 - [ ] Test edge cases (no trades, all losses, all wins) - needs more test cases
-- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
+- [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ### Documentation
 - [x] Document backtesting methodology (docs/BACKTESTING.md)
@@ -442,7 +442,7 @@
 ### Tests
 - [x] Unit test message rendering (spec/services/telegram/alert_formatter_spec.rb)
 - [ ] End-to-end integration test with sandbox Telegram bot (use VCR cassette for Telegram API calls)
-- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
+- [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---
 
@@ -473,7 +473,7 @@
 - [ ] Test order payloads
 - [ ] Test idempotency logic
 - [ ] Test risk limits
-- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
+- [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---
 
@@ -518,7 +518,7 @@
 - [x] Test job execution (spec/jobs/application_job_spec.rb, spec/jobs/monitor_job_spec.rb)
 - [ ] Test job retry logic - SolidQueue handles automatically
 - [x] Test job failure handling (spec/jobs/application_job_spec.rb)
-- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
+- [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---
 
