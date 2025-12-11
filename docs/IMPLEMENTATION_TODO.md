@@ -104,7 +104,7 @@
 - [x] Create `.env.example` template
 - [x] Run `bundle install` (install required gems)
 - [ ] Run `rails universe:build` to generate `config/universe/master_universe.yml` (optional - if using universe filtering)
-- [ ] Update importer to use universe whitelist (if needed)
+- [x] Update importer to use universe whitelist (if master_universe.yml exists)
 - [x] Create `.env.example` file with all environment variables
 - [ ] Create `.env` file with DhanHQ credentials (copy from .env.example)
 - [ ] Test import: `rails instruments:import`
@@ -163,8 +163,8 @@
 - [ ] Keep SMC functions pure (accept candle arrays)
 
 ### Tests
-- [ ] Write unit tests for each indicator with static fixtures
-- [ ] Write unit tests for SMC components
+- [x] Write unit tests for each indicator with static fixtures (test/services/indicators/indicator_test.rb)
+- [ ] Write unit tests for SMC components (optional - Phase 6)
 
 ---
 
@@ -188,13 +188,13 @@
 - [ ] Implement SMC structure validation (optional - Phase 6)
 
 ### AI Ranker Implementation
-- [ ] Create OpenAI client wrapper
-- [ ] Build prompt with daily/weekly structure
-- [ ] Parse JSON response (confidence, risk, summary, holding_days)
-- [ ] Add error handling for non-JSON responses
-- [ ] Implement caching (avoid duplicate AI calls)
-- [ ] Add rate limiting (max 50 calls/day)
-- [ ] Add cost monitoring
+- [x] Create OpenAI client wrapper (app/services/openai/client.rb)
+- [x] Build prompt with daily/weekly structure (in AIRanker)
+- [x] Parse JSON response (confidence, risk, summary, holding_days)
+- [x] Add error handling for non-JSON responses
+- [x] Implement caching (avoid duplicate AI calls)
+- [x] Add rate limiting (max 50 calls/day)
+- [ ] Add cost monitoring (token usage tracked, cost calculation optional)
 
 ### Final Selector
 - [ ] Combine screener score + AI score

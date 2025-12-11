@@ -3,6 +3,7 @@
 
 require 'csv'
 require 'open-uri'
+require 'yaml'
 
 class InstrumentsImporter
   CSV_URL         = 'https://images.dhan.co/api-data/api-scrip-master-detailed.csv'
@@ -10,6 +11,7 @@ class InstrumentsImporter
   CACHE_MAX_AGE   = 24.hours
   VALID_EXCHANGES = %w[NSE BSE].freeze
   BATCH_SIZE      = 1_000
+  UNIVERSE_FILE   = Rails.root.join('config/universe/master_universe.yml')
 
   class << self
     # ------------------------------------------------------------
@@ -67,14 +69,24 @@ class InstrumentsImporter
 
     # ------------------------------------------------------------
     # 1. Split CSV rows (swing trading only needs instruments, not derivatives)
+    # Optionally filter by universe whitelist if master_universe.yml exists
     # ------------------------------------------------------------
     def build_batches(csv_content)
       instruments = []
+      universe_symbols = load_universe_symbols
 
       CSV.parse(csv_content, headers: true).each do |row|
         next unless VALID_EXCHANGES.include?(row['EXCH_ID'])
         # Skip derivatives (SEGMENT='D') - swing trading uses equity/index instruments only
         next if row['SEGMENT'] == 'D'
+
+        # Filter by universe whitelist if available
+        if universe_symbols.present?
+          symbol_name = row['SYMBOL_NAME']&.strip&.upcase
+          # Remove suffix like -EQ, -BE, etc. for matching
+          clean_symbol = symbol_name&.split('-')&.first
+          next unless universe_symbols.include?(clean_symbol)
+        end
 
         attrs = build_attrs(row)
         instruments << attrs.slice(*Instrument.column_names.map(&:to_sym))
@@ -82,6 +94,19 @@ class InstrumentsImporter
 
       instruments
     end
+
+    def load_universe_symbols
+      return Set.new unless UNIVERSE_FILE.exist?
+
+      begin
+        symbols = YAML.load_file(UNIVERSE_FILE)
+        Set.new(symbols.map(&:to_s).map(&:upcase))
+      rescue StandardError => e
+        Rails.logger.warn("[InstrumentsImporter] Failed to load universe: #{e.message}")
+        Set.new
+      end
+    end
+    private :load_universe_symbols
 
     def build_attrs(row)
       now = Time.zone.now
