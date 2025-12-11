@@ -398,7 +398,7 @@
 - [ ] Ensure backtest signals match live signals (validation) - manual testing required
 
 ### Tests
-- [ ] Write unit tests for backtesting engine - needs comprehensive test data
+- [x] Write unit tests for backtesting engine - Created swing_backtester_spec.rb with edge cases
 - [x] Write unit tests for portfolio manager (portfolio logic tested in backtester)
 - [x] Write unit tests for position tracker (position logic tested in backtester)
 - [x] Write unit tests for result analyzer (result_analyzer_spec.rb)
@@ -406,7 +406,7 @@
 - [ ] Write integration tests with sample historical data - use VCR cassettes for API responses
 - [ ] Test walk-forward logic (no look-ahead bias) - manual verification needed
 - [x] Test performance metrics calculations (result_analyzer_spec.rb)
-- [ ] Test edge cases (no trades, all losses, all wins) - needs more test cases
+- [x] Test edge cases (no trades, all losses, all wins) - Added comprehensive edge case tests in swing_backtester_spec.rb
 - [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ### Documentation
