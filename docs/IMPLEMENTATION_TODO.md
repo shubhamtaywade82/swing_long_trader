@@ -107,8 +107,8 @@
 - [x] Update importer to use universe whitelist (if master_universe.yml exists)
 - [x] Create `.env.example` file with all environment variables
 - [x] Create `.env` file with DhanHQ credentials (copy from .env.example) - Created setup guide (docs/ENV_SETUP.md)
-- [ ] Test import: `rails instruments:import` (manual step - requires DhanHQ credentials)
-- [ ] Verify import: `rails instruments:status` (manual step - requires import to be run first)
+- [ ] Test import: `rails instruments:import` (manual step - requires DhanHQ credentials) - See docs/MANUAL_VERIFICATION_STEPS.md
+- [ ] Verify import: `rails instruments:status` (manual step - requires import to be run first) - See docs/MANUAL_VERIFICATION_STEPS.md
 - [x] Write RSpec test for importer with sample CSV fixture (spec/services/instruments_importer_spec.rb - uses VCR for API calls)
 
 ---
@@ -395,7 +395,7 @@
 - [x] Integrate backtester with `Strategies::Swing::Engine` (SwingBacktester uses Engine.call)
 - [x] Integrate backtester with `Strategies::LongTerm::Evaluator` (LongTermBacktester uses Evaluator.call)
 - [x] Use same signal generation logic as live trading (uses Strategies::Swing::Engine)
-- [ ] Ensure backtest signals match live signals (validation) - manual testing required
+- [ ] Ensure backtest signals match live signals (validation) - manual testing required - See docs/MANUAL_VERIFICATION_STEPS.md
 
 ### Tests
 - [x] Write unit tests for backtesting engine - Created swing_backtester_spec.rb with edge cases
@@ -404,7 +404,7 @@
 - [x] Write unit tests for result analyzer (result_analyzer_spec.rb)
 - [x] Write unit tests for data loader (data_loader_spec.rb)
 - [x] Write integration tests with sample historical data - Created backtesting_integration_spec.rb with VCR support
-- [ ] Test walk-forward logic (no look-ahead bias) - manual verification needed
+- [ ] Test walk-forward logic (no look-ahead bias) - manual verification needed - See docs/MANUAL_VERIFICATION_STEPS.md
 - [x] Test performance metrics calculations (result_analyzer_spec.rb)
 - [x] Test edge cases (no trades, all losses, all wins) - Added comprehensive edge case tests in swing_backtester_spec.rb
 - [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically

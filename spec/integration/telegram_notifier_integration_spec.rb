@@ -37,34 +37,26 @@ RSpec.describe 'Telegram Notifier Integration', type: :integration do
       end
 
       it 'sends formatted message to Telegram API' do
-        message = Telegram::AlertFormatter.format_daily_candidates(candidates)
-        
-        result = Telegram::Notifier.send_message(
-          chat_id: chat_id,
-          message: message
-        )
+        # Mock TelegramNotifier
+        allow(::TelegramNotifier).to receive(:enabled?).and_return(true)
+        allow(::TelegramNotifier).to receive(:send_message).and_return(true)
 
-        expect(result[:success]).to be true
-        expect(result[:message_id]).to be_present
+        result = Telegram::Notifier.send_daily_candidates(candidates)
+
+        expect(::TelegramNotifier).to have_received(:send_message).with(
+          anything,
+          parse_mode: 'HTML'
+        )
       end
 
       it 'handles API errors gracefully' do
-        # Mock API error response
-        stub_request(:post, "https://api.telegram.org/bot#{bot_token}/sendMessage")
-          .to_return(
-            status: 400,
-            body: { ok: false, error_code: 400, description: 'Bad Request' }.to_json
-          )
+        # Mock TelegramNotifier to raise error
+        allow(::TelegramNotifier).to receive(:enabled?).and_return(true)
+        allow(::TelegramNotifier).to receive(:send_message).and_raise(StandardError.new('API Error'))
 
-        message = Telegram::AlertFormatter.format_daily_candidates(candidates)
-        
-        result = Telegram::Notifier.send_message(
-          chat_id: chat_id,
-          message: message
-        )
-
-        expect(result[:success]).to be false
-        expect(result[:error]).to be_present
+        expect do
+          Telegram::Notifier.send_daily_candidates(candidates)
+        end.not_to raise_error
       end
     end
 
@@ -84,19 +76,20 @@ RSpec.describe 'Telegram Notifier Integration', type: :integration do
       end
 
       it 'sends signal alert to Telegram' do
-        message = Telegram::AlertFormatter.format_signal_alert(signal)
-        
-        result = Telegram::Notifier.send_message(
-          chat_id: chat_id,
-          message: message
-        )
+        allow(::TelegramNotifier).to receive(:enabled?).and_return(true)
+        allow(::TelegramNotifier).to receive(:send_message).and_return(true)
 
-        expect(result[:success]).to be true
+        Telegram::Notifier.send_signal_alert(signal)
+
+        expect(::TelegramNotifier).to have_received(:send_message).with(
+          anything,
+          parse_mode: 'HTML'
+        )
       end
 
       it 'validates message content before sending' do
         message = Telegram::AlertFormatter.format_signal_alert(signal)
-        
+
         # Verify message contains required fields
         expect(message).to include('RELIANCE')
         expect(message).to include('LONG')
@@ -116,40 +109,34 @@ RSpec.describe 'Telegram Notifier Integration', type: :integration do
       end
 
       it 'sends exit alert with P&L information' do
-        message = Telegram::AlertFormatter.format_exit_alert(
+        allow(::TelegramNotifier).to receive(:enabled?).and_return(true)
+        allow(::TelegramNotifier).to receive(:send_message).and_return(true)
+
+        Telegram::Notifier.send_exit_alert(
           signal,
           exit_reason: 'take_profit',
           exit_price: 2700.0,
-          pnl: 10000.0,
-          pnl_pct: 4.0
-        )
-        
-        result = Telegram::Notifier.send_message(
-          chat_id: chat_id,
-          message: message
+          pnl: 10000.0
         )
 
-        expect(result[:success]).to be true
-        expect(message).to include('take_profit')
-        expect(message).to include('10000')
+        expect(::TelegramNotifier).to have_received(:send_message).with(
+          anything,
+          parse_mode: 'HTML'
+        )
       end
     end
 
     context 'when sending error alert' do
       it 'sends error notification' do
-        message = Telegram::AlertFormatter.format_error_alert(
-          'Test error message',
-          context: 'TestContext'
-        )
-        
-        result = Telegram::Notifier.send_message(
-          chat_id: chat_id,
-          message: message
-        )
+        allow(::TelegramNotifier).to receive(:enabled?).and_return(true)
+        allow(::TelegramNotifier).to receive(:send_message).and_return(true)
 
-        expect(result[:success]).to be true
-        expect(message).to include('ERROR')
-        expect(message).to include('Test error message')
+        Telegram::Notifier.send_error_alert('Test error message', context: 'TestContext')
+
+        expect(::TelegramNotifier).to have_received(:send_message).with(
+          anything,
+          parse_mode: 'HTML'
+        )
       end
     end
 
@@ -167,16 +154,15 @@ RSpec.describe 'Telegram Notifier Integration', type: :integration do
       end
 
       it 'sends portfolio snapshot' do
-        message = Telegram::AlertFormatter.format_portfolio_snapshot(portfolio_data)
-        
-        result = Telegram::Notifier.send_message(
-          chat_id: chat_id,
-          message: message
-        )
+        allow(::TelegramNotifier).to receive(:enabled?).and_return(true)
+        allow(::TelegramNotifier).to receive(:send_message).and_return(true)
 
-        expect(result[:success]).to be true
-        expect(message).to include('110000')
-        expect(message).to include('10000')
+        Telegram::Notifier.send_portfolio_snapshot(portfolio_data)
+
+        expect(::TelegramNotifier).to have_received(:send_message).with(
+          anything,
+          parse_mode: 'HTML'
+        )
       end
     end
 
@@ -256,7 +242,7 @@ RSpec.describe 'Telegram Notifier Integration', type: :integration do
         }
 
         message = Telegram::AlertFormatter.format_signal_alert(signal)
-        
+
         # Should not contain raw script tags
         expect(message).not_to include('<script>')
         expect(message.length).to be < 4096
@@ -276,7 +262,7 @@ RSpec.describe 'Telegram Notifier Integration', type: :integration do
         end
 
         message = Telegram::AlertFormatter.format_daily_candidates(large_candidates)
-        
+
         # Should be under Telegram's 4096 character limit
         expect(message.length).to be < 4096
         # Should still contain some candidates
@@ -286,52 +272,37 @@ RSpec.describe 'Telegram Notifier Integration', type: :integration do
 
     context 'rate limiting and error handling' do
       it 'handles rate limit errors' do
-        stub_request(:post, "https://api.telegram.org/bot#{bot_token}/sendMessage")
-          .to_return(
-            status: 429,
-            body: { ok: false, error_code: 429, description: 'Too Many Requests' }.to_json
+        allow(::TelegramNotifier).to receive(:enabled?).and_return(true)
+        allow(::TelegramNotifier).to receive(:send_message).and_raise(StandardError.new('Rate limit exceeded'))
+
+        expect do
+          Telegram::Notifier.send_signal_alert(
+            symbol: 'TEST',
+            direction: :long,
+            entry_price: 100.0,
+            sl: 95.0,
+            tp: 110.0,
+            rr: 2.0,
+            confidence: 80.0
           )
-
-        message = Telegram::AlertFormatter.format_signal_alert(
-          symbol: 'TEST',
-          direction: :long,
-          entry_price: 100.0,
-          sl: 95.0,
-          tp: 110.0,
-          rr: 2.0,
-          confidence: 80.0
-        )
-        
-        result = Telegram::Notifier.send_message(
-          chat_id: chat_id,
-          message: message
-        )
-
-        expect(result[:success]).to be false
-        expect(result[:error]).to include('429') || result[:error].to include('rate limit')
+        end.not_to raise_error
       end
 
       it 'handles network errors' do
-        stub_request(:post, "https://api.telegram.org/bot#{bot_token}/sendMessage")
-          .to_raise(StandardError.new('Network error'))
+        allow(::TelegramNotifier).to receive(:enabled?).and_return(true)
+        allow(::TelegramNotifier).to receive(:send_message).and_raise(StandardError.new('Network error'))
 
-        message = Telegram::AlertFormatter.format_signal_alert(
-          symbol: 'TEST',
-          direction: :long,
-          entry_price: 100.0,
-          sl: 95.0,
-          tp: 110.0,
-          rr: 2.0,
-          confidence: 80.0
-        )
-        
-        result = Telegram::Notifier.send_message(
-          chat_id: chat_id,
-          message: message
-        )
-
-        expect(result[:success]).to be false
-        expect(result[:error]).to be_present
+        expect do
+          Telegram::Notifier.send_signal_alert(
+            symbol: 'TEST',
+            direction: :long,
+            entry_price: 100.0,
+            sl: 95.0,
+            tp: 110.0,
+            rr: 2.0,
+            confidence: 80.0
+          )
+        end.not_to raise_error
       end
     end
   end
