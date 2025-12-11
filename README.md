@@ -364,6 +364,7 @@ rails console
 
 ## Documentation
 
+- **[Getting Started](docs/GETTING_STARTED.md)** - Complete step-by-step setup guide for new users
 - **[System Overview](docs/SYSTEM_OVERVIEW.md)** - Complete system guide, quick reference, and troubleshooting
 - **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** - Complete implementation summary and status
 - **[Architecture](docs/architecture.md)** - System architecture and component overview

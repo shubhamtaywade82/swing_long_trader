@@ -383,6 +383,16 @@ See [Environment Setup Guide](ENV_SETUP.md) for complete list:
 - `rails test:verify_infrastructure` - Verify test infrastructure (VCR, WebMock, Database Cleaner)
 - `rails test:list` - List all test files
 
+**Alert Testing:**
+- `rails test:alerts:all` - Test all Telegram alert types
+- `rails test:alerts:signal` - Test signal alert only
+- `rails test:alerts:error` - Test error alert only
+
+**Dry-Run Mode:**
+- `rails test:dry_run:check` - Check dry-run mode status
+- `rails test:dry_run:enable` - Enable dry-run mode
+- `rails test:dry_run:disable` - Disable dry-run mode
+
 **Monitoring:**
 - `rails metrics:daily` - Show daily metrics
 - `rails metrics:weekly` - Show weekly metrics
