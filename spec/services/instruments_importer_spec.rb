@@ -7,7 +7,7 @@ RSpec.describe InstrumentsImporter do
   let(:cache_path) { Rails.root.join('tmp/dhan_scrip_master.csv') }
   let(:sample_csv) do
     <<~CSV
-      Security Id,Exchange,Segment,Instrument Type,Symbol Name,Series,ISIN,Underlying Security Id,Underlying Symbol,Expiry Date,Strike Price,Option Type,Exchange Segment
+      SECURITY_ID,EXCH_ID,SEGMENT,INSTRUMENT_TYPE,SYMBOL_NAME,SERIES,ISIN,UNDERLYING_SECURITY_ID,UNDERLYING_SYMBOL,SM_EXPIRY_DATE,STRIKE_PRICE,OPTION_TYPE,EXCH_SEGMENT
       11536,NSE,E,EQUITY,RELIANCE,EQ,INE467B01029,,,2025-12-31,,,NSE_EQ
       11537,NSE,E,EQUITY,TCS,EQ,INE467B01030,,,2025-12-31,,,NSE_EQ
       9999,NSE,I,INDEX,NIFTY 50,XX,INE467B01031,,,2025-12-31,,,IDX_I
@@ -73,8 +73,8 @@ RSpec.describe InstrumentsImporter do
 
         InstrumentsImporter.import_from_url
 
-        # Should not import futures
-        expect(Instrument.where(instrument_type: 'FUTSTK').count).to eq(0)
+        # Should not import futures (segment D is skipped)
+        expect(Instrument.where(segment: 'D').count).to eq(0)
       end
 
       it 'only imports NSE and BSE instruments' do
@@ -83,8 +83,9 @@ RSpec.describe InstrumentsImporter do
 
         InstrumentsImporter.import_from_url
 
-        # Should not import MCX instruments
+        # Should not import MCX instruments (only NSE and BSE are valid)
         expect(Instrument.where(exchange: 'MCX').count).to eq(0)
+        expect(Instrument.pluck(:exchange).uniq).to contain_exactly('NSE')
       end
     end
 

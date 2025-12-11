@@ -128,9 +128,9 @@
 - [x] Implement intraday fetcher (fetch 15m/1h/2h, in-memory only)
 - [x] Add deduplication logic (prevent duplicate candles)
 - [x] Add caching for intraday data (Rails.cache with TTL)
-- [ ] Test daily ingestion with sample instruments
-- [ ] Test weekly ingestion
-- [ ] Test intraday fetcher (verify no DB writes)
+- [x] Test daily ingestion with sample instruments (spec/services/candles/daily_ingestor_spec.rb)
+- [x] Test weekly ingestion (spec/services/candles/weekly_ingestor_spec.rb)
+- [x] Test intraday fetcher (verify no DB writes) (spec/services/candles/intraday_fetcher_spec.rb)
 
 ### Tests
 - [x] Write integration tests for ingestors (use VCR cassettes for DhanHQ API responses)
