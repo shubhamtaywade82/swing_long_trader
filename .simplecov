@@ -2,6 +2,9 @@
 # This file is loaded by SimpleCov when running tests
 
 SimpleCov.configure do
+  # Coverage criterion (line or branch coverage)
+  criterion :line
+
   # Output format
   formatter SimpleCov::Formatter::MultiFormatter.new([
     SimpleCov::Formatter::SimpleFormatter,
