@@ -89,6 +89,7 @@ group :development, :test do
   gem "factory_bot_rails", "~> 6.4"
   gem "shoulda-matchers", "~> 6.0"
   gem "rubocop-rspec", require: false
+  gem "simplecov", require: false
 end
 
 group :development do

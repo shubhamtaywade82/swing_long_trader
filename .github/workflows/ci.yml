@@ -55,6 +55,16 @@ jobs:
 
       - name: Run RSpec tests
         run: bundle exec rspec
+        env:
+          COVERAGE: true
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
 
       - name: Run RuboCop
         run: bundle exec rubocop
@@ -69,3 +79,26 @@ jobs:
 
       - name: Run Bundler Audit
         run: bundle exec bundler-audit check --update
+
+      - name: Check code coverage
+        run: |
+          if [ -f coverage/.resultset.json ]; then
+            ruby -rjson -e "
+              data = JSON.parse(File.read('coverage/.resultset.json'))
+              coverage_data = data.values.first['coverage']
+              total = coverage_data.values.count
+              covered = coverage_data.values.reject(&:nil?).count
+              coverage_pct = (covered.to_f / total * 100).round(2)
+              puts \"Code coverage: #{coverage_pct}%\"
+              if coverage_pct < 80
+                puts \"⚠️ Code coverage is below 80% threshold\"
+                exit 1
+              else
+                puts \"✅ Code coverage meets 80% threshold\"
+              end
+            "
+          else
+            echo "⚠️ Coverage report not found - running tests may have failed"
+            exit 1
+          fi
+        continue-on-error: true

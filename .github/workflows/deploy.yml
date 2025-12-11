@@ -1,0 +1,52 @@
+# Deployment workflow (optional - configure based on your deployment target)
+# This is a template that can be customized for your deployment needs
+
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.3
+          bundler-cache: true
+
+      # Example: Deploy using Kamal (Rails 8 default)
+      # Uncomment and configure based on your deployment target
+      # - name: Deploy with Kamal
+      #   env:
+      #     KAMAL_REGISTRY_PASSWORD: ${{ secrets.KAMAL_REGISTRY_PASSWORD }}
+      #     RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+      #     SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      #   run: |
+      #     bundle exec kamal deploy
+
+      # Example: Run database migrations
+      # - name: Run database migrations
+      #   env:
+      #     DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      #     RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+      #   run: |
+      #     bundle exec rails db:migrate
+
+      # Example: Restart SolidQueue workers
+      # - name: Restart SolidQueue workers
+      #   run: |
+      #     # Add your worker restart command here
+      #     # e.g., systemctl restart solid_queue_worker
+      #     echo "Restart SolidQueue workers on your deployment target"
+
+      - name: Deployment complete
+        run: echo "Deployment workflow configured - customize based on your deployment target"
+
