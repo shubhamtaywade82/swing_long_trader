@@ -329,29 +329,30 @@
 - [x] Calculate average holding period
 - [x] Calculate best/worst trade
 - [x] Calculate consecutive wins/losses
-- [ ] Generate equity curve data (needs portfolio integration)
-- [ ] Generate monthly returns breakdown (needs portfolio integration)
+- [x] Generate equity curve data (implemented in ReportGenerator)
+- [x] Generate monthly returns breakdown (implemented in ReportGenerator)
 - [ ] Generate trade distribution analysis
 
 ### Backtest Configuration
-- [ ] Create `app/services/backtesting/config.rb` (backtest parameters)
-- [ ] Implement initial capital setting
-- [ ] Implement risk per trade (%)
-- [ ] Implement commission/slippage settings
-- [ ] Implement position sizing method selection
-- [ ] Implement date range configuration
-- [ ] Implement instrument universe selection
-- [ ] Implement strategy parameter overrides
+- [x] Create `app/services/backtesting/config.rb` (backtest parameters)
+- [x] Implement initial capital setting
+- [x] Implement risk per trade (%)
+- [x] Implement commission/slippage settings
+- [x] Implement position sizing method selection
+- [x] Implement date range configuration
+- [x] Implement instrument universe selection
+- [x] Implement strategy parameter overrides
 
 ### Results Storage & Reporting
-- [ ] Store backtest runs in database
-- [ ] Store individual trades/positions
-- [ ] Create `app/services/backtesting/report_generator.rb`
-- [ ] Generate CSV export of trades
-- [ ] Generate CSV export of equity curve
-- [ ] Generate summary report (text/markdown)
-- [ ] Generate detailed performance metrics report
-- [ ] Create visualization data (JSON for charts)
+- [x] Store backtest runs in database (BacktestRun model)
+- [x] Store individual trades/positions (BacktestPosition model)
+- [x] Create `app/services/backtesting/report_generator.rb`
+- [x] Generate CSV export of trades
+- [x] Generate CSV export of equity curve
+- [x] Generate summary report (text/markdown)
+- [x] Generate detailed performance metrics report
+- [x] Create visualization data (JSON for charts)
+- [x] Implement `rails backtest:report[run_id]` task
 
 ### Rake Tasks
 - [x] Create `lib/tasks/backtest.rake`

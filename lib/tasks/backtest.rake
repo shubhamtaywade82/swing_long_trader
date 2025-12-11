@@ -172,6 +172,53 @@ namespace :backtest do
       end
     end
   end
+
+  desc 'Generate report for backtest run [run_id]'
+  task :report, [:run_id] => :environment do |_t, args|
+    run_id = args[:run_id]&.to_i
+    unless run_id
+      puts 'Usage: rails backtest:report[run_id]'
+      exit 1
+    end
+
+    run = BacktestRun.find_by(id: run_id)
+    unless run
+      puts "❌ Backtest run #{run_id} not found"
+      exit 1
+    end
+
+    puts "📊 Generating report for backtest run #{run_id}..."
+    puts ''
+
+    report = Backtesting::ReportGenerator.generate(run)
+
+    # Print summary
+    puts report[:summary]
+    puts ''
+
+    # Print metrics report
+    puts report[:metrics_report]
+
+    # Save CSV files
+    output_dir = Rails.root.join('tmp/backtest_reports')
+    output_dir.mkpath
+
+    trades_file = output_dir.join("backtest_#{run_id}_trades.csv")
+    equity_file = output_dir.join("backtest_#{run_id}_equity_curve.csv")
+
+    File.write(trades_file, report[:trades_csv])
+    File.write(equity_file, report[:equity_curve_csv])
+
+    puts ''
+    puts "✅ CSV files saved:"
+    puts "   Trades: #{trades_file}"
+    puts "   Equity Curve: #{equity_file}"
+
+    # Save visualization data
+    viz_file = output_dir.join("backtest_#{run_id}_visualization.json")
+    File.write(viz_file, JSON.pretty_generate(report[:visualization_data]))
+    puts "   Visualization: #{viz_file}"
+  end
 end
 
 
