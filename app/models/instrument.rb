@@ -71,8 +71,11 @@ class Instrument < ApplicationRecord
 
   scope :enabled, -> { where(enabled: true) }
 
-  validates :security_id, presence: true, uniqueness: true
+  validates :security_id, presence: true
   validates :symbol_name, presence: true
+  validates :exchange, presence: true
+  validates :segment, presence: true
+  validates :security_id, uniqueness: { scope: %i[exchange segment], case_sensitive: true }
   validates :exchange_segment, presence: true, unless: -> { exchange.present? && segment.present? }
 
   SEGMENT_FROM_EXCHANGE = {

@@ -159,7 +159,7 @@ namespace :hardening do
 
   def check_tests
     # Check if test files exist
-    test_files = Dir.glob('test/**/*_test.rb')
+    test_files = Dir.glob('spec/**/*_spec.rb')
     {
       passed: test_files.any?,
       message: "#{test_files.size} test files found"

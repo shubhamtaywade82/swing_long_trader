@@ -537,6 +537,9 @@
 - [x] Create factories for Instrument and CandleSeriesRecord (FactoryBot)
 - [x] Create VCR cassettes directory structure (spec/fixtures/vcr_cassettes/)
 - [x] Document VCR cassette naming conventions (docs/VCR_CASSETTE_NAMING.md)
+- [x] Migrate all Minitest tests to RSpec (20 test files migrated: models, jobs, services, contracts, integration, smoke tests)
+- [x] Update FactoryBot configuration to load from spec/factories only
+- [x] Update hardening rake task to check for spec files instead of test files
 
 ### Test Coverage
 - [x] Write unit tests for Instrument model (spec/models/instrument_spec.rb)

@@ -157,16 +157,37 @@ class InstrumentsImporter
 
     # ------------------------------------------------------------
     # 2. Upsert instruments
+    # Handles duplicate constraint on (security_id, exchange, segment)
+    # Deduplicates rows by composite key and uses upsert for efficient import
     # ------------------------------------------------------------
     def import_instruments!(rows)
+      # Deduplicate rows by (security_id, exchange, segment) composite key
+      # Keep last occurrence if duplicates exist in CSV
+      deduplicated_rows = rows.each_with_object({}) do |row, hash|
+        key = [row[:security_id], row[:exchange], row[:segment]]
+        hash[key] = row
+      end.values
+
+      # Use upsert with (security_id, exchange, segment) as conflict target
       Instrument.import(
-        rows,
+        deduplicated_rows,
         batch_size: BATCH_SIZE,
         on_duplicate_key_update: {
-          conflict_target: %i[security_id symbol_name exchange segment],
+          conflict_target: %i[security_id exchange segment],
           columns: %i[
-            display_name isin instrument_code instrument_type
-            underlying_symbol lot_size tick_size updated_at
+            isin instrument_code underlying_security_id
+            underlying_symbol symbol_name display_name instrument_type
+            series lot_size expiry_date strike_price option_type tick_size
+            expiry_flag bracket_flag cover_flag asm_gsm_flag asm_gsm_category
+            buy_sell_indicator buy_co_min_margin_per sell_co_min_margin_per
+            buy_co_sl_range_max_perc sell_co_sl_range_max_perc
+            buy_co_sl_range_min_perc sell_co_sl_range_min_perc
+            buy_bo_min_margin_per sell_bo_min_margin_per
+            buy_bo_sl_range_max_perc sell_bo_sl_range_max_perc
+            buy_bo_sl_range_min_perc sell_bo_sl_min_range
+            buy_bo_profit_range_max_perc sell_bo_profit_range_max_perc
+            buy_bo_profit_range_min_perc sell_bo_profit_range_min_perc
+            mtf_leverage updated_at
           ]
         }
       )
