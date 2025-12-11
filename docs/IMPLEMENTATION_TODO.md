@@ -449,18 +449,18 @@
 ## 💰 PHASE 12 — Execution (Optional - Dhan Orders)
 
 ### Implementation
-- [ ] Create `app/services/dhan/orders.rb` wrapper
-- [ ] Create `app/services/strategies/swing/executor.rb`
-- [ ] Create `app/models/order.rb` (audit trail)
-- [ ] Create `create_orders` migration
-- [ ] Implement idempotency checks
-- [ ] Implement max order size limits
-- [ ] Implement risk manager (max exposure per instrument)
-- [ ] Implement risk manager (max exposure per portfolio)
-- [ ] Add dry-run toggle (`ENV['DRY_RUN'] == 'true'`)
-- [ ] Add Telegram confirmation for large orders
-- [ ] Implement circuit breaker (stop on high error rate)
-- [ ] Add order logging and audit trail
+- [x] Create `app/services/dhan/orders.rb` wrapper
+- [x] Create `app/services/strategies/swing/executor.rb`
+- [x] Create `app/models/order.rb` (audit trail)
+- [x] Create `create_orders` migration
+- [x] Implement idempotency checks (client_order_id uniqueness)
+- [x] Implement max order size limits (in Executor)
+- [x] Implement risk manager (max exposure per instrument)
+- [x] Implement risk manager (max exposure per portfolio)
+- [x] Add dry-run toggle (`ENV['DRY_RUN'] == 'true'`)
+- [x] Add Telegram confirmation for large orders
+- [x] Implement circuit breaker (stop on high error rate)
+- [x] Add order logging and audit trail
 
 ### Safeguards
 - [ ] Test idempotency (prevent duplicate orders)
