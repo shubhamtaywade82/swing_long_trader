@@ -39,6 +39,11 @@ module SwingLongTrader
     # Time zone for Indian market
     config.time_zone = "Asia/Kolkata"
 
+    # Paper trading configuration
+    config.x.paper_trading = ActiveSupport::OrderedOptions.new
+    config.x.paper_trading.enabled = ENV["PAPER_TRADING"] == "true"
+    config.x.paper_trading.initial_capital = (ENV["PAPER_TRADING_CAPITAL"] || 100_000).to_f
+
     # config.eager_load_paths << Rails.root.join("extras")
 
     # Don't generate system test files.

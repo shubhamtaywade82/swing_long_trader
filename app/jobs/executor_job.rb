@@ -15,18 +15,23 @@ class ExecutorJob < ApplicationJob
     result = Strategies::Swing::Executor.call(signal, dry_run: dry_run)
 
     if result[:success]
+      mode = result[:paper_trade] ? 'PAPER' : (@dry_run ? 'DRY RUN' : 'LIVE')
       Rails.logger.info(
-        "[ExecutorJob] Order executed: " \
+        "[ExecutorJob] Order executed (#{mode}): " \
         "#{signal[:symbol]} #{signal[:direction]} #{signal[:qty]} @ #{signal[:entry_price]}"
       )
 
-      # Send notification
-      if AlgoConfig.fetch([:notifications, :telegram, :notify_entry])
-        Telegram::Notifier.send_signal_alert(signal.merge(order_id: result[:order]&.id))
+      # Send notification (only for live trades, paper trades send their own notifications)
+      unless result[:paper_trade]
+        if AlgoConfig.fetch([:notifications, :telegram, :notify_entry])
+          order_id = result[:order]&.id || result[:position]&.id
+          Telegram::Notifier.send_signal_alert(signal.merge(order_id: order_id))
+        end
       end
     else
+      mode = result[:paper_trade] ? 'PAPER' : (@dry_run ? 'DRY RUN' : 'LIVE')
       Rails.logger.warn(
-        "[ExecutorJob] Order execution failed: #{signal[:symbol]} - #{result[:error]}"
+        "[ExecutorJob] Order execution failed (#{mode}): #{signal[:symbol]} - #{result[:error]}"
       )
     end
 
