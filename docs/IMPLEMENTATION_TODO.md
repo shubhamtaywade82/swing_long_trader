@@ -548,7 +548,7 @@
 - [x] Write integration tests with VCR cassettes for OpenAI responses (spec/services/openai/client_spec.rb)
 - [x] Write contract tests for Telegram messages (spec/contracts/telegram_messages_spec.rb)
 - [x] Write smoke tests for rake tasks (spec/smoke/rake_tasks_spec.rb)
-- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
+- [x] Ensure all tests use transaction-based database cleanup (Database Cleaner configured in spec/support/database_cleaner.rb)
 - [ ] Achieve >80% code coverage
 
 ### CI/CD Setup

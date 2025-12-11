@@ -1,8 +1,53 @@
-# Omakase Ruby styling for Rails
-inherit_gem: { rubocop-rails-omakase: rubocop.yml }
+# Inherit from Rails Omakase configuration
+inherit_from:
+  - .rubocop-rails-omakase.yml
 
-# Overwrite or add rules to create your own house style
-#
-# # Use `[a, [b, c]]` not `[ a, [ b, c ] ]`
-# Layout/SpaceInsideArrayLiteralBrackets:
-#   Enabled: false
+# RSpec specific configuration
+require:
+  - rubocop-rspec
+
+# RSpec cops
+RSpec/ExampleLength:
+  Max: 30
+  Exclude:
+    - "spec/integration/**/*"
+
+RSpec/MultipleExpectations:
+  Max: 8
+  Exclude:
+    - "spec/integration/**/*"
+
+RSpec/NestedGroups:
+  Max: 4
+
+RSpec/DescribeClass:
+  Enabled: true
+
+RSpec/EmptyExampleGroup:
+  Enabled: true
+
+RSpec/ContextWording:
+  Enabled: true
+
+# Allow longer lines in specs
+Layout/LineLength:
+  Exclude:
+    - "spec/**/*"
+    - "config/**/*"
+    - "db/**/*"
+
+# Allow block length in specs
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*"
+    - "config/**/*"
+
+# Allow method length in specs
+Metrics/MethodLength:
+  Exclude:
+    - "spec/**/*"
+
+# Allow class length in specs
+Metrics/ClassLength:
+  Exclude:
+    - "spec/**/*"
