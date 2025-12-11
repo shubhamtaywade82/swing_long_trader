@@ -298,7 +298,7 @@
 - [x] Implement date range selection (from_date, to_date)
 - [x] Implement instrument filtering (universe or specific symbols)
 - [x] Add data validation (ensure sufficient candles for indicators)
-- [ ] Handle missing data gracefully (skip or interpolate) - basic skip implemented
+- [x] Handle missing data gracefully (skip or interpolate) - Enhanced DataLoader with interpolation option and gap detection
 
 ### Swing Trading Backtesting
 - [x] Create `app/services/backtesting/swing_backtester.rb`
