@@ -170,6 +170,152 @@ namespace :backtest do
     puts "✅ Backtest saved to database (Run ID: #{backtest_run.id})"
   end
 
+  desc 'Run long-term trading backtest [from_date] [to_date] [initial_capital]'
+  task :long_term, [:from_date, :to_date, :initial_capital] => :environment do |_t, args|
+    from_date = args[:from_date] ? Date.parse(args[:from_date]) : 6.months.ago.to_date
+    to_date = args[:to_date] ? Date.parse(args[:to_date]) : Date.today
+    initial_capital = args[:initial_capital]&.to_f || 100_000
+
+    puts "🔬 Running Long-Term Trading Backtest"
+    puts "   Period: #{from_date} to #{to_date}"
+    puts "   Initial Capital: ₹#{initial_capital}"
+    puts ""
+
+    # Load instruments (use universe or all equity/index)
+    instruments = Instrument.where(instrument_type: ['EQUITY', 'INDEX']).limit(50)
+
+    if instruments.empty?
+      puts "❌ No instruments found. Run 'rails instruments:import' first."
+      exit 1
+    end
+
+    puts "📊 Testing with #{instruments.size} instruments..."
+    puts ""
+
+    # Get long-term trading config
+    long_term_config = AlgoConfig.fetch(:long_term_trading) || {}
+    rebalance_frequency = (long_term_config[:rebalance_frequency] || 'weekly').to_sym
+    max_positions = long_term_config[:max_positions] || 10
+    min_holding_days = long_term_config[:holding_period_days] || 30
+
+    # Get commission and slippage config (optional, defaults to 0)
+    backtest_config = AlgoConfig.fetch(:backtesting) || {}
+    commission_rate = backtest_config[:commission_rate] || 0.0
+    slippage_pct = backtest_config[:slippage_pct] || 0.0
+
+    puts "⚙️  Configuration:"
+    puts "   Rebalance Frequency: #{rebalance_frequency}"
+    puts "   Max Positions: #{max_positions}"
+    puts "   Min Holding Days: #{min_holding_days}"
+    puts ""
+
+    # Run backtest
+    result = Backtesting::LongTermBacktester.call(
+      instruments: instruments,
+      from_date: from_date,
+      to_date: to_date,
+      initial_capital: initial_capital,
+      risk_per_trade: 2.0,
+      rebalance_frequency: rebalance_frequency,
+      max_positions: max_positions,
+      min_holding_days: min_holding_days,
+      commission_rate: commission_rate,
+      slippage_pct: slippage_pct
+    )
+
+    unless result[:success]
+      puts "❌ Backtest failed: #{result[:error]}"
+      exit 1
+    end
+
+    # Display results
+    results = result[:results]
+    puts "=" * 60
+    puts "📈 BACKTEST RESULTS (LONG-TERM)"
+    puts "=" * 60
+    puts ""
+    puts "💰 Total Return: #{results[:total_return]}%"
+    puts "📊 Annualized Return: #{results[:annualized_return].round(2)}%"
+    puts "📉 Max Drawdown: #{results[:max_drawdown]}%"
+    puts "📈 Sharpe Ratio: #{results[:sharpe_ratio]}"
+    puts "📊 Sortino Ratio: #{results[:sortino_ratio]}"
+    puts ""
+    puts "🎯 Win Rate: #{results[:win_rate]}%"
+    puts "📊 Total Trades: #{results[:total_trades]}"
+    puts "✅ Winning Trades: #{results[:winning_trades]}"
+    puts "❌ Losing Trades: #{results[:losing_trades]}"
+    puts "📈 Profit Factor: #{results[:profit_factor]}"
+    puts "📊 Avg Win/Loss Ratio: #{results[:avg_win_loss_ratio]}"
+    puts ""
+    puts "💰 Trading Costs:"
+    puts "   Commission: ₹#{results[:total_commission] || 0}"
+    puts "   Slippage: ₹#{results[:total_slippage] || 0}"
+    puts "   Total: ₹#{results[:total_trading_costs] || 0}"
+    puts ""
+    puts "📊 Portfolio Metrics:"
+    puts "   Rebalance Count: #{results[:rebalance_count] || 0}"
+    puts "   Avg Positions per Rebalance: #{results[:avg_positions_per_rebalance] || 0}"
+    puts ""
+    puts "⏳ Avg Holding Period: #{results[:avg_holding_period]} days"
+    puts "🏆 Best Trade: ₹#{results[:best_trade][:pnl]} (#{results[:best_trade][:pnl_pct]}%)"
+    puts "📉 Worst Trade: ₹#{results[:worst_trade][:pnl]} (#{results[:worst_trade][:pnl_pct]}%)"
+    puts ""
+    puts "📊 Consecutive Wins: #{results[:consecutive_wins]}"
+    puts "📉 Consecutive Losses: #{results[:consecutive_losses]}"
+    puts ""
+    puts "💰 Final Capital: ₹#{result[:portfolio].current_equity.round(2)}"
+    puts "=" * 60
+
+    # Save to database
+    backtest_run = BacktestRun.create!(
+      start_date: from_date,
+      end_date: to_date,
+      strategy_type: 'long_term',
+      initial_capital: initial_capital,
+      risk_per_trade: 2.0,
+      total_return: results[:total_return],
+      annualized_return: results[:annualized_return],
+      max_drawdown: results[:max_drawdown],
+      sharpe_ratio: results[:sharpe_ratio],
+      win_rate: results[:win_rate],
+      total_trades: results[:total_trades],
+      status: 'completed',
+      config: {
+        risk_per_trade: 2.0,
+        rebalance_frequency: rebalance_frequency,
+        max_positions: max_positions,
+        min_holding_days: min_holding_days
+      }.to_json,
+      results: results.to_json
+    )
+
+    # Save positions
+    result[:positions].each do |position|
+      instrument = Instrument.find_by(id: position.instrument_id)
+      next unless instrument
+
+      BacktestPosition.create!(
+        backtest_run: backtest_run,
+        instrument: instrument,
+        entry_date: position.entry_date,
+        exit_date: position.exit_date,
+        direction: position.direction.to_s,
+        entry_price: position.entry_price,
+        exit_price: position.exit_price,
+        quantity: position.quantity,
+        stop_loss: position.stop_loss,
+        take_profit: position.take_profit,
+        pnl: position.calculate_pnl,
+        pnl_pct: position.calculate_pnl_pct,
+        holding_days: position.holding_days,
+        exit_reason: position.exit_reason
+      )
+    end
+
+    puts ""
+    puts "✅ Backtest saved to database (Run ID: #{backtest_run.id})"
+  end
+
   desc 'List all backtest runs'
   task list: :environment do
     runs = BacktestRun.order(created_at: :desc).limit(10)

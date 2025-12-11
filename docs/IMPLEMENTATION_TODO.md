@@ -364,17 +364,17 @@
 - [x] Implement `rails backtest:swing[from_date,to_date]` task
 - [x] Implement `rails backtest:list` task
 - [x] Implement `rails backtest:show[run_id]` task
-- [ ] Implement `rails backtest:long_term[from_date,to_date]` task (requires LongTermBacktester)
+- [x] Implement `rails backtest:long_term[from_date,to_date]` task (requires LongTermBacktester)
 - [x] Implement `rails backtest:compare[run_id1,run_id2]` task
 - [x] Implement `rails backtest:export[run_id]` task
 
 ### Walk-Forward Analysis
-- [ ] Create `app/services/backtesting/walk_forward.rb`
-- [ ] Implement in-sample/out-of-sample split
-- [ ] Implement rolling window backtesting
-- [ ] Implement expanding window backtesting
-- [ ] Calculate out-of-sample performance
-- [ ] Compare in-sample vs out-of-sample results
+- [x] Create `app/services/backtesting/walk_forward.rb`
+- [x] Implement in-sample/out-of-sample split
+- [x] Implement rolling window backtesting
+- [x] Implement expanding window backtesting
+- [x] Calculate out-of-sample performance
+- [x] Compare in-sample vs out-of-sample results
 
 ### Parameter Optimization (Optional)
 - [ ] Create `app/services/backtesting/optimizer.rb`
