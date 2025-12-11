@@ -524,19 +524,31 @@
 
 ## 🧪 PHASE 14 — Tests, CI/CD & QA
 
+### Test Infrastructure Setup
+- [x] Set up RSpec with rspec-rails
+- [x] Configure Database Cleaner with transaction strategy for each example
+- [x] Set up WebMock for HTTP request stubbing
+- [x] Set up VCR for recording/replaying API interactions
+- [x] Create spec/spec_helper.rb with RSpec configuration
+- [x] Create spec/rails_helper.rb with Rails-specific configuration
+- [x] Configure Database Cleaner in spec/support/database_cleaner.rb
+- [x] Configure VCR in spec/support/vcr.rb (filter sensitive data, set cassette directory)
+- [x] Configure WebMock in spec/support/webmock.rb (disable net connect, allow localhost)
+- [x] Create factories for Instrument and CandleSeriesRecord (FactoryBot)
+- [ ] Create VCR cassettes directory structure (spec/fixtures/vcr_cassettes/)
+- [ ] Document VCR cassette naming conventions
+
 ### Test Coverage
-- [x] Set up test infrastructure (Minitest, FactoryBot, WebMock, VCR)
-- [x] Create test helper with VCR/WebMock configuration
-- [x] Create factories for Instrument and CandleSeriesRecord
-- [x] Write unit tests for Instrument model
-- [x] Write unit tests for Candles::Ingestor service
-- [x] Write unit tests for jobs (application_job_test.rb, monitor_job_test.rb, daily_ingestor_job_test.rb)
+- [x] Write unit tests for Instrument model (spec/models/instrument_spec.rb)
+- [x] Write unit tests for Candles::Ingestor service (spec/services/candles/ingestor_spec.rb)
+- [x] Write unit tests for jobs (spec/jobs/application_job_spec.rb, spec/jobs/monitor_job_spec.rb, spec/jobs/candles/daily_ingestor_job_spec.rb)
 - [ ] Write unit tests for all other services (screeners, strategies, etc.)
-- [x] Write unit tests for all other models (BacktestRun, BacktestPosition, Setting) - test/models/backtest_run_test.rb, test/models/backtest_position_test.rb, test/models/setting_test.rb
-- [x] Write integration tests with mocked Dhan responses (candles_ingestion_test.rb)
-- [x] Write integration tests with mocked OpenAI responses (openai/client_test.rb)
-- [x] Write contract tests for Telegram messages (test/contracts/telegram_messages_test.rb)
-- [x] Write smoke tests for rake tasks (test/smoke/rake_tasks_test.rb)
+- [x] Write unit tests for all other models (BacktestRun, BacktestPosition, Setting) - spec/models/backtest_run_spec.rb, spec/models/backtest_position_spec.rb, spec/models/setting_spec.rb
+- [x] Write integration tests with VCR cassettes for Dhan responses (spec/integration/candles_ingestion_spec.rb)
+- [x] Write integration tests with VCR cassettes for OpenAI responses (spec/services/openai/client_spec.rb)
+- [x] Write contract tests for Telegram messages (spec/contracts/telegram_messages_spec.rb)
+- [x] Write smoke tests for rake tasks (spec/smoke/rake_tasks_spec.rb)
+- [ ] Ensure all tests use transaction-based database cleanup (Database Cleaner)
 - [ ] Achieve >80% code coverage
 
 ### CI/CD Setup
