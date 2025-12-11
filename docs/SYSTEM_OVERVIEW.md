@@ -381,7 +381,12 @@ See [Environment Setup Guide](ENV_SETUP.md) for complete list:
 - `rails solid_queue:failed` - List failed jobs
 
 **Verification:**
+- `rails verify:complete` - Verify system completeness
+- `rails verify:status` - Check implementation status
 - `rails verify:risks` - Verify all risk items
+- `rails verify:workflow` - Run complete verification workflow
+- `rails verify:validate_signals` - Validate backtest vs live signals
+- `rails verify:health` - Quick health check
 - `rails production:ready` - Check production readiness
 - `rails production:checklist` - Show deployment checklist
 - `rails hardening:check` - Run hardening checks
