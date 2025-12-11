@@ -364,10 +364,13 @@ rails console
 
 ## Documentation
 
+- **[System Overview](docs/SYSTEM_OVERVIEW.md)** - Complete system guide, quick reference, and troubleshooting
 - **[Architecture](docs/architecture.md)** - System architecture and component overview
 - **[Runbook](docs/runbook.md)** - Operational procedures and troubleshooting
 - **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)** - Complete list of environment variables
 - **[Production Checklist](docs/PRODUCTION_CHECKLIST.md)** - Pre-deployment checklist
+- **[Deployment Quickstart](docs/DEPLOYMENT_QUICKSTART.md)** - Step-by-step deployment guide
+- **[Backtesting Guide](docs/BACKTESTING.md)** - Comprehensive backtesting documentation
 - **[Migration Guide](docs/SWING_LONG_TRADER_MIGRATION_GUIDE.md)** - Migration from AlgoScalperAPI
 - **[Implementation TODO](docs/IMPLEMENTATION_TODO.md)** - Development progress tracker
 
