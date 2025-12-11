@@ -382,7 +382,7 @@
 - [ ] Implement genetic algorithm optimization (optional - complex, can be added later)
 - [x] Implement parameter sensitivity analysis
 - [x] Avoid overfitting (use walk-forward analysis with out-of-sample validation)
-- [ ] Store optimization results (can be saved to database or file)
+- [x] Store optimization results (can be saved to database or file) - Created OptimizationRun model and updated Optimizer to save results
 
 ### Monte Carlo Simulation (Optional)
 - [x] Create `app/services/backtesting/monte_carlo.rb`

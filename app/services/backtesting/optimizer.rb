@@ -14,7 +14,7 @@ module Backtesting
         optimization_metric: optimization_metric,
         use_walk_forward: use_walk_forward,
         backtester_class: backtester_class
-      ).call
+      ).call(save_to_db: save_to_db)
     end
 
     def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, parameter_ranges: {}, optimization_metric: :sharpe_ratio, use_walk_forward: true, backtester_class: SwingBacktester)
@@ -29,12 +29,15 @@ module Backtesting
       @results = []
     end
 
-    def call
+    def call(save_to_db: false)
       # Generate all parameter combinations
       combinations = generate_combinations(@parameter_ranges)
       total_combinations = combinations.size
 
       Rails.logger.info("[Optimizer] Testing #{total_combinations} parameter combinations...")
+
+      # Create optimization run record if saving to DB
+      optimization_run = create_optimization_run if save_to_db
 
       # Test each combination
       combinations.each_with_index do |params, index|
@@ -56,7 +59,7 @@ module Backtesting
       # Generate sensitivity analysis
       sensitivity = calculate_sensitivity_analysis
 
-      {
+      result = {
         success: true,
         best_parameters: @results.first&.dig(:parameters),
         best_metrics: @results.first&.dig(:metrics),
@@ -64,6 +67,14 @@ module Backtesting
         sensitivity_analysis: sensitivity,
         total_combinations_tested: @results.size
       }
+
+      # Save to database if requested
+      if save_to_db && optimization_run
+        save_optimization_run(optimization_run, result)
+        result[:optimization_run_id] = optimization_run.id
+      end
+
+      result
     end
 
     private
