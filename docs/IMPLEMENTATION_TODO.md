@@ -109,7 +109,7 @@
 - [ ] Create `.env` file with DhanHQ credentials (copy from .env.example)
 - [ ] Test import: `rails instruments:import`
 - [ ] Verify import: `rails instruments:status`
-- [ ] Write RSpec test for importer with sample CSV fixture (use VCR cassette for API calls)
+- [x] Write RSpec test for importer with sample CSV fixture (spec/services/instruments_importer_spec.rb - uses VCR for API calls)
 
 ---
 
