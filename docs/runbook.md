@@ -77,7 +77,18 @@ rails backtest:swing[2024-01-01,2024-12-31,100000]
 # View results
 rails backtest:list
 rails backtest:show[run_id]
+
+# Generate comprehensive report
+rails backtest:report[run_id]
+
+# Export all files
+rails backtest:export[run_id]
+
+# Compare two backtest runs
+rails backtest:compare[run_id1,run_id2]
 ```
+
+See [Backtesting Documentation](BACKTESTING.md) for detailed guide.
 
 ## Troubleshooting
 
@@ -86,6 +97,8 @@ rails backtest:show[run_id]
 1. Check SolidQueue status:
    ```bash
    rails solid_queue:status
+   rails solid_queue:verify  # Verify tables exist
+   rails solid_queue:failed  # View failed jobs
    ```
 
 2. Check job queue:
