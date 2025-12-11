@@ -214,6 +214,15 @@ openai:
     monthly_threshold: 200.0 # Alert if monthly cost exceeds $200
 
 # ============================================
+# EXECUTION CONFIGURATION
+# ============================================
+execution:
+  # Manual approval for first N trades
+  manual_approval:
+    enabled: true # Set to false to disable manual approval
+    count: 30 # Number of trades requiring manual approval
+
+# ============================================
 # RISK MANAGEMENT
 # ============================================
 risk:

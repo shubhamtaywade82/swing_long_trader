@@ -29,6 +29,10 @@ module Strategies
         circuit_check = check_circuit_breaker
         return circuit_check unless circuit_check[:success]
 
+        # Check if manual approval required (first 30 trades)
+        approval_check = check_manual_approval_required
+        return approval_check unless approval_check[:success]
+
         # Place order
         place_entry_order
       end
@@ -95,12 +99,49 @@ module Strategies
         { success: true }
       end
 
+      def check_manual_approval_required
+        # Skip approval check in dry-run mode
+        return { success: true } if @dry_run
+
+        # Get configuration
+        execution_config = AlgoConfig.fetch(:execution) || {}
+        manual_approval_enabled = execution_config[:manual_approval]&.dig(:enabled) != false
+        manual_approval_count = execution_config[:manual_approval]&.dig(:count) || 30
+
+        # If manual approval is disabled, skip
+        return { success: true } unless manual_approval_enabled
+
+        # Count executed trades (excluding dry-run)
+        executed_count = Order.real.where(status: 'executed').count
+
+        # If we've already executed 30+ trades, no approval needed
+        return { success: true } if executed_count >= manual_approval_count
+
+        # For first 30 trades, require approval
+        # Create order record with requires_approval flag
+        # The order will be placed only after approval
+        {
+          success: false,
+          requires_approval: true,
+          executed_count: executed_count,
+          remaining: manual_approval_count - executed_count,
+          error: "Manual approval required for first #{manual_approval_count} trades (#{executed_count}/#{manual_approval_count} executed)"
+        }
+      end
+
       def place_entry_order
         # Determine order type (MARKET for swing trading)
         order_type = 'MARKET' # Swing trading typically uses market orders
 
         # Map direction to transaction type
         transaction_type = @signal[:direction] == :long ? 'BUY' : 'SELL'
+
+        # Check if manual approval is required
+        execution_config = AlgoConfig.fetch(:execution) || {}
+        manual_approval_enabled = execution_config[:manual_approval]&.dig(:enabled) != false
+        manual_approval_count = execution_config[:manual_approval]&.dig(:count) || 30
+        executed_count = Order.real.where(status: 'executed').count
+        requires_approval = manual_approval_enabled && !@dry_run && executed_count < manual_approval_count
 
         # Check if large order (requires confirmation)
         order_value = @signal[:entry_price] * @signal[:qty]
@@ -109,7 +150,11 @@ module Strategies
         if order_value > large_order_threshold && !@dry_run
           # Send Telegram confirmation request
           send_large_order_confirmation(order_value)
-          # For now, proceed (in production, you might want to wait for confirmation)
+        end
+
+        # If approval required, create order with requires_approval flag
+        if requires_approval
+          return create_pending_approval_order(order_type, transaction_type, order_value)
         end
 
         # Place order via DhanHQ wrapper
@@ -130,6 +175,67 @@ module Strategies
         send_order_notification(result) unless @dry_run
 
         result
+      end
+
+      def create_pending_approval_order(order_type, transaction_type, order_value)
+        # Create order record with requires_approval flag
+        order = Order.create!(
+          instrument: @instrument,
+          client_order_id: generate_order_id,
+          symbol: @instrument.symbol_name,
+          exchange_segment: @instrument.exchange_segment,
+          security_id: @instrument.security_id,
+          product_type: 'EQUITY',
+          order_type: order_type,
+          transaction_type: transaction_type,
+          quantity: @signal[:qty],
+          price: @signal[:entry_price],
+          validity: 'DAY',
+          status: 'pending',
+          dry_run: false,
+          requires_approval: true,
+          metadata: {
+            signal: @signal,
+            order_value: order_value,
+            created_at: Time.current,
+            requires_approval: true
+          }.to_json
+        )
+
+        # Send approval request notification
+        send_approval_request(order, order_value)
+
+        {
+          success: false,
+          requires_approval: true,
+          order: order,
+          message: "Order created, awaiting manual approval (#{Order.real.where(status: 'executed').count}/30 executed)"
+        }
+      rescue StandardError => e
+        Rails.logger.error("[Strategies::Swing::Executor] Failed to create pending approval order: #{e.message}")
+        { success: false, error: "Failed to create approval order: #{e.message}" }
+      end
+
+      def send_approval_request(order, order_value)
+        executed_count = Order.real.where(status: 'executed').count
+        remaining = 30 - executed_count
+
+        message = "🔔 <b>Order Approval Required</b>\n\n"
+        message += "Symbol: #{order.symbol}\n"
+        message += "Type: #{order.transaction_type} #{order.order_type}\n"
+        message += "Quantity: #{order.quantity}\n"
+        message += "Price: ₹#{order.price}\n"
+        message += "Order Value: ₹#{order_value.round(2)}\n"
+        message += "Direction: #{@signal[:direction].to_s.upcase}\n"
+        message += "\n📊 Progress: #{executed_count}/30 trades executed (#{remaining} remaining)\n"
+        message += "\nOrder ID: #{order.client_order_id}\n"
+        message += "\n⚠️ This order requires manual approval before execution."
+        message += "\n\nApprove: rails orders:approve[#{order.id}]"
+        message += "\nReject: rails orders:reject[#{order.id},reason]"
+
+        Telegram::Notifier.send_error_alert(message, context: 'Order Approval Required')
+      rescue StandardError => e
+        Rails.logger.error("[Strategies::Swing::Executor] Failed to send approval request: #{e.message}")
       end
 
       def calculate_instrument_exposure

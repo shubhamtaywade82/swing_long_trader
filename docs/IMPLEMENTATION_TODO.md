@@ -632,7 +632,7 @@
 - [ ] Run comprehensive backtest simulation (3+ months) - manual step
 - [ ] Validate backtest results match expected performance - manual step
 - [ ] Compare backtest results across different market conditions - manual step
-- [ ] Implement manual accept for first 30 live trades - Phase 12
+- [x] Implement manual accept for first 30 live trades - Phase 12 - Implemented with Orders::Approval service, rake tasks, and executor integration
 - [ ] Test idempotency thoroughly - Phase 12
 - [ ] Test exposure limits thoroughly - Phase 12
 - [x] Confirm TLS for all API endpoints (DhanHQ/OpenAI use HTTPS)

@@ -21,6 +21,10 @@ class Order < ApplicationRecord
   scope :dry_run, -> { where(dry_run: true) }
   scope :real, -> { where(dry_run: false) }
   scope :recent, -> { order(created_at: :desc) }
+  scope :requires_approval, -> { where(requires_approval: true, approved_at: nil, rejected_at: nil) }
+  scope :approved, -> { where.not(approved_at: nil) }
+  scope :rejected, -> { where.not(rejected_at: nil) }
+  scope :pending_approval, -> { where(requires_approval: true).where(approved_at: nil, rejected_at: nil) }
 
   def metadata_hash
     return {} if metadata.blank?
@@ -80,6 +84,22 @@ class Order < ApplicationRecord
 
   def filled_value
     (average_price || 0) * filled_quantity
+  end
+
+  def requires_approval?
+    requires_approval == true && approved_at.nil? && rejected_at.nil?
+  end
+
+  def approved?
+    approved_at.present?
+  end
+
+  def rejected?
+    rejected_at.present?
+  end
+
+  def approval_pending?
+    requires_approval? && !approved? && !rejected?
   end
 end
 

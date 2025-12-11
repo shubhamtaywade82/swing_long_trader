@@ -83,6 +83,7 @@ module Dhan
         validity: 'DAY',
         status: 'pending',
         dry_run: @dry_run,
+        requires_approval: false, # Set by executor if needed
         metadata: {
           placed_at: Time.current,
           dry_run: @dry_run
@@ -91,6 +92,15 @@ module Dhan
     end
 
     def execute_order_placement(order)
+      # Check if order requires approval and is not yet approved
+      if order.requires_approval? && !order.approved?
+        return {
+          success: false,
+          error: 'Order requires manual approval before placement',
+          order: order
+        }
+      end
+
       # Get DhanHQ client
       client = get_dhan_client
       return { success: false, error: 'DhanHQ client not available', order: order } unless client
