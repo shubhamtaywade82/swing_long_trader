@@ -21,15 +21,20 @@ module Strategies
         validation = validate_signal
         return validation unless validation[:success]
 
-        # Check risk limits
+        # If paper trading is enabled, skip live trading checks and route directly
+        if Rails.configuration.x.paper_trading.enabled
+          return place_entry_order
+        end
+
+        # Check risk limits (for live trading)
         risk_check = check_risk_limits
         return risk_check unless risk_check[:success]
 
-        # Check circuit breaker
+        # Check circuit breaker (for live trading)
         circuit_check = check_circuit_breaker
         return circuit_check unless circuit_check[:success]
 
-        # Check if manual approval required (first 30 trades)
+        # Check if manual approval required (first 30 trades) - only for live trading
         approval_check = check_manual_approval_required
         return approval_check unless approval_check[:success]
 
@@ -50,6 +55,9 @@ module Strategies
       end
 
       def check_risk_limits
+        # Skip risk limit checks in paper trading mode (handled by PaperTrading::RiskManager)
+        return { success: true } if Rails.configuration.x.paper_trading.enabled
+
         # Check max position size per instrument
         instrument_exposure = calculate_instrument_exposure
         max_per_instrument = @risk_config[:max_position_size_pct] || 10.0
@@ -79,8 +87,11 @@ module Strategies
       end
 
       def check_circuit_breaker
-        # Check recent order failure rate
-        recent_orders = Order.where('created_at > ?', 1.hour.ago)
+        # Skip circuit breaker in paper trading mode
+        return { success: true } if Rails.configuration.x.paper_trading.enabled
+
+        # Check recent order failure rate (only for live orders)
+        recent_orders = Order.real.where('created_at > ?', 1.hour.ago)
         total_recent = recent_orders.count
         failed_recent = recent_orders.failed.count
 
@@ -100,6 +111,9 @@ module Strategies
       end
 
       def check_manual_approval_required
+        # Skip approval check in paper trading mode (no approval needed for paper trades)
+        return { success: true } if Rails.configuration.x.paper_trading.enabled
+
         # Skip approval check in dry-run mode
         return { success: true } if @dry_run
 
@@ -326,17 +340,30 @@ module Strategies
       end
 
       def log_order_placement(result)
+        mode = if result[:paper_trade]
+                 'PAPER'
+               elsif @dry_run
+                 'DRY RUN'
+               else
+                 'LIVE'
+               end
+
         if result[:success]
+          order_info = if result[:paper_trade]
+                        position = result[:position] || result[:order]
+                        "#{position&.instrument&.symbol_name} #{@signal[:direction].to_s.upcase} " \
+                        "#{@signal[:qty]} @ ₹#{@signal[:entry_price]}"
+                      else
+                        "#{result[:order]&.symbol} #{result[:order]&.transaction_type} " \
+                        "#{result[:order]&.quantity} @ #{result[:order]&.price || 'Market'}"
+                      end
+
           Rails.logger.info(
-            "[Strategies::Swing::Executor] Order placed: " \
-            "#{result[:order]&.symbol} #{result[:order]&.transaction_type} " \
-            "#{result[:order]&.quantity} @ #{result[:order]&.price || 'Market'} " \
-            "(#{@dry_run ? 'DRY RUN' : 'LIVE'})"
+            "[Strategies::Swing::Executor] Order placed: #{order_info} (#{mode})"
           )
         else
           Rails.logger.error(
-            "[Strategies::Swing::Executor] Order failed: #{result[:error]} " \
-            "(#{@dry_run ? 'DRY RUN' : 'LIVE'})"
+            "[Strategies::Swing::Executor] Order failed: #{result[:error]} (#{mode})"
           )
         end
       end

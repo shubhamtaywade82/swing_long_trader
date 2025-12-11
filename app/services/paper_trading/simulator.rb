@@ -112,9 +112,11 @@ module PaperTrading
       entry_value = position.entry_price * position.quantity
       @portfolio.decrement!(:reserved_capital, entry_value)
 
-      # Update portfolio P&L
+      # Update portfolio P&L and capital
+      # Capital increases/decreases by the P&L amount
       if pnl > 0
         @portfolio.increment!(:pnl_realized, pnl)
+        @portfolio.increment!(:capital, pnl) # Add profit to capital
         PaperTrading::Ledger.credit(
           portfolio: @portfolio,
           amount: pnl,
@@ -130,6 +132,7 @@ module PaperTrading
         )
       else
         @portfolio.increment!(:pnl_realized, pnl) # pnl is negative
+        @portfolio.decrement!(:capital, pnl.abs) # Subtract loss from capital
         PaperTrading::Ledger.debit(
           portfolio: @portfolio,
           amount: pnl.abs,
@@ -144,6 +147,23 @@ module PaperTrading
           }
         )
       end
+
+      # Record exit in ledger (for audit trail)
+      exit_value = exit_price * position.quantity
+      PaperLedger.create!(
+        paper_portfolio: @portfolio,
+        paper_position: position,
+        amount: exit_value,
+        transaction_type: 'credit',
+        reason: 'trade_exit',
+        description: "Exit: #{position.instrument.symbol_name} #{position.direction.to_s.upcase} @ ₹#{exit_price}",
+        meta: {
+          symbol: position.instrument.symbol_name,
+          exit_price: exit_price,
+          exit_reason: reason,
+          pnl: pnl
+        }.to_json
+      )
 
       # Update portfolio equity
       @portfolio.update_equity!

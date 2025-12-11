@@ -19,7 +19,7 @@ module PaperTrading
       quantity = @signal[:qty]
       position_value = entry_price * quantity
 
-      # Reserve capital
+      # Reserve capital (don't debit - capital stays same, just reserved)
       reserve_capital(position_value)
 
       # Create position
@@ -37,19 +37,20 @@ module PaperTrading
         metadata: @signal[:metadata]&.to_json || {}.to_json
       )
 
-      # Record ledger entry
-      PaperTrading::Ledger.debit(
-        portfolio: @portfolio,
+      # Record ledger entry (for audit trail only - doesn't change capital)
+      PaperLedger.create!(
+        paper_portfolio: @portfolio,
+        paper_position: position,
         amount: position_value,
+        transaction_type: 'debit',
         reason: 'trade_entry',
         description: "Entry: #{@instrument.symbol_name} #{@signal[:direction].to_s.upcase} @ ₹#{entry_price}",
-        position: position,
         meta: {
           symbol: @instrument.symbol_name,
           direction: @signal[:direction],
           entry_price: entry_price,
           quantity: quantity
-        }
+        }.to_json
       )
 
       log_info("Created paper position: #{@instrument.symbol_name} #{@signal[:direction].to_s.upcase} #{quantity} @ ₹#{entry_price}")

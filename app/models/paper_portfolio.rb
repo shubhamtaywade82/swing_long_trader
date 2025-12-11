@@ -18,8 +18,10 @@ class PaperPortfolio < ApplicationRecord
   end
 
   def update_equity!
+    # Total equity = capital (which includes realized P&L) + unrealized P&L
+    # Capital already includes realized P&L from exits, so we only add unrealized
     update!(
-      total_equity: capital + pnl_realized + pnl_unrealized,
+      total_equity: capital + pnl_unrealized,
       available_capital: capital - reserved_capital
     )
   end
