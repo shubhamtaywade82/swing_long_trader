@@ -463,16 +463,16 @@
 - [x] Add order logging and audit trail
 
 ### Safeguards
-- [ ] Test idempotency (prevent duplicate orders)
-- [ ] Test exposure limits
-- [ ] Test dry-run mode
-- [ ] Test circuit breaker
+- [x] Test idempotency (prevent duplicate orders) - Tested in spec/services/dhan/orders_spec.rb
+- [x] Test exposure limits - Tested in spec/services/strategies/swing/executor_spec.rb
+- [x] Test dry-run mode - Tested in both orders and executor specs
+- [x] Test circuit breaker - Tested failure rate monitoring in executor spec
 
 ### Tests
-- [ ] Use WebMock/VCR cassettes to stub Dhan API responses
-- [ ] Test order payloads
-- [ ] Test idempotency logic
-- [ ] Test risk limits
+- [x] Use WebMock/VCR cassettes to stub Dhan API responses - Created comprehensive RSpec tests with WebMock stubs
+- [x] Test order payloads - Tested in spec/services/dhan/orders_spec.rb
+- [x] Test idempotency logic - Tested duplicate order prevention
+- [x] Test risk limits - Tested position size and total exposure limits in spec/services/strategies/swing/executor_spec.rb
 - [x] Ensure all tests use transaction-based database cleanup (Database Cleaner) - Configured in spec/support/database_cleaner.rb, all RSpec tests use it automatically
 
 ---
