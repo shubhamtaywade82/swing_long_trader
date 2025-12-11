@@ -10,7 +10,9 @@ class MonitorJob < ApplicationJob
       database: check_database,
       dhan_api: check_dhan_api,
       telegram: check_telegram,
-      candle_freshness: check_candle_freshness
+      candle_freshness: check_candle_freshness,
+      job_queue: check_job_queue,
+      job_duration: check_job_duration
     }
 
     failed_checks = checks.select { |_k, v| !v[:healthy] }
@@ -65,6 +67,56 @@ class MonitorJob < ApplicationJob
     { healthy: healthy, message: healthy ? 'OK' : "Candles #{days_old} days old" }
   rescue StandardError => e
     { healthy: false, message: e.message }
+  end
+
+  def check_job_queue
+    return { healthy: true, message: 'SolidQueue not installed' } unless solid_queue_installed?
+
+    pending = SolidQueue::Job.where(finished_at: nil).where('scheduled_at IS NULL OR scheduled_at <= ?', Time.current).count
+    failed = SolidQueue::FailedExecution.count
+    running = SolidQueue::ClaimedExecution.count
+
+    queue_healthy = pending < 100 && failed < 50
+    message = "Pending: #{pending}, Running: #{running}, Failed: #{failed}"
+
+    { healthy: queue_healthy, message: message }
+  rescue StandardError => e
+    { healthy: false, message: e.message }
+  end
+
+  def check_job_duration
+    return { healthy: true, message: 'N/A' } unless solid_queue_installed?
+
+    # Get average duration for recent completed jobs
+    recent_jobs = SolidQueue::Job
+                   .where.not(finished_at: nil)
+                   .where('finished_at > ?', 1.hour.ago)
+                   .where('created_at IS NOT NULL')
+                   .limit(100)
+
+    return { healthy: true, message: 'No recent jobs' } if recent_jobs.empty?
+
+    durations = recent_jobs.map do |job|
+      next unless job.created_at && job.finished_at
+      (job.finished_at - job.created_at).to_f
+    end.compact
+
+    return { healthy: true, message: 'No duration data' } if durations.empty?
+
+    avg_duration = durations.sum / durations.size
+    max_duration = durations.max
+
+    # Alert if average > 5 minutes or max > 10 minutes
+    healthy = avg_duration < 300 && max_duration < 600
+    message = "Avg: #{avg_duration.round(1)}s, Max: #{max_duration.round(1)}s"
+
+    { healthy: healthy, message: message }
+  rescue StandardError => e
+    { healthy: false, message: e.message }
+  end
+
+  def solid_queue_installed?
+    ActiveRecord::Base.connection.table_exists?('solid_queue_jobs')
   end
 end
 

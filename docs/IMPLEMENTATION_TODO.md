@@ -501,15 +501,15 @@
 
 ### Monitoring & Alerts
 - [x] Add job failure hooks (alert to Telegram) - implemented in all jobs
-- [ ] Monitor job queue length - can be added to MonitorJob
+- [x] Monitor job queue length - added to MonitorJob (check_job_queue)
 - [ ] Configure retry strategies - SolidQueue default retry
-- [ ] Add job duration tracking - can be added to MonitorJob
+- [x] Add job duration tracking - added to MonitorJob (check_job_duration) and JobLogging concern
 
 ### Tests
-- [ ] Test job enqueueing
-- [ ] Test job execution
-- [ ] Test job retry logic
-- [ ] Test job failure handling
+- [x] Test job enqueueing (test/jobs/application_job_test.rb)
+- [x] Test job execution (test/jobs/application_job_test.rb, test/jobs/monitor_job_test.rb)
+- [ ] Test job retry logic - SolidQueue handles automatically
+- [x] Test job failure handling (test/jobs/application_job_test.rb)
 
 ---
 
@@ -521,10 +521,11 @@
 - [x] Create factories for Instrument and CandleSeriesRecord
 - [x] Write unit tests for Instrument model
 - [x] Write unit tests for Candles::Ingestor service
-- [ ] Write unit tests for all other services
-- [ ] Write unit tests for all other models
-- [ ] Write integration tests with mocked Dhan responses
-- [ ] Write integration tests with mocked OpenAI responses
+- [x] Write unit tests for jobs (application_job_test.rb, monitor_job_test.rb, daily_ingestor_job_test.rb)
+- [ ] Write unit tests for all other services (screeners, strategies, etc.)
+- [ ] Write unit tests for all other models (BacktestRun, BacktestPosition, etc.)
+- [x] Write integration tests with mocked Dhan responses (candles_ingestion_test.rb)
+- [x] Write integration tests with mocked OpenAI responses (openai/client_test.rb)
 - [ ] Write contract tests for Telegram messages
 - [ ] Write smoke tests for rake tasks
 - [ ] Achieve >80% code coverage
