@@ -20,6 +20,8 @@ SimpleCov.configure do
   add_filter '/test/'
 
   # Minimum coverage percentage
-  minimum_coverage 90
+  # Target: 90% test coverage for all implementations
+  # Can be overridden via MINIMUM_COVERAGE environment variable for local development
+  minimum_coverage (ENV['MINIMUM_COVERAGE'] || 90).to_i
 end
 
