@@ -46,7 +46,7 @@ RSpec.describe Backtesting::SwingBacktester, type: :service do
               }
             }
           )
-          
+
           # Call the service once for all tests in this context
           @result = described_class.call(
             instruments: Instrument.where(id: instrument.id),

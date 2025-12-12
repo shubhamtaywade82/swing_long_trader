@@ -11,7 +11,7 @@ RSpec.describe Screeners::SwingScreener do
       before do
         # Create daily candles for the instrument
         create_list(:candle_series_record, 60, instrument: instrument, timeframe: '1D')
-        
+
         # Call the service once for tests that use default limit
         @result = described_class.call(instruments: instruments, limit: 10)
       end

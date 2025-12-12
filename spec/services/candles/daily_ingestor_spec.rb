@@ -36,7 +36,7 @@ RSpec.describe Candles::DailyIngestor do
           to_date: anything,
           oi: false
         ).and_return(mock_candles)
-        
+
         # Call the service once for all tests in this context
         @result = described_class.call(instruments: instruments, days_back: 2)
       end

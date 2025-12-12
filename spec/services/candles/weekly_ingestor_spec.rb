@@ -112,9 +112,20 @@ RSpec.describe Candles::WeeklyIngestor do
     end
 
     context 'when instrument has no security_id' do
-      let(:instrument_no_security) { create(:instrument, symbol_name: 'NO_SEC', security_id: nil) }
+      let(:instrument_no_security) do
+        inst = create(:instrument, symbol_name: 'NO_SEC')
+        # Use update_column to bypass validations and set security_id to empty string
+        # This tests the service's error handling without violating database constraints
+        inst.update_column(:security_id, '')
+        inst
+      end
       let(:instruments_no_security) { Instrument.where(id: instrument_no_security.id) }
       let(:result) { described_class.call(instruments: instruments_no_security, weeks_back: 1) }
+
+      before do
+        # Stub security_id to return nil to test the service's handling of missing security_id
+        allow(instrument_no_security).to receive(:security_id).and_return(nil)
+      end
 
       it { expect(result[:failed]).to be >= 0 }
     end

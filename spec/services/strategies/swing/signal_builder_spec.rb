@@ -34,7 +34,7 @@ RSpec.describe Strategies::Swing::SignalBuilder do
         })
         allow(AlgoConfig).to receive(:fetch).with([:swing_trading, :strategy]).and_return({})
         allow(AlgoConfig).to receive(:fetch).with(:risk).and_return({})
-        
+
         # Call the service once for all tests in this context
         @result = described_class.call(
           instrument: instrument,
@@ -156,7 +156,7 @@ RSpec.describe Strategies::Swing::SignalBuilder do
           period: 10,
           multiplier: 3.0
         })
-        
+
         # Call the service once for all tests in this context
         @result = described_class.call(
           instrument: instrument,

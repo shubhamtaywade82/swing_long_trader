@@ -44,7 +44,7 @@ RSpec.describe Strategies::Swing::Executor, type: :service do
           success: true,
           order: create(:order, instrument: instrument, status: 'placed')
         )
-        
+
         # Call the service once for all tests in this context
         @result = described_class.call(signal)
       end
