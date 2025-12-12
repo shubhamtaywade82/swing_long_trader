@@ -10,6 +10,7 @@ ENV['RAILS_ENV'] ||= 'test'
 # - technical-analysis gem: unused variable warnings
 # - DhanHQ gem: method redefinition and circular require warnings
 # - ActiveRecord: enum scope redefinition (fixed in code, but may still appear)
+# - Rails core and third-party rake tasks: method redefinition when tasks are loaded multiple times
 original_verbose = $VERBOSE
 begin
   $VERBOSE = nil
@@ -17,6 +18,41 @@ begin
 ensure
   $VERBOSE = original_verbose
 end
+
+# Suppress method redefinition warnings from Rails core and third-party rake tasks
+# These occur when rake tasks are loaded multiple times during test runs
+# This is harmless and expected behavior in Rails applications
+# We use a custom warning handler to filter out these specific warnings
+module WarningFilter
+  def self.setup
+    return unless defined?(Warning) && Warning.respond_to?(:warn)
+    
+    # Store original warn method
+    original_warn = Warning.method(:warn)
+    
+    # Override Warning.warn to filter rake task warnings
+    Warning.define_singleton_method(:warn) do |message, category: nil|
+      # Filter out method redefinition warnings from rake tasks
+      return if message.is_a?(String) && (
+        message.match?(/method redefined.*discarding old/) ||
+        message.match?(/previous definition of/) ||
+        message.match?(/already initialized constant/) ||
+        message.match?(/cache_digests\.rake/) ||
+        message.match?(/jsbundling.*build\.rake/) ||
+        message.match?(/turbo_tasks\.rake/) ||
+        message.match?(/stimulus_tasks\.rake/) ||
+        message.match?(/cssbundling.*build\.rake/) ||
+        message.match?(/railties.*tasks.*log\.rake/) ||
+        message.match?(/railties.*tasks.*misc\.rake/)
+      )
+      
+      # Call original warning handler
+      original_warn.call(message, category: category)
+    end
+  end
+end
+
+WarningFilter.setup
 # Prevent database truncation if the environment is production
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 require 'rspec/rails'

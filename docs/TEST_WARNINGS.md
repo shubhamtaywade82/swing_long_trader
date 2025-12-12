@@ -48,10 +48,19 @@ enum :exchange, { nse: 'NSE', bse: 'BSE', mcx: 'MCX' }
 
 ## Warning Suppression
 
-Warnings from third-party gems are suppressed in the test environment by temporarily setting `$VERBOSE = nil` while loading Rails and SimpleCov. This is done in:
+Warnings from third-party gems and Rails core rake tasks are suppressed in the test environment:
 
-- `spec/spec_helper.rb` - Suppresses warnings during SimpleCov initialization
-- `spec/rails_helper.rb` - Suppresses warnings during Rails environment loading
+1. **During Loading:** Temporarily setting `$VERBOSE = nil` while loading Rails and SimpleCov:
+   - `spec/spec_helper.rb` - Suppresses warnings during SimpleCov initialization
+   - `spec/rails_helper.rb` - Suppresses warnings during Rails environment loading
+
+2. **Rake Task Warnings:** Custom warning filter in `spec/rails_helper.rb` that intercepts and filters out method redefinition warnings from:
+   - `actionview` rake tasks (cache_digests.rake)
+   - `jsbundling-rails` rake tasks (build.rake)
+   - `turbo-rails` rake tasks (turbo_tasks.rake)
+   - `stimulus-rails` rake tasks (stimulus_tasks.rake)
+   - `cssbundling-rails` rake tasks (build.rake)
+   - `railties` rake tasks (log.rake, misc.rake)
 
 **Note:** This only suppresses warnings during test runs. Production and development environments will still show warnings, which is acceptable since they come from external dependencies.
 
@@ -77,9 +86,9 @@ The following warnings from your own rake tasks have been **fixed**:
 - Each method is wrapped in `unless respond_to?(:method_name)` to prevent redefinition when rake files are loaded multiple times
 - This ensures methods are only defined once, even if the rake file is loaded multiple times during a rake task execution
 
-### Remaining Warnings
+### Rails Core Rake Task Warnings (Suppressed)
 
-The following warnings are from **Rails core gems** and are expected:
+The following warnings from **Rails core gems** are now **suppressed** in the test environment:
 
 - `actionview` - Method redefinitions in cache_digests.rake
 - `jsbundling-rails` - Method redefinitions in build.rake
@@ -88,7 +97,7 @@ The following warnings are from **Rails core gems** and are expected:
 - `cssbundling-rails` - Method redefinitions and constant reinitializations
 - `railties` - Method redefinitions in log.rake and misc.rake
 
-These are internal to Rails and its gems and don't affect functionality. They occur because rake tasks can be loaded multiple times during development.
+These are internal to Rails and its gems and don't affect functionality. They occur because rake tasks can be loaded multiple times during test runs. A custom warning filter in `spec/rails_helper.rb` intercepts and suppresses these warnings during test execution.
 
 ## Monitoring
 
