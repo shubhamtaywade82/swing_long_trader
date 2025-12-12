@@ -151,5 +151,101 @@ RSpec.describe BacktestPosition, type: :model do
       expect(position.calculate_pnl_pct).to eq(expected_pct)
     end
   end
+
+  describe 'edge cases' do
+    it 'calculates loss for long position' do
+      position = create(:backtest_position,
+        direction: 'long',
+        entry_price: 100.0,
+        exit_price: 90.0,
+        quantity: 100)
+      expected_pnl = (90.0 - 100.0) * 100
+      expect(position.calculate_pnl).to eq(expected_pnl)
+    end
+
+    it 'calculates loss for short position' do
+      position = create(:backtest_position,
+        direction: 'short',
+        entry_price: 100.0,
+        exit_price: 110.0,
+        quantity: 100)
+      expected_pnl = (100.0 - 110.0) * 100
+      expect(position.calculate_pnl).to eq(expected_pnl)
+    end
+
+    it 'calculates P&L percentage for long position with loss' do
+      position = create(:backtest_position,
+        direction: 'long',
+        entry_price: 100.0,
+        exit_price: 90.0)
+      expected_pct = ((90.0 - 100.0) / 100.0 * 100).round(4)
+      expect(position.calculate_pnl_pct).to eq(expected_pct)
+    end
+
+    it 'calculates P&L percentage for short position with loss' do
+      position = create(:backtest_position,
+        direction: 'short',
+        entry_price: 100.0,
+        exit_price: 110.0)
+      expected_pct = ((100.0 - 110.0) / 100.0 * 100).round(4)
+      expect(position.calculate_pnl_pct).to eq(expected_pct)
+    end
+
+    it 'handles zero quantity' do
+      position = create(:backtest_position,
+        direction: 'long',
+        entry_price: 100.0,
+        exit_price: 110.0,
+        quantity: 0)
+      expect(position.calculate_pnl).to eq(0)
+    end
+
+    it 'handles zero entry_price in P&L percentage' do
+      position = create(:backtest_position,
+        direction: 'long',
+        entry_price: 0,
+        exit_price: 110.0,
+        quantity: 100)
+      # Should handle division by zero gracefully
+      pct = position.calculate_pnl_pct
+      expect(pct).to be_a(Numeric)
+    end
+
+    it 'handles calculate_pnl with invalid direction' do
+      position = create(:backtest_position,
+        direction: 'long',
+        entry_price: 100.0,
+        exit_price: 110.0,
+        quantity: 100)
+      # Mock invalid direction
+      allow(position).to receive(:direction).and_return('invalid')
+      expect(position.calculate_pnl).to eq(0)
+    end
+
+    it 'handles calculate_pnl_pct with invalid direction' do
+      position = create(:backtest_position,
+        direction: 'long',
+        entry_price: 100.0,
+        exit_price: 110.0,
+        quantity: 100)
+      # Mock invalid direction
+      allow(position).to receive(:direction).and_return('invalid')
+      expect(position.calculate_pnl_pct).to eq(0)
+    end
+
+    it 'handles closed? with empty string exit_date' do
+      position = create(:backtest_position, exit_date: nil)
+      position.exit_date = ''
+      # Should handle empty string as nil
+      expect(position.closed?).to be false
+    end
+
+    it 'handles open? with empty string exit_date' do
+      position = create(:backtest_position, exit_date: nil)
+      position.exit_date = ''
+      # Should handle empty string as nil
+      expect(position.open?).to be true
+    end
+  end
 end
 

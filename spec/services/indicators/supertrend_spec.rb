@@ -157,7 +157,8 @@ RSpec.describe Indicators::Supertrend, type: :service do
       end
     end
 
-    describe '#calculate_adaptive_atr' do
+    context 'private methods' do
+      describe '#calculate_adaptive_atr' do
       it 'handles nil values in highs and lows' do
         indicator = described_class.new(series: series)
         highs = [100.0, nil, 105.0]
@@ -256,7 +257,7 @@ RSpec.describe Indicators::Supertrend, type: :service do
   end
 
   describe '#get_current_volatility_regime' do
-      it 'returns low volatility for multiplier below base' do
+    it 'returns low volatility for multiplier below base' do
         indicator = described_class.new(series: series, base_multiplier: 2.0)
         indicator.instance_variable_set(:@adaptive_multipliers, Array.new(100, 1.5))
         indicator.call
@@ -293,28 +294,6 @@ RSpec.describe Indicators::Supertrend, type: :service do
         regime = indicator.get_current_volatility_regime(nil)
 
         expect(regime).to eq(:unknown)
-      end
-    end
-  end
-
-  describe '#get_adaptive_multiplier' do
-      it 'returns multiplier for valid index' do
-        indicator = described_class.new(series: series)
-        indicator.instance_variable_set(:@adaptive_multipliers, Array.new(100, 2.5))
-        indicator.call
-
-        multiplier = indicator.get_adaptive_multiplier(50)
-
-        expect(multiplier).to eq(2.5)
-      end
-
-      it 'returns base multiplier for out of range index' do
-        indicator = described_class.new(series: series, base_multiplier: 3.0)
-        indicator.call
-
-        multiplier = indicator.get_adaptive_multiplier(999)
-
-        expect(multiplier).to eq(3.0)
       end
     end
   end

@@ -1,12 +1,366 @@
-# Inherit from Rails Omakase configuration
-inherit_from:
-  - .rubocop-rails-omakase.yml
+# RuboCop Configuration
+# Using all available plugins: rubocop-rails, rubocop-performance, rubocop-rspec, rubocop-factory_bot, rubocop-rspec_rails
 
-# RSpec specific configuration
-require:
+plugins:
+  - rubocop-rails
   - rubocop-rspec
+  - rubocop-performance
+  - rubocop-factory_bot
+  - rubocop-rspec_rails
 
-# RSpec cops
+# AllCops configuration
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.3
+  SuggestExtensions: true
+  Exclude:
+    - "vendor/**/*"
+    - "node_modules/**/*"
+    - "tmp/**/*"
+    - "log/**/*"
+    - "db/schema.rb"
+    - "db/migrate/**/*"
+    - "bin/**/*"
+    - "config/environments/**/*"
+    - "config/initializers/**/*"
+    - "coverage/**/*"
+
+# Style configuration
+Style/Documentation:
+  Enabled: false
+
+Style/FrozenStringLiteralComment:
+  Enabled: true
+  EnforcedStyle: always
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/HashSyntax:
+  EnforcedStyle: ruby19
+
+Style/TrailingCommaInArguments:
+  EnforcedStyleForMultiline: comma
+
+Style/TrailingCommaInArrayLiteral:
+  EnforcedStyleForMultiline: comma
+
+Style/TrailingCommaInHashLiteral:
+  EnforcedStyleForMultiline: comma
+
+# Layout configuration
+Layout/LineLength:
+  Max: 120
+  Exclude:
+    - "spec/**/*"
+    - "config/**/*"
+    - "db/**/*"
+
+Layout/MultilineMethodCallIndentation:
+  EnforcedStyle: aligned
+
+Layout/FirstHashElementIndentation:
+  EnforcedStyle: consistent
+
+# Metrics configuration
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*"
+    - "config/**/*"
+    - "Rakefile"
+
+Metrics/MethodLength:
+  Max: 30
+  Exclude:
+    - "spec/**/*"
+
+Metrics/ClassLength:
+  Max: 200
+  Exclude:
+    - "spec/**/*"
+
+Metrics/AbcSize:
+  Max: 20
+  Exclude:
+    - "spec/**/*"
+
+Metrics/CyclomaticComplexity:
+  Max: 10
+  Exclude:
+    - "spec/**/*"
+
+Metrics/PerceivedComplexity:
+  Max: 10
+  Exclude:
+    - "spec/**/*"
+
+# Rails configuration
+Rails:
+  Enabled: true
+
+Rails/ApplicationRecord:
+  Enabled: true
+
+Rails/ApplicationController:
+  Enabled: true
+
+Rails/InverseOf:
+  Enabled: true
+
+Rails/HasManyOrHasOneDependent:
+  Enabled: true
+
+Rails/NotNullColumn:
+  Enabled: true
+
+Rails/ReadWriteAttribute:
+  Enabled: true
+
+Rails/ReversibleMigration:
+  Enabled: true
+
+Rails/SkipsModelValidations:
+  Enabled: true
+
+Rails/TimeZone:
+  Enabled: true
+
+Rails/Validation:
+  Enabled: true
+
+Rails/HelperInstanceVariable:
+  Enabled: true
+
+Rails/Pluck:
+  Enabled: true
+
+Rails/PluckInWhere:
+  Enabled: true
+
+Rails/FindBy:
+  Enabled: true
+
+Rails/FindEach:
+  Enabled: true
+
+Rails/WhereExists:
+  Enabled: true
+
+Rails/WhereNot:
+  Enabled: true
+
+Rails/WhereEquals:
+  Enabled: true
+
+Rails/UniqBeforePluck:
+  Enabled: true
+
+Rails/IndexBy:
+  Enabled: true
+
+Rails/IndexWith:
+  Enabled: true
+
+Rails/RedundantPresenceValidationOnBelongsTo:
+  Enabled: true
+
+Rails/RedundantForeignKey:
+  Enabled: true
+
+Rails/ActiveRecordCallbacksOrder:
+  Enabled: true
+
+Rails/ActiveRecordOverride:
+  Enabled: true
+
+Rails/AfterCommitOverride:
+  Enabled: true
+
+Rails/AttributeDefaultBlockValue:
+  Enabled: true
+
+Rails/DefaultScope:
+  Enabled: true
+
+Rails/DynamicFindBy:
+  Enabled: true
+
+Rails/EnumHash:
+  Enabled: true
+
+Rails/EnumUniqueness:
+  Enabled: true
+
+Rails/ExpandedDateRange:
+  Enabled: true
+
+Rails/Exit:
+  Enabled: true
+
+Rails/HttpPositionalArguments:
+  Enabled: true
+
+Rails/LexicallyScopedActionFilter:
+  Enabled: true
+
+Rails/Output:
+  Enabled: true
+
+Rails/OutputSafety:
+  Enabled: true
+
+Rails/RefuteMethods:
+  Enabled: true
+
+Rails/RequestReferer:
+  Enabled: true
+
+Rails/ResponseParsedBody:
+  Enabled: true
+
+Rails/SafeNavigation:
+  Enabled: true
+
+Rails/SaveBang:
+  Enabled: true
+
+Rails/ScopeArgs:
+  Enabled: true
+
+Rails/ShortI18n:
+  Enabled: true
+
+Rails/SquishedSQLHeredocs:
+  Enabled: true
+
+Rails/TransactionExitStatement:
+  Enabled: true
+
+Rails/UnknownEnv:
+  Enabled: true
+
+Rails/UnusedIgnoredColumns:
+  Enabled: true
+
+Rails/UnusedRenderContent:
+  Enabled: true
+
+# Performance configuration
+Performance:
+  Enabled: true
+
+Performance/ArraySemiInfiniteRangeSlice:
+  Enabled: true
+
+Performance/BigDecimalWithNumericArgument:
+  Enabled: true
+
+Performance/BlockGivenWithExplicitBlock:
+  Enabled: true
+
+Performance/Caller:
+  Enabled: true
+
+Performance/CollectionLiteralInLoop:
+  Enabled: true
+
+Performance/ConstantRegexp:
+  Enabled: true
+
+Performance/Count:
+  Enabled: true
+
+Performance/DeletePrefix:
+  Enabled: true
+
+Performance/DeleteSuffix:
+  Enabled: true
+
+Performance/Detect:
+  Enabled: true
+
+Performance/DoubleStartEndWith:
+  Enabled: true
+
+Performance/EndWith:
+  Enabled: true
+
+Performance/FixedSize:
+  Enabled: true
+
+Performance/FlatMap:
+  Enabled: true
+
+Performance/InefficientHashSearch:
+  Enabled: true
+
+Performance/MapCompact:
+  Enabled: true
+
+Performance/MapMethodChain:
+  Enabled: true
+
+Performance/OpenStruct:
+  Enabled: true
+
+Performance/RangeInclude:
+  Enabled: true
+
+Performance/RedundantBlockCall:
+  Enabled: true
+
+Performance/RedundantMatch:
+  Enabled: true
+
+Performance/RedundantMerge:
+  Enabled: true
+
+Style/RedundantSortBy:
+  Enabled: true
+
+Performance/RedundantStringChars:
+  Enabled: true
+
+Performance/RegexpMatch:
+  Enabled: true
+
+Performance/ReverseEach:
+  Enabled: true
+
+Performance/Size:
+  Enabled: true
+
+Performance/SortReverse:
+  Enabled: true
+
+Performance/Squeeze:
+  Enabled: true
+
+Performance/StartWith:
+  Enabled: true
+
+Performance/StringIdentifierArgument:
+  Enabled: true
+
+Performance/StringReplacement:
+  Enabled: true
+
+Performance/Sum:
+  Enabled: true
+
+Performance/TimesMap:
+  Enabled: true
+
+Performance/UnfreezeString:
+  Enabled: true
+
+Performance/UriDefaultParser:
+  Enabled: true
+
+# RSpec configuration
+RSpec:
+  Enabled: true
+
 RSpec/ExampleLength:
   Max: 30
   Exclude:
@@ -28,26 +382,199 @@ RSpec/EmptyExampleGroup:
 
 RSpec/ContextWording:
   Enabled: true
+  Prefixes:
+    - when
+    - with
+    - without
 
-# Allow longer lines in specs
-Layout/LineLength:
-  Exclude:
-    - "spec/**/*"
-    - "config/**/*"
-    - "db/**/*"
+RSpec/LetSetup:
+  Enabled: true
 
-# Allow block length in specs
-Metrics/BlockLength:
-  Exclude:
-    - "spec/**/*"
-    - "config/**/*"
+RSpec/SubjectStub:
+  Enabled: true
 
-# Allow method length in specs
-Metrics/MethodLength:
-  Exclude:
-    - "spec/**/*"
+RSpec/VerifiedDoubles:
+  Enabled: true
 
-# Allow class length in specs
-Metrics/ClassLength:
-  Exclude:
-    - "spec/**/*"
+RSpec/MessageSpies:
+  Enabled: true
+
+RSpec/MessageExpectation:
+  Enabled: true
+
+RSpec/NotToNot:
+  Enabled: true
+
+RSpec/BeEql:
+  Enabled: true
+
+RSpec/BeNil:
+  Enabled: true
+
+RSpec/ChangeByZero:
+  Enabled: true
+
+RSpec/ExpectActual:
+  Enabled: true
+
+RSpec/ExpectChange:
+  Enabled: true
+
+RSpec/ExpectInHook:
+  Enabled: true
+
+RSpec/Focus:
+  Enabled: true
+
+RSpec/ImplicitExpect:
+  Enabled: true
+
+RSpec/ImplicitSubject:
+  Enabled: true
+
+RSpec/InstanceVariable:
+  Enabled: true
+
+RSpec/IteratedExpectation:
+  Enabled: true
+
+RSpec/LeakyConstantDeclaration:
+  Enabled: true
+
+RSpec/MissingExampleGroupArgument:
+  Enabled: true
+
+RSpec/MultipleDescribes:
+  Enabled: true
+
+RSpec/NamedSubject:
+  Enabled: true
+
+RSpec/NoExpectationExample:
+  Enabled: true
+
+RSpec/OverwritingSetup:
+  Enabled: true
+
+RSpec/Pending:
+  Enabled: true
+
+RSpec/PredicateMatcher:
+  Enabled: true
+
+RSpec/ReceiveCounts:
+  Enabled: true
+
+RSpec/ReceiveNever:
+  Enabled: true
+
+RSpec/RepeatedDescription:
+  Enabled: true
+
+RSpec/RepeatedExample:
+  Enabled: true
+
+RSpec/RepeatedExampleGroupBody:
+  Enabled: true
+
+RSpec/ReturnFromStub:
+  Enabled: true
+
+RSpec/ScatteredLet:
+  Enabled: true
+
+RSpec/ScatteredSetup:
+  Enabled: true
+
+RSpec/SharedExamples:
+  Enabled: true
+
+RSpec/SingleArgumentMessageChain:
+  Enabled: true
+
+RSpec/SpecFilePathFormat:
+  Enabled: true
+
+RSpec/StubbedMock:
+  Enabled: true
+
+RSpec/SubjectDeclaration:
+  Enabled: true
+
+RSpec/UnspecifiedException:
+  Enabled: true
+
+RSpec/VariableDefinition:
+  Enabled: true
+
+RSpec/VoidExpect:
+  Enabled: true
+
+# FactoryBot configuration
+FactoryBot:
+  Enabled: true
+
+FactoryBot/AttributeDefinedStatically:
+  Enabled: true
+
+FactoryBot/ConsistentParenthesesStyle:
+  Enabled: true
+
+FactoryBot/CreateList:
+  Enabled: true
+
+FactoryBot/FactoryClassName:
+  Enabled: true
+
+FactoryBot/FactoryNameStyle:
+  Enabled: true
+
+FactoryBot/IdSequence:
+  Enabled: true
+
+FactoryBot/RedundantFactoryOption:
+  Enabled: true
+
+# RSpec Rails configuration
+RSpecRails:
+  Enabled: true
+
+RSpecRails/InferredSpecType:
+  Enabled: true
+
+RSpecRails/HaveHttpStatus:
+  Enabled: true
+
+RSpecRails/HttpStatus:
+  Enabled: true
+
+RSpecRails/MinitestAssertions:
+  Enabled: true
+
+RSpecRails/NegationBeValid:
+  Enabled: true
+
+# Lint configuration
+Lint/UnusedBlockArgument:
+  Enabled: true
+  AllowUnusedKeywordArguments: false
+
+Lint/UnusedMethodArgument:
+  Enabled: true
+  AllowUnusedKeywordArguments: false
+
+Lint/UselessAssignment:
+  Enabled: true
+
+# Naming configuration
+Naming/MethodName:
+  Enabled: true
+
+Naming/VariableName:
+  Enabled: true
+
+Naming/FileName:
+  Enabled: true
+
+Naming/RescuedExceptionsVariableName:
+  Enabled: true

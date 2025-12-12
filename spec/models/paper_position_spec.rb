@@ -368,5 +368,148 @@ RSpec.describe PaperPosition, type: :model do
       expect(recent).not_to include(old_pos)
     end
   end
+
+  describe 'edge cases' do
+    it 'handles unrealized_pnl_pct with zero entry_price' do
+      position = create(:paper_position,
+        direction: 'long',
+        entry_price: 0,
+        current_price: 10,
+        quantity: 10)
+      expect(position.unrealized_pnl_pct).to eq(0)
+    end
+
+    it 'handles unrealized_pnl for long position with loss' do
+      position = create(:paper_position,
+        direction: 'long',
+        entry_price: 100,
+        current_price: 95,
+        quantity: 10)
+      expect(position.unrealized_pnl).to eq(-50) # (95 - 100) * 10
+    end
+
+    it 'handles unrealized_pnl for short position with loss' do
+      position = create(:paper_position,
+        direction: 'short',
+        entry_price: 100,
+        current_price: 105,
+        quantity: 10)
+      expect(position.unrealized_pnl).to eq(-50) # (100 - 105) * 10
+    end
+
+    it 'handles unrealized_pnl_pct for long position with loss' do
+      position = create(:paper_position,
+        direction: 'long',
+        entry_price: 100,
+        current_price: 95,
+        quantity: 10)
+      expect(position.unrealized_pnl_pct).to eq(-5.0) # (95 - 100) / 100 * 100
+    end
+
+    it 'handles unrealized_pnl_pct for short position with loss' do
+      position = create(:paper_position,
+        direction: 'short',
+        entry_price: 100,
+        current_price: 105,
+        quantity: 10)
+      expect(position.unrealized_pnl_pct).to eq(-5.0) # (100 - 105) / 100 * 100
+    end
+
+    it 'handles realized_pnl for short position' do
+      position = create(:paper_position,
+        direction: 'short',
+        entry_price: 100,
+        exit_price: 90,
+        quantity: 10,
+        status: 'closed')
+      expect(position.realized_pnl).to eq(100) # (100 - 90) * 10
+    end
+
+    it 'handles realized_pnl for short position with loss' do
+      position = create(:paper_position,
+        direction: 'short',
+        entry_price: 100,
+        exit_price: 110,
+        quantity: 10,
+        status: 'closed')
+      expect(position.realized_pnl).to eq(-100) # (100 - 110) * 10
+    end
+
+    it 'handles realized_pnl_pct for short position with loss' do
+      position = create(:paper_position,
+        direction: 'short',
+        entry_price: 100,
+        exit_price: 110,
+        quantity: 10,
+        status: 'closed')
+      expect(position.realized_pnl_pct).to eq(-10.0) # (100 - 110) / 100 * 100
+    end
+
+    it 'handles check_sl_hit? with exact sl price for long' do
+      position = create(:paper_position,
+        direction: 'long',
+        entry_price: 100,
+        current_price: 95,
+        sl: 95)
+      expect(position.check_sl_hit?).to be true
+    end
+
+    it 'handles check_sl_hit? with exact sl price for short' do
+      position = create(:paper_position,
+        direction: 'short',
+        entry_price: 100,
+        current_price: 105,
+        sl: 105)
+      expect(position.check_sl_hit?).to be true
+    end
+
+    it 'handles check_tp_hit? with exact tp price for long' do
+      position = create(:paper_position,
+        direction: 'long',
+        entry_price: 100,
+        current_price: 110,
+        tp: 110)
+      expect(position.check_tp_hit?).to be true
+    end
+
+    it 'handles check_tp_hit? with exact tp price for short' do
+      position = create(:paper_position,
+        direction: 'short',
+        entry_price: 100,
+        current_price: 90,
+        tp: 90)
+      expect(position.check_tp_hit?).to be true
+    end
+
+    it 'handles update_current_price! with string price' do
+      position.update_current_price!('110.5')
+      expect(position.current_price).to eq(110.5)
+    end
+
+    it 'handles days_held with very recent opened_at' do
+      position.opened_at = 1.hour.ago
+      expect(position.days_held).to eq(0) # Less than 1 day
+    end
+
+    it 'handles days_held with exactly 1 day ago' do
+      position.opened_at = 1.day.ago
+      expect(position.days_held).to eq(1)
+    end
+
+    it 'handles entry_value with zero quantity' do
+      position.quantity = 0
+      expect(position.entry_value).to eq(0)
+    end
+
+    it 'handles current_value with zero quantity' do
+      position.quantity = 0
+      expect(position.current_value).to eq(0)
+    end
+
+    it 'handles metadata_hash with empty string' do
+      position.update(metadata: '')
+      expect(position.metadata_hash).to eq({})
+    end
+  end
 end
 

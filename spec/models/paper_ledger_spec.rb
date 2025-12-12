@@ -101,5 +101,72 @@ RSpec.describe PaperLedger, type: :model do
       expect(ledger.meta_hash).to eq({})
     end
   end
+
+  describe 'edge cases' do
+    it 'handles meta_hash with empty string' do
+      ledger.update(meta: '')
+      expect(ledger.meta_hash).to eq({})
+    end
+
+    it 'handles meta_hash with complex nested JSON' do
+      meta = {
+        position_id: 123,
+        details: {
+          entry_price: 100.0,
+          exit_price: 110.0
+        }
+      }
+      ledger.update(meta: meta.to_json)
+      expect(ledger.meta_hash).to have_key('position_id')
+      expect(ledger.meta_hash).to have_key('details')
+    end
+
+    it 'handles optional paper_position association' do
+      ledger = create(:paper_ledger, paper_portfolio: portfolio, paper_position: nil)
+      expect(ledger).to be_valid
+      expect(ledger.paper_position).to be_nil
+    end
+
+    it 'handles ledger with associated position' do
+      position = create(:paper_position, paper_portfolio: portfolio)
+      ledger = create(:paper_ledger, paper_portfolio: portfolio, paper_position: position)
+      expect(ledger.paper_position).to eq(position)
+    end
+
+    it 'handles amount with very small decimal' do
+      ledger = create(:paper_ledger, paper_portfolio: portfolio, amount: 0.01)
+      expect(ledger).to be_valid
+    end
+
+    it 'handles amount with very large number' do
+      ledger = create(:paper_ledger, paper_portfolio: portfolio, amount: 1_000_000_000.0)
+      expect(ledger).to be_valid
+    end
+
+    it 'handles reason with long text' do
+      long_reason = 'A' * 1000
+      ledger = create(:paper_ledger, paper_portfolio: portfolio, reason: long_reason)
+      expect(ledger).to be_valid
+    end
+
+    it 'handles recent scope ordering' do
+      old_ledger = create(:paper_ledger, paper_portfolio: portfolio, created_at: 10.days.ago)
+      new_ledger = create(:paper_ledger, paper_portfolio: portfolio, created_at: 1.day.ago)
+
+      recent = PaperLedger.recent.limit(1)
+      expect(recent).to include(new_ledger)
+      expect(recent).not_to include(old_ledger)
+    end
+
+    it 'handles credit? with uppercase transaction_type' do
+      ledger.update(transaction_type: 'CREDIT')
+      expect(ledger.credit?).to be false # Case sensitive
+    end
+
+    it 'handles debit? with uppercase transaction_type' do
+      ledger.update(transaction_type: 'DEBIT')
+      expect(ledger.debit?).to be false # Case sensitive
+    end
+  end
 end
 

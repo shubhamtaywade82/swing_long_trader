@@ -47,7 +47,7 @@ module Smc
       score = 0.0
       max_score = 0.0
       reasons = []
-      valid = false
+      _valid = false
 
       # BOS validation
       if config[:require_bos] != false
@@ -57,7 +57,7 @@ module Smc
              (direction == :short && structure[:bos][:type] == :bearish)
             score += 30
             reasons << "BOS detected: #{structure[:bos][:type]}"
-            valid = true if config[:require_bos] == true
+            _valid = true if config[:require_bos] == true
           else
             reasons << "BOS mismatch: expected #{direction}, got #{structure[:bos][:type]}"
           end

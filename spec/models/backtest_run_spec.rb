@@ -136,5 +136,80 @@ RSpec.describe BacktestRun, type: :model do
       expect(run.results_hash).to eq({})
     end
   end
+
+  describe 'edge cases' do
+    it 'handles config_hash with empty string' do
+      run = create(:backtest_run, config: '')
+      expect(run.config_hash).to eq({})
+    end
+
+    it 'handles results_hash with empty string' do
+      run = create(:backtest_run, results: '')
+      expect(run.results_hash).to eq({})
+    end
+
+    it 'handles config_hash with complex nested JSON' do
+      config = {
+        initial_capital: 100_000,
+        risk_per_trade: 2.0,
+        strategy: {
+          entry_conditions: { min_score: 80 },
+          exit_conditions: { profit_target: 30.0 }
+        }
+      }
+      run = create(:backtest_run, config: config.to_json)
+      expect(run.config_hash).to have_key('strategy')
+    end
+
+    it 'handles results_hash with complex nested JSON' do
+      results = {
+        total_return: 15.5,
+        metrics: {
+          sharpe_ratio: 1.5,
+          max_drawdown: 5.0
+        }
+      }
+      run = create(:backtest_run, results: results.to_json)
+      expect(run.results_hash).to have_key('metrics')
+    end
+
+    it 'handles status values correctly' do
+      %w[pending running completed failed].each do |status|
+        run = create(:backtest_run, status: status)
+        expect(run).to be_valid
+      end
+    end
+
+    it 'handles strategy_type values correctly' do
+      %w[swing long_term].each do |strategy_type|
+        run = create(:backtest_run, strategy_type: strategy_type)
+        expect(run).to be_valid
+      end
+    end
+
+    it 'handles zero initial_capital' do
+      run = build(:backtest_run, initial_capital: 0)
+      expect(run).to be_valid
+    end
+
+    it 'handles zero risk_per_trade' do
+      run = build(:backtest_run, risk_per_trade: 0)
+      expect(run).to be_valid
+    end
+
+    it 'handles negative initial_capital' do
+      run = build(:backtest_run, initial_capital: -1000)
+      # Depending on validation, this might be valid or invalid
+      # Test that it doesn't crash
+      expect(run.initial_capital).to eq(-1000)
+    end
+
+    it 'handles negative risk_per_trade' do
+      run = build(:backtest_run, risk_per_trade: -1.0)
+      # Depending on validation, this might be valid or invalid
+      # Test that it doesn't crash
+      expect(run.risk_per_trade).to eq(-1.0)
+    end
+  end
 end
 

@@ -194,5 +194,84 @@ RSpec.describe PaperPortfolio, type: :model do
       expect(portfolio.total_exposure).to eq(2000) # (100 * 10) + (50 * 20)
     end
   end
+
+  describe 'edge cases' do
+    it 'handles update_equity! with zero capital' do
+      portfolio.update(capital: 0, pnl_unrealized: 5_000, reserved_capital: 0)
+      portfolio.update_equity!
+
+      expect(portfolio.total_equity).to eq(5_000)
+      expect(portfolio.available_capital).to eq(0)
+    end
+
+    it 'handles update_equity! with negative unrealized P&L' do
+      portfolio.update(capital: 100_000, pnl_unrealized: -5_000, reserved_capital: 10_000)
+      portfolio.update_equity!
+
+      expect(portfolio.total_equity).to eq(95_000)
+      expect(portfolio.available_capital).to eq(90_000)
+    end
+
+    it 'handles update_equity! with zero reserved_capital' do
+      portfolio.update(capital: 100_000, pnl_unrealized: 5_000, reserved_capital: 0)
+      portfolio.update_equity!
+
+      expect(portfolio.total_equity).to eq(105_000)
+      expect(portfolio.available_capital).to eq(100_000)
+    end
+
+    it 'handles update_drawdown! with zero total_equity' do
+      portfolio.update(peak_equity: 100_000, total_equity: 0)
+      portfolio.update_drawdown!
+
+      expect(portfolio.max_drawdown).to eq(100.0) # 100% drawdown
+      expect(portfolio.peak_equity).to eq(100_000)
+    end
+
+    it 'handles update_drawdown! when max_drawdown already exists' do
+      portfolio.update(peak_equity: 110_000, total_equity: 100_000, max_drawdown: 5.0)
+      portfolio.update_drawdown!
+
+      # Should keep the maximum drawdown
+      expect(portfolio.max_drawdown).to be >= 5.0
+    end
+
+    it 'handles total_exposure with zero prices' do
+      create(:paper_position, paper_portfolio: portfolio, status: 'open', current_price: 0, quantity: 10)
+      expect(portfolio.total_exposure).to eq(0)
+    end
+
+    it 'handles total_exposure with zero quantities' do
+      create(:paper_position, paper_portfolio: portfolio, status: 'open', current_price: 100, quantity: 0)
+      expect(portfolio.total_exposure).to eq(0)
+    end
+
+    it 'handles utilization_pct with very high exposure' do
+      portfolio.update(capital: 100_000)
+      create(:paper_position, paper_portfolio: portfolio, status: 'open', current_price: 100, quantity: 1_000)
+
+      expect(portfolio.utilization_pct).to eq(100.0) # 100% utilization
+    end
+
+    it 'handles utilization_pct with very small capital' do
+      portfolio.update(capital: 1)
+      create(:paper_position, paper_portfolio: portfolio, status: 'open', current_price: 100, quantity: 1)
+
+      expect(portfolio.utilization_pct).to eq(10_000.0) # >100% utilization
+    end
+
+    it 'handles metadata_hash with empty string' do
+      portfolio.update(metadata: '')
+      expect(portfolio.metadata_hash).to eq({})
+    end
+
+    it 'handles open_positions with no positions' do
+      expect(portfolio.open_positions).to be_empty
+    end
+
+    it 'handles closed_positions with no positions' do
+      expect(portfolio.closed_positions).to be_empty
+    end
+  end
 end
 

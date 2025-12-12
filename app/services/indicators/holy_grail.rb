@@ -110,8 +110,8 @@ module Indicators
           false
         end
 
-      latest_time = Time.zone.at(stamps.last)
-      # Rails.logger.debug { "[HolyGrail] (#{latest_time}) proceed?=#{proceed}" }
+      _latest_time = Time.zone.at(stamps.last)
+      # Rails.logger.debug { "[HolyGrail] (#{_latest_time}) proceed?=#{proceed}" }
 
       trend =
         if ema200 < closes.last && sma50 > ema200 then :up
