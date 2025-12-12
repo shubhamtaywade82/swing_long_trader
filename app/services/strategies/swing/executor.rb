@@ -56,11 +56,16 @@ module Strategies
         # Skip risk limit checks in paper trading mode (handled by PaperTrading::RiskManager)
         return { success: true } if Rails.configuration.x.paper_trading.enabled
 
+        order_value = @signal[:entry_price] * @signal[:qty]
+
+        # Check available balance first
+        balance_check = check_available_balance(order_value)
+        return balance_check unless balance_check[:success]
+
         # Check max position size per instrument
         _instrument_exposure = calculate_instrument_exposure
         max_per_instrument = @risk_config[:max_position_size_pct] || 10.0
         max_value = (get_current_capital * max_per_instrument / 100.0)
-        order_value = @signal[:entry_price] * @signal[:qty]
 
         if order_value > max_value
           return {
@@ -82,6 +87,62 @@ module Strategies
         end
 
         { success: true }
+      end
+
+      def check_available_balance(required_amount)
+        balance_result = Dhan::Balance.check_available_balance
+
+        unless balance_result[:success]
+          send_balance_check_failed_notification(required_amount, balance_result[:error])
+          return {
+            success: false,
+            error: "Unable to check account balance: #{balance_result[:error]}",
+          }
+        end
+
+        available_balance = balance_result[:balance]
+
+        if available_balance < required_amount
+          send_insufficient_balance_notification(required_amount, available_balance)
+          return {
+            success: false,
+            error: "Insufficient balance: ₹#{required_amount.round(2)} required, ₹#{available_balance.round(2)} available",
+          }
+        end
+
+        { success: true, balance: available_balance }
+      end
+
+      def send_insufficient_balance_notification(required_amount, available_balance)
+        return unless Telegram::Notifier.enabled?
+
+        message = "⚠️ <b>INSUFFICIENT BALANCE</b>\n\n"
+        message += "Required: ₹#{required_amount.round(2)}\n"
+        message += "Available: ₹#{available_balance.round(2)}\n"
+        message += "Shortfall: ₹#{(required_amount - available_balance).round(2)}\n\n"
+        message += "Symbol: #{@instrument.symbol_name}\n"
+        message += "Order Value: ₹#{(@signal[:entry_price] * @signal[:qty]).round(2)}\n"
+        message += "Direction: #{@signal[:direction].to_s.upcase}\n\n"
+        message += "⚠️ Please add funds to your trading account to continue trading."
+
+        Telegram::Notifier.send_error_alert(message, context: "Insufficient Balance")
+      rescue StandardError => e
+        Rails.logger.error("[Strategies::Swing::Executor] Failed to send balance notification: #{e.message}")
+      end
+
+      def send_balance_check_failed_notification(required_amount, error)
+        return unless Telegram::Notifier.enabled?
+
+        message = "❌ <b>BALANCE CHECK FAILED</b>\n\n"
+        message += "Unable to verify account balance.\n"
+        message += "Error: #{error}\n\n"
+        message += "Required for order: ₹#{required_amount.round(2)}\n"
+        message += "Symbol: #{@instrument.symbol_name}\n\n"
+        message += "⚠️ Order not placed. Please check your account balance manually."
+
+        Telegram::Notifier.send_error_alert(message, context: "Balance Check Failed")
+      rescue StandardError => e
+        Rails.logger.error("[Strategies::Swing::Executor] Failed to send balance check notification: #{e.message}")
       end
 
       def check_circuit_breaker
@@ -120,16 +181,23 @@ module Strategies
         manual_approval_enabled = execution_config[:manual_approval]&.dig(:enabled) != false
         manual_approval_count = execution_config[:manual_approval]&.dig(:count) || 30
 
-        # If manual approval is disabled, skip
+        # If manual approval is explicitly disabled, skip
+        return { success: true } if manual_approval_enabled == false
+
+        # If auto_trading is enabled, skip manual approval
+        auto_trading_enabled = execution_config[:auto_trading]&.dig(:enabled) == true
+        return { success: true } if auto_trading_enabled
+
+        # If manual approval is disabled (nil or not set), skip
         return { success: true } unless manual_approval_enabled
 
         # Count executed trades (excluding dry-run)
         executed_count = Order.real.where(status: "executed").count
 
-        # If we've already executed 30+ trades, no approval needed
+        # If we've already executed required trades, no approval needed
         return { success: true } if executed_count >= manual_approval_count
 
-        # For first 30 trades, require approval
+        # For first N trades, require approval
         # Create order record with requires_approval flag
         # The order will be placed only after approval
         {
@@ -167,8 +235,14 @@ module Strategies
           send_large_order_confirmation(order_value)
         end
 
-        # If approval required, create order with requires_approval flag
-        return create_pending_approval_order(order_type, transaction_type, order_value) if requires_approval
+        # Check if auto trading is enabled
+        execution_config = AlgoConfig.fetch(:execution) || {}
+        auto_trading_enabled = execution_config[:auto_trading]&.dig(:enabled) == true
+
+        # If approval required and auto trading not enabled, create pending approval order
+        if requires_approval && !auto_trading_enabled
+          return create_pending_approval_order(order_type, transaction_type, order_value)
+        end
 
         # Place order via DhanHQ wrapper
         result = Dhan::Orders.place_order(

@@ -56,19 +56,19 @@ production:
   #   queue: default
   #   priority: 0
 
-  # Optional: Swing entry monitor (commented out - for live trading)
-  # swing_entry_monitor:
-  #   class: Strategies::SwingEntryMonitorJob
-  #   schedule: every 30 minutes from 9:00am to 3:30pm on weekdays
-  #   queue: default
-  #   priority: 1
+  # Swing entry monitor - Automatic trading during market hours
+  swing_entry_monitor:
+    class: Strategies::Swing::EntryMonitorJob
+    schedule: "*/30 9-15 * * 1-5"  # Every 30 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
 
-  # Optional: Swing exit monitor (commented out - for live trading)
-  # swing_exit_monitor:
-  #   class: Strategies::SwingExitMonitorJob
-  #   schedule: every 30 minutes from 9:00am to 3:30pm on weekdays
-  #   queue: default
-  #   priority: 1
+  # Swing exit monitor - Automatic exit monitoring during market hours
+  swing_exit_monitor:
+    class: Strategies::Swing::ExitMonitorJob
+    schedule: "*/30 9-15 * * 1-5"  # Every 30 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
 
 development:
   # Same as production for development testing
@@ -93,6 +93,20 @@ development:
   monitor_job:
     class: MonitorJob
     schedule: "*/30 9-15 * * 1-5"
+    queue: default
+    priority: 1
+
+  # Swing entry monitor - Automatic trading during market hours
+  swing_entry_monitor:
+    class: Strategies::Swing::EntryMonitorJob
+    schedule: "*/30 9-15 * * 1-5"  # Every 30 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
+
+  # Swing exit monitor - Automatic exit monitoring during market hours
+  swing_exit_monitor:
+    class: Strategies::Swing::ExitMonitorJob
+    schedule: "*/30 9-15 * * 3:30 PM IST, weekdays
     queue: default
     priority: 1
 

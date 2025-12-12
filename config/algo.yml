@@ -50,7 +50,7 @@ swing_trading:
   strategy:
     confirmation_mode: majority # all, majority, weighted, any
     min_confidence: 0.7 # Minimum confidence score (0.0-1.0)
-    auto_analyze: false # Automatically trigger analysis job after screening (set to true to enable)
+    auto_analyze: true # Automatically trigger analysis job after screening (enabled for automatic trading)
     trend_filters:
       use_ema20: true
       use_ema50: true
@@ -217,9 +217,13 @@ openai:
 # EXECUTION CONFIGURATION
 # ============================================
 execution:
-  # Manual approval for first N trades
+  # Automatic trading - enables fully automated trading without manual approval
+  auto_trading:
+    enabled: true # Set to true to enable automatic trading (both paper and live)
+  
+  # Manual approval for first N trades (only applies if auto_trading.enabled is false)
   manual_approval:
-    enabled: true # Set to false to disable manual approval
+    enabled: false # Set to false to disable manual approval (ignored if auto_trading.enabled is true)
     count: 30 # Number of trades requiring manual approval
 
 # ============================================

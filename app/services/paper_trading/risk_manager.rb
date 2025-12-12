@@ -37,6 +37,7 @@ module PaperTrading
       required_capital = entry_price * quantity
 
       if required_capital > @portfolio.available_capital
+        send_insufficient_balance_notification(required_capital, @portfolio.available_capital)
         return {
           success: false,
           error: "Insufficient capital: ₹#{required_capital.round(2)} required, ₹#{@portfolio.available_capital.round(2)} available",
@@ -44,6 +45,29 @@ module PaperTrading
       end
 
       { success: true }
+    end
+
+    def send_insufficient_balance_notification(required_amount, available_balance)
+      return unless Telegram::Notifier.enabled?
+
+      instrument = Instrument.find_by(id: @signal[:instrument_id])
+      symbol = instrument&.symbol_name || "Unknown"
+
+      message = "⚠️ <b>PAPER TRADING: INSUFFICIENT BALANCE</b>\n\n"
+      message += "Required: ₹#{required_amount.round(2)}\n"
+      message += "Available: ₹#{available_balance.round(2)}\n"
+      message += "Shortfall: ₹#{(required_amount - available_balance).round(2)}\n\n"
+      message += "Symbol: #{symbol}\n"
+      message += "Order Value: ₹#{(@signal[:entry_price] * @signal[:qty]).round(2)}\n"
+      message += "Direction: #{@signal[:direction].to_s.upcase}\n\n"
+      message += "Portfolio: #{@portfolio.name}\n"
+      message += "Total Equity: ₹#{@portfolio.total_equity.round(2)}\n"
+      message += "Capital: ₹#{@portfolio.capital.round(2)}\n\n"
+      message += "⚠️ Paper trade not executed. Add capital to portfolio to continue."
+
+      Telegram::Notifier.send_error_alert(message, context: "Paper Trading: Insufficient Balance")
+    rescue StandardError => e
+      Rails.logger.error("[PaperTrading::RiskManager] Failed to send balance notification: #{e.message}")
     end
 
     def check_max_position_size
