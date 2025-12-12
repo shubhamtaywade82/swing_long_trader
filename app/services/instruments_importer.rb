@@ -59,6 +59,7 @@ class InstrumentsImporter
       instrument_import = instruments_rows.empty? ? nil : import_instruments!(instruments_rows)
 
       {
+        success: true,
         instrument_rows: instruments_rows.size,
         instrument_upserts: instrument_import&.ids&.size.to_i,
         instrument_total: Instrument.count

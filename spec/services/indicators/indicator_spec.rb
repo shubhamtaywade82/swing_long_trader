@@ -6,8 +6,8 @@ RSpec.describe CandleSeries, type: :service do
   # Test data: Simple uptrend with known values
   def create_uptrend_candles
     series = CandleSeries.new(symbol: 'TEST', interval: '1D')
-    # Create 20 candles with upward trend
-    20.times do |i|
+    # Create 60 candles with upward trend (enough for MACD: 26 + 9 = 35, Supertrend: 50+)
+    60.times do |i|
       base_price = 100.0 + (i * 2.0)
       series.add_candle(
         Candle.new(
@@ -26,8 +26,8 @@ RSpec.describe CandleSeries, type: :service do
   # Test data: Simple downtrend
   def create_downtrend_candles
     series = CandleSeries.new(symbol: 'TEST', interval: '1D')
-    # Create 20 candles with downward trend
-    20.times do |i|
+    # Create 60 candles with downward trend (enough for MACD: 26 + 9 = 35, Supertrend: 50+)
+    60.times do |i|
       base_price = 120.0 - (i * 2.0)
       series.add_candle(
         Candle.new(
@@ -46,8 +46,8 @@ RSpec.describe CandleSeries, type: :service do
   # Test data: Sideways/volatile market
   def create_sideways_candles
     series = CandleSeries.new(symbol: 'TEST', interval: '1D')
-    # Create 20 candles oscillating around 100
-    20.times do |i|
+    # Create 60 candles oscillating around 100 (enough for MACD: 26 + 9 = 35, Supertrend: 50+)
+    60.times do |i|
       oscillation = Math.sin(i * 0.5) * 5.0
       base_price = 100.0 + oscillation
       series.add_candle(
@@ -130,7 +130,8 @@ RSpec.describe CandleSeries, type: :service do
   describe 'Supertrend' do
     it 'identifies trend direction' do
       series = create_uptrend_candles
-      supertrend = Indicators::Supertrend.new(series: series, period: 10, base_multiplier: 3.0)
+      # Use training_period: 30 to reduce data requirement while still testing functionality
+      supertrend = Indicators::Supertrend.new(series: series, period: 10, base_multiplier: 3.0, training_period: 30)
 
       result = supertrend.call
 

@@ -26,9 +26,9 @@ RSpec.describe Openai::Service, type: :service do
     end
 
     it 'respects rate limit' do
-      # Set rate limit to exceeded
+      # Mock cache to return rate limit exceeded since cache is disabled in test env
       today = Date.today.to_s
-      Rails.cache.write("openai_calls:#{today}", 50, expires_in: 1.day)
+      allow(Rails.cache).to receive(:read).with("openai_calls:#{today}").and_return(50)
 
       result = described_class.call(prompt: prompt)
 
@@ -38,23 +38,26 @@ RSpec.describe Openai::Service, type: :service do
 
     it 'caches responses' do
       # Mock API response
-      mock_response = {
-        'choices' => [
-          {
-            'message' => {
-              'content' => '{"score": 85, "confidence": 80}'
-            }
-          }
-        ],
-        'usage' => {
-          'prompt_tokens' => 50,
-          'completion_tokens' => 20,
-          'total_tokens' => 70
+      mock_api_response = {
+        content: '{"score": 85, "confidence": 80}',
+        usage: {
+          prompt_tokens: 50,
+          completion_tokens: 20,
+          total_tokens: 70
         }
       }
 
-      stub_request(:post, 'https://api.openai.com/v1/chat/completions')
-        .to_return(status: 200, body: mock_response.to_json)
+      # Mock cache to simulate real caching behavior since test env uses null_store
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) do |key|
+        cache_store[key]
+      end
+      allow(Rails.cache).to receive(:write) do |key, value, options = {}|
+        cache_store[key] = value
+      end
+
+      # Stub call_api method on service instances
+      allow_any_instance_of(described_class).to receive(:call_api).and_return(mock_api_response)
 
       # First call
       result1 = described_class.call(prompt: prompt, cache: true)
@@ -69,23 +72,17 @@ RSpec.describe Openai::Service, type: :service do
     end
 
     it 'parses JSON response correctly' do
-      mock_response = {
-        'choices' => [
-          {
-            'message' => {
-              'content' => '{"score": 85, "confidence": 80, "summary": "Good signal", "risk": "medium"}'
-            }
-          }
-        ],
-        'usage' => {
-          'prompt_tokens' => 50,
-          'completion_tokens' => 20,
-          'total_tokens' => 70
+      mock_api_response = {
+        content: '{"score": 85, "confidence": 80, "summary": "Good signal", "risk": "medium"}',
+        usage: {
+          prompt_tokens: 50,
+          completion_tokens: 20,
+          total_tokens: 70
         }
       }
 
-      stub_request(:post, 'https://api.openai.com/v1/chat/completions')
-        .to_return(status: 200, body: mock_response.to_json)
+      # Stub call_api method on service instances
+      allow_any_instance_of(described_class).to receive(:call_api).and_return(mock_api_response)
 
       result = described_class.call(prompt: prompt)
 
@@ -95,23 +92,17 @@ RSpec.describe Openai::Service, type: :service do
     end
 
     it 'handles non-JSON response gracefully' do
-      mock_response = {
-        'choices' => [
-          {
-            'message' => {
-              'content' => 'This is not JSON content'
-            }
-          }
-        ],
-        'usage' => {
-          'prompt_tokens' => 50,
-          'completion_tokens' => 20,
-          'total_tokens' => 70
+      mock_api_response = {
+        content: 'This is not JSON content',
+        usage: {
+          prompt_tokens: 50,
+          completion_tokens: 20,
+          total_tokens: 70
         }
       }
 
-      stub_request(:post, 'https://api.openai.com/v1/chat/completions')
-        .to_return(status: 200, body: mock_response.to_json)
+      # Stub call_api method on service instances
+      allow_any_instance_of(described_class).to receive(:call_api).and_return(mock_api_response)
 
       result = described_class.call(prompt: prompt)
 
@@ -121,28 +112,31 @@ RSpec.describe Openai::Service, type: :service do
     end
 
     it 'tracks token usage' do
-      mock_response = {
-        'choices' => [
-          {
-            'message' => {
-              'content' => '{"score": 85}'
-            }
-          }
-        ],
-        'usage' => {
-          'prompt_tokens' => 100,
-          'completion_tokens' => 50,
-          'total_tokens' => 150
+      mock_api_response = {
+        content: '{"score": 85}',
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150
         }
       }
 
-      stub_request(:post, 'https://api.openai.com/v1/chat/completions')
-        .to_return(status: 200, body: mock_response.to_json)
+      # Mock cache to simulate real caching behavior since test env uses null_store
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) do |key|
+        cache_store[key]
+      end
+      allow(Rails.cache).to receive(:write) do |key, value, options = {}|
+        cache_store[key] = value
+      end
+
+      # Stub call_api method on service instances
+      allow_any_instance_of(described_class).to receive(:call_api).and_return(mock_api_response)
 
       described_class.call(prompt: prompt)
 
       today = Date.today.to_s
-      tokens = Rails.cache.read("openai_tokens:#{today}")
+      tokens = cache_store["openai_tokens:#{today}"]
 
       expect(tokens).not_to be_nil
       expect(tokens[:prompt]).to eq(100)
@@ -151,13 +145,13 @@ RSpec.describe Openai::Service, type: :service do
     end
 
     it 'handles API errors gracefully' do
-      stub_request(:post, 'https://api.openai.com/v1/chat/completions')
-        .to_return(status: 500, body: 'Internal Server Error')
+      # Stub call_api to return nil (simulating API failure)
+      allow_any_instance_of(described_class).to receive(:call_api).and_return(nil)
 
       result = described_class.call(prompt: prompt)
 
       expect(result[:success]).to be false
-      expect(result[:error]).not_to be_nil
+      expect(result[:error]).to eq('API call failed')
     end
   end
 

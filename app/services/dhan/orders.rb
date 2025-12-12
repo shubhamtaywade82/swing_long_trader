@@ -24,7 +24,7 @@ module Dhan
       @quantity = quantity.to_i
       @price = price&.to_f
       @trigger_price = trigger_price&.to_f
-      @client_order_id = client_order_id || generate_client_order_id
+      @client_order_id = client_order_id || (generate_client_order_id if @instrument.present?)
       @dry_run = dry_run || (ENV['DRY_RUN'] == 'true')
     end
 
@@ -243,6 +243,7 @@ module Dhan
     end
 
     def generate_client_order_id
+      return nil unless @instrument&.security_id.present?
       timestamp = Time.current.to_i.to_s[-6..]
       "#{@transaction_type[0]}-#{@instrument.security_id}-#{timestamp}"
     end

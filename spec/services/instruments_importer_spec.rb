@@ -84,8 +84,9 @@ RSpec.describe InstrumentsImporter do
         InstrumentsImporter.import_from_url
 
         # Should not import MCX instruments (only NSE and BSE are valid)
-        expect(Instrument.where(exchange: 'MCX').count).to eq(0)
-        expect(Instrument.pluck(:exchange).uniq).to contain_exactly('NSE')
+        # Note: exchange is stored as enum key (lowercase) in database
+        expect(Instrument.where(exchange: 'mcx').count).to eq(0)
+        expect(Instrument.pluck(:exchange).uniq).to contain_exactly('nse')
       end
     end
 
@@ -94,7 +95,7 @@ RSpec.describe InstrumentsImporter do
         # Create a fresh cache file
         FileUtils.mkdir_p(cache_path.dirname)
         File.write(cache_path, sample_csv)
-        FileUtils.touch(cache_path, mtime: Time.current)
+        FileUtils.touch(cache_path, mtime: Time.current.to_time)
 
         expect(URI).not_to receive(:open)
         allow(InstrumentsImporter).to receive(:import_from_csv).and_return({ instrument_total: 0 })
@@ -106,9 +107,9 @@ RSpec.describe InstrumentsImporter do
         # Create a stale cache file
         FileUtils.mkdir_p(cache_path.dirname)
         File.write(cache_path, sample_csv)
-        FileUtils.touch(cache_path, mtime: 2.days.ago)
+        FileUtils.touch(cache_path, mtime: 2.days.ago.to_time)
 
-        allow(URI).to receive(:open).and_return(StringIO.new(sample_csv))
+        allow(URI).to receive(:open).and_yield(StringIO.new(sample_csv))
         allow(InstrumentsImporter).to receive(:import_from_csv).and_return({ instrument_total: 0 })
 
         InstrumentsImporter.import_from_url
@@ -161,8 +162,9 @@ RSpec.describe InstrumentsImporter do
 
       reliance = Instrument.find_by(symbol_name: 'RELIANCE')
       expect(reliance).to be_present
-      expect(reliance.exchange).to eq('NSE')
-      expect(reliance.segment).to eq('E')
+      # Note: exchange and segment are stored as enum keys in database
+      expect(reliance.exchange).to eq('nse')
+      expect(reliance.segment).to eq('equity')
       expect(reliance.instrument_type).to eq('EQUITY')
       expect(reliance.security_id).to eq('11536')
     end
@@ -224,18 +226,18 @@ RSpec.describe InstrumentsImporter do
     end
 
     it 'fetches CSV from URL' do
-      allow(URI).to receive(:open).and_return(StringIO.new(sample_csv))
+      allow(URI).to receive(:open).and_yield(StringIO.new(sample_csv))
 
-      result = InstrumentsImporter.fetch_csv_with_cache
+      result = InstrumentsImporter.send(:fetch_csv_with_cache)
 
       expect(result).to eq(sample_csv)
       expect(URI).to have_received(:open).with(csv_url, any_args)
     end
 
     it 'saves CSV to cache file' do
-      allow(URI).to receive(:open).and_return(StringIO.new(sample_csv))
+      allow(URI).to receive(:open).and_yield(StringIO.new(sample_csv))
 
-      InstrumentsImporter.fetch_csv_with_cache
+      InstrumentsImporter.send(:fetch_csv_with_cache)
 
       expect(cache_path).to exist
       expect(File.read(cache_path)).to eq(sample_csv)
@@ -245,11 +247,11 @@ RSpec.describe InstrumentsImporter do
       # Create cache
       FileUtils.mkdir_p(cache_path.dirname)
       File.write(cache_path, sample_csv)
-      FileUtils.touch(cache_path, mtime: Time.current)
+      FileUtils.touch(cache_path, mtime: Time.current.to_time)
 
       expect(URI).not_to receive(:open)
 
-      result = InstrumentsImporter.fetch_csv_with_cache
+      result = InstrumentsImporter.send(:fetch_csv_with_cache)
       expect(result).to eq(sample_csv)
     end
 
@@ -257,11 +259,11 @@ RSpec.describe InstrumentsImporter do
       # Create stale cache
       FileUtils.mkdir_p(cache_path.dirname)
       File.write(cache_path, 'old data')
-      FileUtils.touch(cache_path, mtime: 2.days.ago)
+      FileUtils.touch(cache_path, mtime: 2.days.ago.to_time)
 
-      allow(URI).to receive(:open).and_return(StringIO.new(sample_csv))
+      allow(URI).to receive(:open).and_yield(StringIO.new(sample_csv))
 
-      result = InstrumentsImporter.fetch_csv_with_cache
+      result = InstrumentsImporter.send(:fetch_csv_with_cache)
 
       expect(result).to eq(sample_csv)
       expect(File.read(cache_path)).to eq(sample_csv)
