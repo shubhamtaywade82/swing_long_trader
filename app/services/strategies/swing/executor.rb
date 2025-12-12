@@ -349,6 +349,11 @@ module Strategies
           dry_run: @dry_run,
         )
 
+        # Create position record if order placed successfully
+        if result[:success] && result[:order] && !@dry_run
+          create_position_from_order(result[:order])
+        end
+
         # Log order placement
         log_order_placement(result)
 
@@ -515,10 +520,12 @@ module Strategies
               metadata: { result: result },
             )
           else
+            # Find position if created
+            position = Position.find_by(order: result[:order]) if result[:order]
             signal_record.mark_as_executed!(
               execution_type: "live",
               order: result[:order],
-              metadata: { result: result },
+              metadata: { result: result, position_id: position&.id },
             )
           end
         else
@@ -530,6 +537,42 @@ module Strategies
         end
       rescue StandardError => e
         Rails.logger.error("[Strategies::Swing::Executor] Failed to update signal record: #{e.message}")
+      end
+
+      def create_position_from_order(order)
+        return unless order&.executed? || order&.placed?
+
+        # Get signal metadata
+        metadata = order.metadata_hash
+        signal_data = metadata["signal"] || {}
+
+        # Create position record
+        Position.create!(
+          instrument: @instrument,
+          order: order,
+          trading_signal: TradingSignal.find_by(order: order),
+          symbol: order.symbol,
+          direction: order.buy? ? "long" : "short",
+          entry_price: order.average_price || order.price || @signal[:entry_price],
+          current_price: @instrument.ltp || order.average_price || order.price || @signal[:entry_price],
+          quantity: order.filled_quantity.positive? ? order.filled_quantity : order.quantity,
+          average_entry_price: order.average_price,
+          filled_quantity: order.filled_quantity.positive? ? order.filled_quantity : order.quantity,
+          stop_loss: signal_data["sl"] || @signal[:sl],
+          take_profit: signal_data["tp"] || @signal[:tp],
+          status: "open",
+          opened_at: order.created_at,
+          metadata: {
+            order_id: order.id,
+            client_order_id: order.client_order_id,
+            signal: @signal,
+          }.to_json,
+        )
+
+        Rails.logger.info("[Strategies::Swing::Executor] Created position for order #{order.client_order_id}")
+      rescue StandardError => e
+        Rails.logger.error("[Strategies::Swing::Executor] Failed to create position: #{e.message}")
+        nil
       end
 
       def generate_order_id

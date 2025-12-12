@@ -70,6 +70,14 @@ production:
     queue: default
     priority: 1
 
+  # Position sync - Sync live positions with DhanHQ and reconcile prices
+  position_sync:
+    class: Positions::SyncJob
+    schedule: "*/15 9-15 * * 1-5"  # Every 15 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
+    args: ["all"]  # Sync both live and paper
+
 development:
   # Same as production for development testing
   daily_candle_ingestion:
@@ -106,7 +114,14 @@ development:
   # Swing exit monitor - Automatic exit monitoring during market hours
   swing_exit_monitor:
     class: Strategies::Swing::ExitMonitorJob
-    schedule: "*/30 9-15 * * 3:30 PM IST, weekdays
+    schedule: "*/30 9-15 * * 1-5"  # Every 30 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
+
+  # Position sync - Sync live positions with DhanHQ and reconcile prices
+  position_sync:
+    class: Positions::SyncJob
+    schedule: "*/15 9-15 * * 1-5"  # Every 15 minutes, 9 AM - 3:30 PM IST, weekdays
     queue: default
     priority: 1
 

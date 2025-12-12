@@ -456,20 +456,45 @@ Strategies::Swing::EntryMonitorJob
 └─ Sends notifications
 ```
 
+**Every 15 Minutes (9 AM - 3:30 PM IST, Weekdays) - Position Sync**
+```
+Positions::SyncJob
+├─ LIVE: Dhan::Positions.sync_all
+│  ├─ Fetches positions from DhanHQ API
+│  ├─ Creates/updates Position records
+│  ├─ Links to Orders and TradingSignals
+│  └─ Marks as synced_with_dhan: true
+│
+├─ LIVE: Positions::Reconciler.reconcile_live
+│  ├─ Updates current_price from instrument.ltp
+│  ├─ Updates highest/lowest_price
+│  ├─ Calculates unrealized_pnl
+│  └─ Updates position records
+│
+└─ PAPER: Positions::Reconciler.reconcile_paper
+   ├─ Updates position prices from candles
+   ├─ Calculates unrealized_pnl
+   ├─ Updates portfolio equity
+   └─ Updates position records
+```
+
 **Every 30 Minutes (9 AM - 3:30 PM IST, Weekdays) - Exit Monitor**
 
 **Live Trading:**
 ```
 Strategies::Swing::ExitMonitorJob
-├─ Checks open orders
-├─ Checks SL/TP conditions
+├─ Checks Position.open (synced positions)
+├─ Updates current_price
+├─ Checks SL/TP/trailing stop conditions
 ├─ Places exit orders when triggered
+├─ Marks positions as closed
 └─ Sends exit notifications
 ```
 
 **Paper Trading:**
 ```
 PaperTrading::Simulator.check_exits
+├─ Checks PaperPosition.open
 ├─ Updates position prices from candles
 ├─ Checks SL/TP conditions
 ├─ Closes positions when triggered
@@ -577,9 +602,12 @@ bin/dev
 - Automatic execution (paper and live)
 - Balance checking
 - Risk limit enforcement
+- **Position sync with DhanHQ (live)**
+- **Position tracking in database (live + paper)**
+- **Automatic price updates and P&L calculation**
 
 **❌ Not Implemented:**
-- Partial exits (exits full position)
+- Partial exits (exits full position) - Structure ready, logic needs implementation
 - Position scaling (adds to position)
 - Multiple timeframes analysis
 - Custom exit strategies
@@ -856,6 +884,7 @@ bin/rails solid_queue:start
 - ✅ Swing screener (07:40 IST weekdays)
 - ✅ Signal analysis (after screening, if enabled)
 - ✅ Entry monitoring (every 30 min, market hours)
+- ✅ **Position sync (every 15 min, market hours)** - NEW!
 - ✅ Exit monitoring (every 30 min, market hours)
 - ✅ Health monitoring (every 30 min, market hours)
 - ✅ Job queue cleanup (hourly)
