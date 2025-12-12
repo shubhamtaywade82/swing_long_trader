@@ -62,7 +62,32 @@ Warnings from third-party gems are suppressed in the test environment by tempora
 3. **No Functional Impact:** These warnings don't affect the application's functionality
 4. **Test Focus:** Tests should focus on application code, not gem internals
 
+## Rake Task Warnings
+
+### Fixed Warnings
+
+The following warnings from your own rake tasks have been **fixed**:
+
+1. **`lib/tasks/backtest.rake`** - Already uses `BacktestHelpers` module (no changes needed)
+2. **`lib/tasks/hardening.rake`** - Wrapped helper methods in `HardeningHelpers` module
+3. **`lib/tasks/indicators.rake`** - Wrapped helper methods in `IndicatorHelpers` module
+
+**Solution:** Helper methods are now defined in modules outside the namespace, preventing redefinition warnings when rake files are loaded multiple times.
+
+### Remaining Warnings
+
+The following warnings are from **Rails core gems** and are expected:
+
+- `actionview` - Method redefinitions in cache_digests.rake
+- `jsbundling-rails` - Method redefinitions in build.rake
+- `turbo-rails` - Method redefinitions in turbo_tasks.rake
+- `stimulus-rails` - Method redefinitions in stimulus_tasks.rake
+- `cssbundling-rails` - Method redefinitions and constant reinitializations
+- `railties` - Method redefinitions in log.rake and misc.rake
+
+These are internal to Rails and its gems and don't affect functionality. They occur because rake tasks can be loaded multiple times during development.
+
 ## Monitoring
 
-If you see new warnings that aren't from third-party gems, investigate them as they may indicate actual issues in the application code.
+If you see new warnings that aren't from third-party gems or Rails core, investigate them as they may indicate actual issues in the application code.
 
