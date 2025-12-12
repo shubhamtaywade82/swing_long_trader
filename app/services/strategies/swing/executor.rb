@@ -540,17 +540,19 @@ module Strategies
       end
 
       def create_position_from_order(order)
+        # Create Position record for live trading
         return unless order&.executed? || order&.placed?
 
         # Get signal metadata
         metadata = order.metadata_hash
         signal_data = metadata["signal"] || {}
 
-        # Create position record
+        # Create position record for live trading
         Position.create!(
           instrument: @instrument,
           order: order,
           trading_signal: TradingSignal.find_by(order: order),
+          trading_mode: "live", # Live trading position
           symbol: order.symbol,
           direction: order.buy? ? "long" : "short",
           entry_price: order.average_price || order.price || @signal[:entry_price],

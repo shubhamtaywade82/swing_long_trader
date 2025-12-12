@@ -10,9 +10,24 @@ class Position < ApplicationRecord
   validates :direction, inclusion: { in: %w[long short] }, allow_nil: true
   validates :status, inclusion: { in: %w[open closed partially_closed] }
   validates :quantity, numericality: { greater_than: 0 }, allow_nil: true
+  validates :trading_mode, inclusion: { in: %w[live paper] }, allow_nil: true
+
+  belongs_to :paper_portfolio, optional: true # For backward compatibility
+
+  scope :live, -> { where(trading_mode: "live").or(where(trading_mode: nil)) } # nil defaults to live
+  scope :paper, -> { where(trading_mode: "paper") }
+  scope :by_trading_mode, ->(mode) { where(trading_mode: mode) }
 
   def portfolio?
     type == "Portfolio"
+  end
+
+  def live?
+    trading_mode.nil? || trading_mode == "live"
+  end
+
+  def paper?
+    trading_mode == "paper"
   end
 
   scope :open, -> { where(status: "open") }

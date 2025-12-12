@@ -11,7 +11,7 @@ namespace :portfolios do
     if result[:live] && result[:live][:success]
       live = result[:live][:portfolio]
       puts "\n🟢 LIVE PORTFOLIO:"
-      puts "   Date: #{live.date}"
+      puts "   Date: #{live.portfolio_date}"
       puts "   Opening Capital: ₹#{live.opening_capital}"
       puts "   Closing Capital: ₹#{live.closing_capital}"
       puts "   Total Equity: ₹#{live.total_equity}"
@@ -24,7 +24,7 @@ namespace :portfolios do
     if result[:paper] && result[:paper][:success]
       paper = result[:paper][:portfolio]
       puts "\n📘 PAPER PORTFOLIO:"
-      puts "   Date: #{paper.date}"
+      puts "   Date: #{paper.portfolio_date}"
       puts "   Opening Capital: ₹#{paper.opening_capital}"
       puts "   Closing Capital: ₹#{paper.closing_capital}"
       puts "   Total Equity: ₹#{paper.total_equity}"
@@ -80,7 +80,7 @@ namespace :portfolios do
     puts "\n🟢 LIVE PORTFOLIOS:"
     if live_portfolios.any?
       live_portfolios.each do |p|
-        puts "  #{p.date} - Equity: ₹#{p.total_equity}, P&L: ₹#{p.total_pnl} (#{p.pnl_pct}%)"
+        puts "  #{p.portfolio_date} - Equity: ₹#{p.total_equity}, P&L: ₹#{p.realized_pnl + p.unrealized_pnl} (#{p.utilization_pct}%)"
         puts "    Open: #{p.open_positions_count}, Closed: #{p.closed_positions_count}"
       end
     else
@@ -90,7 +90,7 @@ namespace :portfolios do
     puts "\n📘 PAPER PORTFOLIOS:"
     if paper_portfolios.any?
       paper_portfolios.each do |p|
-        puts "  #{p.date} - Equity: ₹#{p.total_equity}, P&L: ₹#{p.total_pnl} (#{p.pnl_pct}%)"
+        puts "  #{p.portfolio_date} - Equity: ₹#{p.total_equity}, P&L: ₹#{p.realized_pnl + p.unrealized_pnl} (#{p.utilization_pct}%)"
         puts "    Open: #{p.open_positions_count}, Closed: #{p.closed_positions_count}"
       end
     else
@@ -113,7 +113,9 @@ namespace :portfolios do
       puts "   Available Capital: ₹#{live.available_capital}"
       puts "   Realized P&L: ₹#{live.realized_pnl}"
       puts "   Unrealized P&L: ₹#{live.unrealized_pnl}"
-      puts "   Total P&L: ₹#{live.total_pnl} (#{live.pnl_pct}%)"
+      total_pnl = (live.realized_pnl || 0) + (live.unrealized_pnl || 0)
+      pnl_pct = live.opening_capital.positive? ? ((total_pnl / live.opening_capital) * 100).round(2) : 0
+      puts "   Total P&L: ₹#{total_pnl} (#{pnl_pct}%)"
       puts "   Open Positions: #{live.open_positions_count}"
       puts "   Closed Today: #{live.closed_positions_count}"
       puts "   Total Exposure: ₹#{live.total_exposure}"
@@ -150,7 +152,9 @@ namespace :portfolios do
       puts "   Available Capital: ₹#{paper.available_capital}"
       puts "   Realized P&L: ₹#{paper.realized_pnl}"
       puts "   Unrealized P&L: ₹#{paper.unrealized_pnl}"
-      puts "   Total P&L: ₹#{paper.total_pnl} (#{paper.pnl_pct}%)"
+      total_pnl = (paper.realized_pnl || 0) + (paper.unrealized_pnl || 0)
+      pnl_pct = paper.opening_capital.positive? ? ((total_pnl / paper.opening_capital) * 100).round(2) : 0
+      puts "   Total P&L: ₹#{total_pnl} (#{pnl_pct}%)"
       puts "   Open Positions: #{paper.open_positions_count}"
       puts "   Closed Today: #{paper.closed_positions_count}"
       puts "   Total Exposure: ₹#{paper.total_exposure}"
@@ -162,7 +166,7 @@ namespace :portfolios do
       if continued.any?
         puts "\n   📌 Continued Positions (#{continued.size}):"
         continued.each do |pos|
-          puts "      #{pos.instrument.symbol_name} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}, P&L: ₹#{pos.unrealized_pnl}"
+          puts "      #{pos.symbol} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}, P&L: ₹#{pos.unrealized_pnl}"
         end
       end
 
@@ -171,7 +175,7 @@ namespace :portfolios do
       if new_pos.any?
         puts "\n   🆕 New Positions Today (#{new_pos.size}):"
         new_pos.each do |pos|
-          puts "      #{pos.instrument.symbol_name} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}"
+          puts "      #{pos.symbol} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}"
         end
       end
     else

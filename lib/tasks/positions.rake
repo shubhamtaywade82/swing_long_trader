@@ -76,11 +76,10 @@ namespace :positions do
     end
 
     puts "\n📘 PAPER POSITIONS:"
-    portfolio = PaperTrading::Portfolio.find_or_create_default
-    paper_positions = portfolio.open_positions.includes(:instrument).recent
+    paper_positions = Position.paper.open.includes(:instrument).recent
     if paper_positions.any?
       paper_positions.each do |pos|
-        puts "  #{pos.instrument.symbol_name} - #{pos.direction.upcase}"
+        puts "  #{pos.symbol} - #{pos.direction.upcase}"
         puts "    Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}"
         puts "    Qty: #{pos.quantity}, P&L: ₹#{pos.unrealized_pnl} (#{pos.unrealized_pnl_pct}%)"
         puts "    Opened: #{pos.opened_at.strftime('%Y-%m-%d')}, Days: #{pos.days_held}"

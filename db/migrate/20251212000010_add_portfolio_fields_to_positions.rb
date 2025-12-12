@@ -6,6 +6,11 @@ class AddPortfolioFieldsToPositions < ActiveRecord::Migration[8.0]
     add_column :positions, :type, :string unless column_exists?(:positions, :type)
     add_index :positions, :type unless index_exists?(:positions, :type)
 
+    # Add trading_mode column: 'live' or 'paper' (for regular positions)
+    add_column :positions, :trading_mode, :string, default: "live" unless column_exists?(:positions, :trading_mode)
+    add_index :positions, :trading_mode unless index_exists?(:positions, :trading_mode)
+    add_index :positions, [:trading_mode, :status] unless index_exists?(:positions, [:trading_mode, :status])
+
     # Add portfolio snapshot date for grouping positions
     add_column :positions, :portfolio_date, :date unless column_exists?(:positions, :portfolio_date)
     add_index :positions, :portfolio_date unless index_exists?(:positions, :portfolio_date)
@@ -27,5 +32,8 @@ class AddPortfolioFieldsToPositions < ActiveRecord::Migration[8.0]
     # Add flag to mark positions that continue from previous day
     add_column :positions, :continued_from_previous_day, :boolean, default: false unless column_exists?(:positions, :continued_from_previous_day)
     add_index :positions, :continued_from_previous_day unless index_exists?(:positions, :continued_from_previous_day)
+
+    # Add paper_portfolio_id for backward compatibility during migration
+    add_reference :positions, :paper_portfolio, foreign_key: true, null: true unless column_exists?(:positions, :paper_portfolio_id)
   end
 end
