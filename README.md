@@ -364,7 +364,9 @@ rails console
 
 ## Documentation
 
-- **[Getting Started](docs/GETTING_STARTED.md)** - Complete step-by-step setup guide for new users
+- **[Quick Start](docs/QUICK_START.md)** - Get running in 5 minutes
+- **[Local Development Guide](docs/LOCAL_DEVELOPMENT_GUIDE.md)** - Complete guide to run locally on your machine
+- **[Getting Started](docs/GETTING_STARTED.md)** - Detailed step-by-step setup guide for new users
 - **[System Overview](docs/SYSTEM_OVERVIEW.md)** - Complete system guide, quick reference, and troubleshooting
 - **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** - Complete implementation summary and status
 - **[Architecture](docs/architecture.md)** - System architecture and component overview
@@ -372,6 +374,7 @@ rails console
 - **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)** - Complete list of environment variables
 - **[Production Checklist](docs/PRODUCTION_CHECKLIST.md)** - Pre-deployment checklist
 - **[Deployment Quickstart](docs/DEPLOYMENT_QUICKSTART.md)** - Step-by-step deployment guide
+- **[Kamal Deployment Guide](docs/KAMAL_DEPLOYMENT_GUIDE.md)** - Complete Kamal deployment instructions
 - **[Backtesting Guide](docs/BACKTESTING.md)** - Comprehensive backtesting documentation
 - **[Migration Guide](docs/SWING_LONG_TRADER_MIGRATION_GUIDE.md)** - Migration from AlgoScalperAPI
 - **[Implementation TODO](docs/IMPLEMENTATION_TODO.md)** - Development progress tracker
