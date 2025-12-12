@@ -69,11 +69,16 @@ RSpec.describe Metrics::PnlTracker do
 
   describe '.get_daily_pnl' do
     it 'calculates total P&L for a date' do
-      order1 = create(:order, created_at: Date.today, status: 'executed')
+      # Create orders with executed status and metadata containing P&L
+      order1 = create(:order, created_at: Time.zone.today.beginning_of_day, status: 'executed')
       order1.update_column(:metadata, { 'pnl' => 100.0 }.to_json)
 
-      order2 = create(:order, created_at: Date.today, status: 'executed')
+      order2 = create(:order, created_at: Time.zone.today.beginning_of_day, status: 'executed')
       order2.update_column(:metadata, { 'pnl' => 50.0 }.to_json)
+
+      # Reload to ensure metadata is parsed correctly
+      order1.reload
+      order2.reload
 
       pnl = described_class.get_daily_pnl
 

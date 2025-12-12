@@ -22,8 +22,8 @@ module Orders
     def call
       order = Order.find_by(id: @order_id)
       return { success: false, error: 'Order not found' } unless order
-      return { success: false, error: 'Order does not require approval' } unless order.requires_approval?
       return { success: false, error: 'Order already processed' } if order.approved? || order.rejected?
+      return { success: false, error: 'Order does not require approval' } unless order.requires_approval?
 
       case @action
       when :approve

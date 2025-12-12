@@ -20,8 +20,8 @@ RSpec.describe OptimizationRun, type: :model do
       expect(run.errors[:start_date]).to be_present
       expect(run.errors[:end_date]).to be_present
       expect(run.errors[:strategy_type]).to be_present
-      # initial_capital might have a default or be nullable
-      expect(run.errors[:optimization_metric]).to be_present
+      # initial_capital has a default value, so no error expected
+      # optimization_metric has a default value ("sharpe_ratio"), so no error expected
     end
 
     it 'requires strategy_type to be swing or long_term' do
@@ -90,7 +90,7 @@ RSpec.describe OptimizationRun, type: :model do
   describe '#best_score' do
     it 'returns score from best_metrics_hash' do
       run.update(best_metrics: '{"sharpe_ratio": 1.5}', optimization_metric: 'sharpe_ratio')
-      run.reload # Reload to ensure instance variable is set
+      run.reload
       expect(run.best_score).to eq(1.5)
     end
 
@@ -98,6 +98,12 @@ RSpec.describe OptimizationRun, type: :model do
       run.update(optimization_metric: 'sharpe_ratio', best_metrics: '{}')
       run.reload
       expect(run.best_score).to eq(0)
+    end
+
+    it 'handles different metric types' do
+      run.update(optimization_metric: 'total_return', best_metrics: '{"total_return": 25.5}')
+      run.reload
+      expect(run.best_score).to eq(25.5)
     end
   end
 

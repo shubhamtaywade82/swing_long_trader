@@ -33,41 +33,83 @@ RSpec.describe Metrics::Tracker do
 
   describe '.track_dhan_api_call' do
     it 'increments API call count' do
+      # Mock cache since test environment uses null_store
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) do |key|
+        cache_store[key]
+      end
+      allow(Rails.cache).to receive(:write) do |key, value, options = {}|
+        cache_store[key] = value
+      end
+
       described_class.track_dhan_api_call
 
-      expect(Rails.cache.read('metrics:dhan_api_calls:2025-12-12')).to eq(1)
+      expect(cache_store['metrics:dhan_api_calls:2025-12-12']).to eq(1)
     end
   end
 
   describe '.track_openai_api_call' do
     it 'increments OpenAI API call count' do
+      # Mock cache since test environment uses null_store
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) do |key|
+        cache_store[key]
+      end
+      allow(Rails.cache).to receive(:write) do |key, value, options = {}|
+        cache_store[key] = value
+      end
+
       described_class.track_openai_api_call
 
-      expect(Rails.cache.read('metrics:openai_api_calls:2025-12-12')).to eq(1)
+      expect(cache_store['metrics:openai_api_calls:2025-12-12']).to eq(1)
     end
   end
 
   describe '.track_openai_cost' do
     it 'tracks OpenAI cost' do
+      # Mock cache since test environment uses null_store
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) do |key|
+        cache_store[key]
+      end
+      allow(Rails.cache).to receive(:write) do |key, value, options = {}|
+        cache_store[key] = value
+      end
+
       described_class.track_openai_cost(0.05)
 
-      expect(Rails.cache.read('metrics:openai_cost:2025-12-12')).to eq(0.05)
+      expect(cache_store['metrics:openai_cost:2025-12-12']).to eq(0.05)
     end
 
     it 'accumulates costs' do
+      # Mock cache since test environment uses null_store
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) do |key|
+        cache_store[key]
+      end
+      allow(Rails.cache).to receive(:write) do |key, value, options = {}|
+        cache_store[key] = value
+      end
+
       described_class.track_openai_cost(0.05)
       described_class.track_openai_cost(0.03)
 
-      expect(Rails.cache.read('metrics:openai_cost:2025-12-12')).to eq(0.08)
+      expect(cache_store['metrics:openai_cost:2025-12-12']).to eq(0.08)
     end
   end
 
   describe '.get_daily_stats' do
     it 'returns daily statistics' do
-      Rails.cache.write('metrics:dhan_api_calls:2025-12-12', 10)
-      Rails.cache.write('metrics:openai_api_calls:2025-12-12', 5)
-      Rails.cache.write('metrics:candidate_count:2025-12-12', 20)
-      Rails.cache.write('metrics:signal_count:2025-12-12', 3)
+      # Mock cache since test environment uses null_store
+      cache_store = {
+        'metrics:dhan_api_calls:2025-12-12' => 10,
+        'metrics:openai_api_calls:2025-12-12' => 5,
+        'metrics:candidate_count:2025-12-12' => 20,
+        'metrics:signal_count:2025-12-12' => 3
+      }
+      allow(Rails.cache).to receive(:read) do |key|
+        cache_store[key]
+      end
 
       stats = described_class.get_daily_stats
 

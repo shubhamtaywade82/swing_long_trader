@@ -29,6 +29,17 @@ RSpec.describe PaperPortfolio, type: :model do
       expect(portfolio).to be_valid
     end
 
+    it 'allows capital to be positive' do
+      portfolio = PaperPortfolio.new(name: 'Test', capital: 100_000)
+      expect(portfolio).to be_valid
+    end
+
+    it 'requires capital to be present (not nil)' do
+      portfolio = PaperPortfolio.new(name: 'Test', capital: nil)
+      expect(portfolio).not_to be_valid
+      expect(portfolio.errors[:capital]).to include("can't be blank")
+    end
+
     it 'requires unique name (case insensitive)' do
       create(:paper_portfolio, name: 'Test Portfolio')
       duplicate = PaperPortfolio.new(name: 'test portfolio', capital: 100_000)

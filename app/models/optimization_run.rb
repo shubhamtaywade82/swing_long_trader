@@ -52,7 +52,10 @@ class OptimizationRun < ApplicationRecord
   end
 
   def best_score
-    best_metrics_hash[@optimization_metric.to_sym] || best_metrics_hash[optimization_metric] || 0
+    return 0 if optimization_metric.blank?
+
+    metric_key = optimization_metric.to_sym
+    best_metrics_hash[metric_key] || best_metrics_hash[optimization_metric] || 0
   end
 
   def top_n_results(n = 10)
