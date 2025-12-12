@@ -35,7 +35,8 @@ module Metrics
     end
 
     def self.get_daily_pnl(date = Date.today)
-      orders = Order.where('DATE(created_at) = ?', date)
+      # Use date range to handle timezone-aware timestamps correctly
+      orders = Order.where(created_at: date.beginning_of_day..date.end_of_day)
       calculate_total_pnl(orders)
     end
 

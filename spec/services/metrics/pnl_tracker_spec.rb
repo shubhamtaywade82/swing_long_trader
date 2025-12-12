@@ -70,17 +70,25 @@ RSpec.describe Metrics::PnlTracker do
   describe '.get_daily_pnl' do
     it 'calculates total P&L for a date' do
       # Create orders with executed status and metadata containing P&L
-      order1 = create(:order, created_at: Time.zone.today.beginning_of_day, status: 'executed')
+      today = Date.today
+      # Use date range to ensure we match the date regardless of time
+      order1 = create(:order, created_at: today.beginning_of_day + 1.hour, status: 'executed')
       order1.update_column(:metadata, { 'pnl' => 100.0 }.to_json)
 
-      order2 = create(:order, created_at: Time.zone.today.beginning_of_day, status: 'executed')
+      order2 = create(:order, created_at: today.beginning_of_day + 2.hours, status: 'executed')
       order2.update_column(:metadata, { 'pnl' => 50.0 }.to_json)
 
-      # Reload to ensure metadata is parsed correctly
+      # Verify orders are found by the query (use date range instead of DATE() function)
+      orders_for_today = Order.where(created_at: today.beginning_of_day..today.end_of_day).executed
+      expect(orders_for_today.count).to eq(2), "Expected 2 orders, found #{orders_for_today.count}. Orders: #{Order.executed.pluck(:id, :created_at, :status)}"
+
+      # Verify metadata is accessible
       order1.reload
       order2.reload
+      expect(order1.metadata_hash['pnl']).to eq(100.0)
+      expect(order2.metadata_hash['pnl']).to eq(50.0)
 
-      pnl = described_class.get_daily_pnl
+      pnl = described_class.get_daily_pnl(today)
 
       expect(pnl).to eq(150.0)
     end
