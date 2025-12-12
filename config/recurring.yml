@@ -125,6 +125,13 @@ development:
     queue: default
     priority: 1
 
+  # Daily portfolio snapshot - Create portfolio snapshot at end of trading day
+  daily_portfolio_snapshot:
+    class: Portfolios::DailySnapshotJob
+    schedule: "0 16 * * 1-5"  # 4:00 PM IST (after market close), weekdays
+    queue: default
+    priority: 2
+
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: "12 * * * *"
