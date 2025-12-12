@@ -41,6 +41,10 @@ module PaperTrading
         return {
           success: false,
           error: "Insufficient capital: ₹#{required_capital.round(2)} required, ₹#{@portfolio.available_capital.round(2)} available",
+          insufficient_balance: true,
+          required: required_capital,
+          available: @portfolio.available_capital,
+          shortfall: required_capital - @portfolio.available_capital,
         }
       end
 
