@@ -102,8 +102,8 @@ namespace :portfolios do
     puts "📊 PORTFOLIO SNAPSHOT - #{date}"
     puts "=" * 60
 
-    live = Portfolio.find_by(portfolio_type: "live", date: date)
-    paper = Portfolio.find_by(portfolio_type: "paper", date: date)
+    live = Portfolio.find_by(portfolio_type: "live", portfolio_date: date)
+    paper = Portfolio.find_by(portfolio_type: "paper", portfolio_date: date)
 
     if live
       puts "\n🟢 LIVE PORTFOLIO:"
@@ -125,16 +125,16 @@ namespace :portfolios do
       if continued.any?
         puts "\n   📌 Continued Positions (#{continued.size}):"
         continued.each do |pos|
-          puts "      #{pos['symbol']} #{pos['direction'].upcase} - Entry: ₹#{pos['entry_price']}, Current: ₹#{pos['current_price']}, P&L: ₹#{pos['unrealized_pnl']}"
+          puts "      #{pos.symbol} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}, P&L: ₹#{pos.unrealized_pnl}"
         end
       end
 
       # Show new positions
-      new_pos = live.new_positions_today
+      new_pos = live.new_positions
       if new_pos.any?
         puts "\n   🆕 New Positions Today (#{new_pos.size}):"
         new_pos.each do |pos|
-          puts "      #{pos['symbol']} #{pos['direction'].upcase} - Entry: ₹#{pos['entry_price']}, Current: ₹#{pos['current_price']}"
+          puts "      #{pos.symbol} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}"
         end
       end
     else
@@ -162,16 +162,16 @@ namespace :portfolios do
       if continued.any?
         puts "\n   📌 Continued Positions (#{continued.size}):"
         continued.each do |pos|
-          puts "      #{pos['symbol']} #{pos['direction'].upcase} - Entry: ₹#{pos['entry_price']}, Current: ₹#{pos['current_price']}, P&L: ₹#{pos['unrealized_pnl']}"
+          puts "      #{pos.instrument.symbol_name} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}, P&L: ₹#{pos.unrealized_pnl}"
         end
       end
 
       # Show new positions
-      new_pos = paper.new_positions_today
+      new_pos = paper.new_positions
       if new_pos.any?
         puts "\n   🆕 New Positions Today (#{new_pos.size}):"
         new_pos.each do |pos|
-          puts "      #{pos['symbol']} #{pos['direction'].upcase} - Entry: ₹#{pos['entry_price']}, Current: ₹#{pos['current_price']}"
+          puts "      #{pos.instrument.symbol_name} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}"
         end
       end
     else

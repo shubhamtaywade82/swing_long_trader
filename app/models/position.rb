@@ -6,10 +6,14 @@ class Position < ApplicationRecord
   belongs_to :exit_order, class_name: "Order", optional: true
   belongs_to :trading_signal, optional: true
 
-  validates :symbol, :direction, :entry_price, :current_price, :quantity, :opened_at, presence: true
-  validates :direction, inclusion: { in: %w[long short] }
+  validates :symbol, :direction, :entry_price, :current_price, :quantity, :opened_at, presence: true, unless: :portfolio?
+  validates :direction, inclusion: { in: %w[long short] }, allow_nil: true
   validates :status, inclusion: { in: %w[open closed partially_closed] }
-  validates :quantity, numericality: { greater_than: 0 }
+  validates :quantity, numericality: { greater_than: 0 }, allow_nil: true
+
+  def portfolio?
+    type == "Portfolio"
+  end
 
   scope :open, -> { where(status: "open") }
   scope :closed, -> { where(status: "closed") }
@@ -20,6 +24,11 @@ class Position < ApplicationRecord
   scope :synced, -> { where(synced_with_dhan: true) }
   scope :not_synced, -> { where(synced_with_dhan: false) }
   scope :by_symbol, ->(symbol) { where(symbol: symbol) }
+  scope :regular_positions, -> { where(type: [nil, "Position"]) }
+  scope :portfolios, -> { where(type: "Portfolio") }
+  scope :by_portfolio_date, ->(date) { where(portfolio_date: date) }
+  scope :continued, -> { where(continued_from_previous_day: true) }
+  scope :new_today, -> { where(continued_from_previous_day: false) }
 
   def metadata_hash
     return {} if metadata.blank?

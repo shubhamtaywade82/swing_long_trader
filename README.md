@@ -366,6 +366,7 @@ rails console
 
 - **[Complete System Guide](docs/COMPLETE_SYSTEM_GUIDE.md)** - **START HERE** - Complete understanding of Live/Paper/Simulation modes
 - **[Position Sync Guide](docs/POSITION_SYNC_GUIDE.md)** - How positions are synced and tracked in database
+- **[Portfolio STI Guide](docs/PORTFOLIO_STI_GUIDE.md)** - Portfolio using Single Table Inheritance from positions table
 - **[Quick Start](docs/QUICK_START.md)** - Get running in 5 minutes
 - **[How It Works](docs/HOW_IT_WORKS.md)** - Understanding automated screening and trading flow
 - **[Local Development Guide](docs/LOCAL_DEVELOPMENT_GUIDE.md)** - Complete guide to run locally on your machine

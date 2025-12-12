@@ -31,14 +31,13 @@ module Portfolios
 
     def create_live_portfolio
       # Check if portfolio already exists for this date
-      existing = Portfolio.find_by(portfolio_type: "live", date: @date)
+      existing = Portfolio.find_by(portfolio_type: "live", portfolio_date: @date)
       return { success: false, error: "Portfolio already exists for #{@date}" } if existing
 
-      # Create portfolio from positions
+      # Create portfolio from positions (STI)
       portfolio = Portfolio.create_from_positions(
         date: @date,
         portfolio_type: "live",
-        name: "live_portfolio",
       )
 
       {
@@ -53,14 +52,13 @@ module Portfolios
 
     def create_paper_portfolio
       # Check if portfolio already exists for this date
-      existing = Portfolio.find_by(portfolio_type: "paper", date: @date)
+      existing = Portfolio.find_by(portfolio_type: "paper", portfolio_date: @date)
       return { success: false, error: "Portfolio already exists for #{@date}" } if existing
 
-      # Create portfolio from positions
+      # Create portfolio from positions (STI)
       portfolio = Portfolio.create_from_positions(
         date: @date,
         portfolio_type: "paper",
-        name: "paper_portfolio",
       )
 
       {

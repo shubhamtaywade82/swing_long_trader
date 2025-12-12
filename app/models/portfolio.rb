@@ -1,30 +1,72 @@
 # frozen_string_literal: true
 
-class Portfolio < ApplicationRecord
-  validates :name, :portfolio_type, :date, :opening_capital, :total_equity, presence: true
+# Portfolio uses Single Table Inheritance (STI) from Position
+# Portfolio aggregates positions that continue from previous day
+class Portfolio < Position
+  self.table_name = "positions"
+
+  validates :portfolio_type, :portfolio_date, presence: true
   validates :portfolio_type, inclusion: { in: %w[live paper] }
-  validates :date, uniqueness: { scope: :portfolio_type }
+  validates :portfolio_date, uniqueness: { scope: :portfolio_type }
 
   scope :live, -> { where(portfolio_type: "live") }
   scope :paper, -> { where(portfolio_type: "paper") }
-  scope :recent, -> { order(date: :desc) }
-  scope :by_date, ->(date) { where(date: date) }
+  scope :recent, -> { order(portfolio_date: :desc) }
+  scope :by_date, ->(date) { where(portfolio_date: date) }
   scope :by_type, ->(type) { where(portfolio_type: type) }
 
-  def metadata_hash
-    return {} if metadata.blank?
-
-    JSON.parse(metadata)
-  rescue JSON::ParserError
-    {}
+  # Get all positions that belong to this portfolio snapshot
+  # For live: positions are in same table (STI)
+  # For paper: positions are in separate PaperPosition table
+  def positions
+    if live?
+      Position.regular_positions
+              .where(portfolio_date: portfolio_date)
+              .where("(portfolio_type = ? OR (portfolio_type IS NULL AND portfolio_date = ?))", portfolio_type, portfolio_date)
+    else
+      # For paper, query PaperPosition table
+      portfolio = PaperTrading::Portfolio.find_or_create_default
+      PaperPosition.where(portfolio_id: portfolio.id)
+                   .where("opened_at::date <= ? AND (closed_at IS NULL OR closed_at::date >= ?)", portfolio_date, portfolio_date)
+    end
   end
 
-  def positions_summary_hash
-    return [] if positions_summary.blank?
+  # Get positions that continued from previous day
+  def continued_positions
+    if live?
+      positions.where(continued_from_previous_day: true)
+    else
+      # For paper, check metadata
+      positions.select do |pos|
+        pos.metadata_hash["continued_from_previous_day"] == true
+      end
+    end
+  end
 
-    JSON.parse(positions_summary)
-  rescue JSON::ParserError
-    []
+  # Get new positions opened on this date
+  def new_positions
+    if live?
+      positions.where(continued_from_previous_day: false)
+              .where("opened_at::date = ?", portfolio_date)
+    else
+      # For paper, check metadata
+      positions.select do |pos|
+        pos.metadata_hash["continued_from_previous_day"] != true &&
+          pos.opened_at.to_date == portfolio_date
+      end
+    end
+  end
+
+  # Get positions closed on this date
+  def closed_positions_today
+    positions.where(status: "closed")
+            .where("closed_at::date = ?", portfolio_date)
+  end
+
+  # Get open positions at end of day
+  def open_positions_at_eod
+    positions.where(status: "open")
+            .where("opened_at::date <= ?", portfolio_date)
   end
 
   def live?
@@ -35,60 +77,74 @@ class Portfolio < ApplicationRecord
     portfolio_type == "paper"
   end
 
-  def self.create_from_positions(date:, portfolio_type: "live", name: nil)
-    name ||= portfolio_type == "live" ? "live_portfolio" : "paper_portfolio"
+  def self.create_from_positions(date:, portfolio_type: "live")
+    date = date.is_a?(Date) ? date : Date.parse(date.to_s)
+
+    # Check if portfolio already exists
+    existing = find_by(portfolio_type: portfolio_type, portfolio_date: date)
+    return existing if existing
 
     # Get positions for this date
     positions_data = get_positions_for_date(date, portfolio_type)
 
+    # Mark positions that continue from previous day
+    mark_continued_positions(date, portfolio_type, positions_data)
+
     # Calculate portfolio metrics
     metrics = calculate_portfolio_metrics(positions_data, date, portfolio_type)
 
-    # Create portfolio record
-    create!(
-      name: name,
+    # Create portfolio record (STI)
+    portfolio = create!(
+      type: "Portfolio",
       portfolio_type: portfolio_type,
-      date: date,
+      portfolio_date: date,
+      symbol: portfolio_type == "live" ? "LIVE_PORTFOLIO" : "PAPER_PORTFOLIO",
+      direction: "long", # Dummy value for STI
+      entry_price: 0, # Dummy value
+      current_price: 0, # Dummy value
+      quantity: 0, # Dummy value
+      status: "open", # Portfolio is always "open"
+      opened_at: date.beginning_of_day,
       opening_capital: metrics[:opening_capital],
       closing_capital: metrics[:closing_capital],
       total_equity: metrics[:total_equity],
       available_capital: metrics[:available_capital],
-      realized_pnl: metrics[:realized_pnl],
-      unrealized_pnl: metrics[:unrealized_pnl],
-      total_pnl: metrics[:total_pnl],
-      pnl_pct: metrics[:pnl_pct],
+      total_exposure: metrics[:total_exposure],
       open_positions_count: metrics[:open_positions_count],
       closed_positions_count: metrics[:closed_positions_count],
-      total_positions_count: metrics[:total_positions_count],
-      total_exposure: metrics[:total_exposure],
       utilization_pct: metrics[:utilization_pct],
-      max_drawdown: metrics[:max_drawdown],
-      peak_equity: metrics[:peak_equity],
       win_rate: metrics[:win_rate],
-      avg_win: metrics[:avg_win],
-      avg_loss: metrics[:avg_loss],
-      positions_summary: positions_data[:summary].to_json,
+      peak_equity: metrics[:peak_equity],
+      unrealized_pnl: metrics[:unrealized_pnl],
+      realized_pnl: metrics[:realized_pnl],
       metadata: {
         calculated_at: Time.current,
-        positions_data: positions_data,
+        positions_summary: positions_data[:summary],
       }.to_json,
     )
+
+    # Update positions with portfolio_date
+    update_positions_with_portfolio_date(positions_data, date, portfolio_type)
+
+    portfolio
   end
 
   def self.get_positions_for_date(date, portfolio_type)
     if portfolio_type == "live"
       # Get live positions
-      # Open positions: positions that were open at end of previous day or opened today
-      # Closed positions: positions closed today
-      open_positions = Position
-                       .open
-                       .where("opened_at::date <= ?", date)
-                       .includes(:instrument)
+      open_positions = Position.regular_positions
+                              .where(portfolio_type: "live")
+                              .or(Position.regular_positions.where(portfolio_type: nil)) # Legacy positions
+                              .open
+                              .where("opened_at::date <= ?", date)
+                              .includes(:instrument)
 
-      closed_today = Position
-                     .closed
-                     .where("closed_at::date = ?", date)
-                     .includes(:instrument)
+      closed_today = Position.regular_positions
+                             .where(portfolio_type: "live")
+                             .or(Position.regular_positions.where(portfolio_type: nil))
+                             .closed
+                             .where("closed_at::date = ?", date)
+                             .includes(:instrument)
 
       {
         open: open_positions,
@@ -98,13 +154,15 @@ class Portfolio < ApplicationRecord
     else
       # Get paper positions
       portfolio = PaperTrading::Portfolio.find_or_create_default
-      open_positions = portfolio
-                       .open_positions
+      open_positions = PaperPosition
+                       .where(portfolio_id: portfolio.id)
+                       .open
                        .where("opened_at::date <= ?", date)
                        .includes(:instrument)
 
-      closed_today = portfolio
-                     .closed_positions
+      closed_today = PaperPosition
+                     .where(portfolio_id: portfolio.id)
+                     .closed
                      .where("closed_at::date = ?", date)
                      .includes(:instrument)
 
@@ -116,23 +174,74 @@ class Portfolio < ApplicationRecord
     end
   end
 
+  def self.mark_continued_positions(date, portfolio_type, positions_data)
+    previous_date = date - 1.day
+
+    # Get previous day's portfolio
+    previous_portfolio = find_by(portfolio_type: portfolio_type, portfolio_date: previous_date)
+
+    return unless previous_portfolio
+
+    # Get positions that were open yesterday
+    previous_open = previous_portfolio.open_positions_at_eod
+
+    if portfolio_type == "live"
+      # For live positions, mark continued_from_previous_day column
+      previous_symbols = previous_open.map { |p| "#{p.symbol}_#{p.direction}" }.to_set
+
+      positions_data[:open].each do |pos|
+        if previous_symbols.include?("#{pos.symbol}_#{pos.direction}")
+          pos.update_column(:continued_from_previous_day, true) if pos.respond_to?(:continued_from_previous_day)
+        end
+      end
+    else
+      # For paper positions, we track continuation in metadata since PaperPosition doesn't have this column
+      previous_symbols = previous_open.map { |p| "#{p.instrument.symbol_name}_#{p.direction}" }.to_set
+
+      positions_data[:open].each do |pos|
+        if previous_symbols.include?("#{pos.instrument.symbol_name}_#{pos.direction}")
+          metadata = pos.metadata_hash
+          metadata["continued_from_previous_day"] = true
+          pos.update_column(:metadata, metadata.to_json)
+        end
+      end
+    end
+  end
+
+  def self.update_positions_with_portfolio_date(positions_data, date, portfolio_type)
+    # Update all positions with portfolio_date
+    all_positions = positions_data[:open] + positions_data[:closed_today]
+
+    all_positions.each do |pos|
+      if portfolio_type == "live" && pos.respond_to?(:portfolio_date)
+        # Live positions: update portfolio_date column
+        pos.update_columns(
+          portfolio_date: date,
+          portfolio_type: portfolio_type,
+        )
+      elsif portfolio_type == "paper"
+        # Paper positions: store portfolio_date in metadata
+        metadata = pos.metadata_hash
+        metadata["portfolio_date"] = date.to_s
+        metadata["portfolio_type"] = portfolio_type
+        pos.update_column(:metadata, metadata.to_json)
+      end
+    end
+  end
+
   def self.calculate_portfolio_metrics(positions_data, date, portfolio_type)
     open_positions = positions_data[:open]
     closed_today = positions_data[:closed_today]
 
     # Get previous day's portfolio for opening capital
-    previous_portfolio = Portfolio
-                        .where(portfolio_type: portfolio_type)
-                        .where("date < ?", date)
-                        .order(date: :desc)
-                        .first
+    previous_date = date - 1.day
+    previous_portfolio = find_by(portfolio_type: portfolio_type, portfolio_date: previous_date)
 
     opening_capital = if previous_portfolio
                        previous_portfolio.closing_capital || previous_portfolio.total_equity
                      elsif portfolio_type == "paper"
                        PaperTrading::Portfolio.find_or_create_default.capital
                      else
-                       # For live, would need to get from DhanHQ or settings
                        Setting.fetch_i("portfolio.current_capital", 100_000)
                      end
 
@@ -159,32 +268,21 @@ class Portfolio < ApplicationRecord
 
     # Calculate available capital
     available_capital = if portfolio_type == "paper"
-                         portfolio = PaperTrading::Portfolio.find_or_create_default
-                         portfolio.available_capital
-                       else
-                         # For live, would check DhanHQ balance
-                         total_equity - total_exposure
-                       end
-
-    # Calculate P&L percentage
-    pnl_pct = opening_capital.positive? ? ((total_equity - opening_capital) / opening_capital * 100).round(2) : 0
+                        portfolio = PaperTrading::Portfolio.find_or_create_default
+                        portfolio.available_capital
+                      else
+                        total_equity - total_exposure
+                      end
 
     # Calculate win rate from closed positions
     winners = closed_today.count { |pos| (pos.realized_pnl || 0).positive? }
     win_rate = closed_today.any? ? (winners.to_f / closed_today.count * 100).round(2) : 0
 
-    # Calculate average win/loss
-    wins = closed_today.select { |pos| (pos.realized_pnl || 0).positive? }.map { |pos| pos.realized_pnl || 0 }
-    losses = closed_today.select { |pos| (pos.realized_pnl || 0).negative? }.map { |pos| pos.realized_pnl || 0 }
-    avg_win = wins.any? ? (wins.sum / wins.count).round(2) : 0
-    avg_loss = losses.any? ? (losses.sum / losses.count).round(2) : 0
-
     # Calculate utilization
     utilization_pct = total_equity.positive? ? (total_exposure / total_equity * 100).round(2) : 0
 
     # Get peak equity (would need historical tracking)
-    peak_equity = total_equity # Simplified - would track historically
-    max_drawdown = peak_equity.positive? ? (((peak_equity - total_equity) / peak_equity) * 100).round(2) : 0
+    peak_equity = total_equity
 
     {
       opening_capital: opening_capital.round(2),
@@ -193,23 +291,17 @@ class Portfolio < ApplicationRecord
       available_capital: available_capital.round(2),
       realized_pnl: realized_pnl.round(2),
       unrealized_pnl: unrealized_pnl.round(2),
-      total_pnl: (realized_pnl + unrealized_pnl).round(2),
-      pnl_pct: pnl_pct,
       open_positions_count: open_positions.count,
       closed_positions_count: closed_today.count,
-      total_positions_count: open_positions.count + closed_today.count,
       total_exposure: total_exposure.round(2),
       utilization_pct: utilization_pct,
-      max_drawdown: max_drawdown,
       peak_equity: peak_equity.round(2),
       win_rate: win_rate,
-      avg_win: avg_win,
-      avg_loss: avg_loss,
     }
   end
 
   def self.build_positions_summary(open_positions, closed_positions)
-    summary = {
+    {
       open: open_positions.map do |pos|
         {
           id: pos.id,
@@ -222,6 +314,7 @@ class Portfolio < ApplicationRecord
           unrealized_pnl_pct: pos.unrealized_pnl_pct,
           opened_at: pos.opened_at,
           days_held: pos.days_held,
+          continued: pos.continued_from_previous_day,
         }
       end,
       closed_today: closed_positions.map do |pos|
@@ -239,12 +332,10 @@ class Portfolio < ApplicationRecord
         }
       end,
     }
-
-    summary
   end
 
   def self.build_paper_positions_summary(open_positions, closed_positions, portfolio)
-    summary = {
+    {
       open: open_positions.map do |pos|
         {
           id: pos.id,
@@ -275,46 +366,5 @@ class Portfolio < ApplicationRecord
       end,
       portfolio_name: portfolio.name,
     }
-
-    summary
-  end
-
-  # Get positions that continue from previous day
-  def continued_positions
-    previous_date = date - 1.day
-    previous_portfolio = Portfolio.find_by(portfolio_type: portfolio_type, date: previous_date)
-
-    return [] unless previous_portfolio
-
-    previous_open = previous_portfolio.positions_summary_hash["open"] || []
-    current_open = positions_summary_hash["open"] || []
-
-    # Find positions that were open yesterday and still open today
-    continued = []
-    current_open.each do |current_pos|
-      previous_pos = previous_open.find { |p| p["symbol"] == current_pos["symbol"] && p["direction"] == current_pos["direction"] }
-      continued << current_pos if previous_pos
-    end
-
-    continued
-  end
-
-  # Get new positions opened today
-  def new_positions_today
-    previous_date = date - 1.day
-    previous_portfolio = Portfolio.find_by(portfolio_type: portfolio_type, date: previous_date)
-
-    current_open = positions_summary_hash["open"] || []
-
-    if previous_portfolio
-      previous_open = previous_portfolio.positions_summary_hash["open"] || []
-      previous_symbols = previous_open.map { |p| "#{p['symbol']}_#{p['direction']}" }.to_set
-
-      current_open.reject do |pos|
-        previous_symbols.include?("#{pos['symbol']}_#{pos['direction']}")
-      end
-    else
-      current_open
-    end
   end
 end
