@@ -116,16 +116,39 @@ module Strategies
       def send_insufficient_balance_notification(required_amount, available_balance)
         return unless Telegram::Notifier.enabled?
 
-        message = "⚠️ <b>INSUFFICIENT BALANCE</b>\n\n"
+        shortfall = required_amount - available_balance
+        order_value = @signal[:entry_price] * @signal[:qty]
+
+        message = "📊 <b>TRADING RECOMMENDATION</b>\n\n"
+        message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        message += "📈 <b>Signal Details:</b>\n"
+        message += "Symbol: <b>#{@instrument.symbol_name}</b>\n"
+        message += "Direction: <b>#{@signal[:direction].to_s.upcase}</b>\n"
+        message += "Entry Price: ₹#{@signal[:entry_price].round(2)}\n"
+        message += "Quantity: #{@signal[:qty]}\n"
+        message += "Order Value: ₹#{order_value.round(2)}\n"
+        
+        if @signal[:sl]
+          message += "Stop Loss: ₹#{@signal[:sl].round(2)}\n"
+        end
+        
+        if @signal[:tp]
+          message += "Take Profit: ₹#{@signal[:tp].round(2)}\n"
+        end
+        
+        if @signal[:confidence]
+          message += "Confidence: #{(@signal[:confidence] * 100).round(1)}%\n"
+        end
+        
+        message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        message += "💰 <b>Balance Information:</b>\n"
         message += "Required: ₹#{required_amount.round(2)}\n"
         message += "Available: ₹#{available_balance.round(2)}\n"
-        message += "Shortfall: ₹#{(required_amount - available_balance).round(2)}\n\n"
-        message += "Symbol: #{@instrument.symbol_name}\n"
-        message += "Order Value: ₹#{(@signal[:entry_price] * @signal[:qty]).round(2)}\n"
-        message += "Direction: #{@signal[:direction].to_s.upcase}\n\n"
-        message += "⚠️ Please add funds to your trading account to continue trading."
+        message += "Shortfall: <b>₹#{shortfall.round(2)}</b>\n"
+        message += "\n⚠️ <b>Trade Not Executed</b> - Insufficient balance\n"
+        message += "\n💡 Add ₹#{shortfall.round(2)} to your account to execute this trade."
 
-        Telegram::Notifier.send_error_alert(message, context: "Insufficient Balance")
+        Telegram::Notifier.send_error_alert(message, context: "Trading Recommendation - Insufficient Balance")
       rescue StandardError => e
         Rails.logger.error("[Strategies::Swing::Executor] Failed to send balance notification: #{e.message}")
       end
@@ -133,14 +156,46 @@ module Strategies
       def send_balance_check_failed_notification(required_amount, error)
         return unless Telegram::Notifier.enabled?
 
-        message = "❌ <b>BALANCE CHECK FAILED</b>\n\n"
+        order_value = @signal[:entry_price] * @signal[:qty]
+
+        message = "📊 <b>TRADING RECOMMENDATION</b>\n\n"
+        message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        message += "📈 <b>Signal Details:</b>\n"
+        message += "Symbol: <b>#{@instrument.symbol_name}</b>\n"
+        message += "Direction: <b>#{@signal[:direction].to_s.upcase}</b>\n"
+        message += "Entry Price: ₹#{@signal[:entry_price].round(2)}\n"
+        message += "Quantity: #{@signal[:qty]}\n"
+        message += "Order Value: ₹#{order_value.round(2)}\n"
+        
+        if @signal[:sl]
+          message += "Stop Loss: ₹#{@signal[:sl].round(2)}\n"
+        end
+        
+        if @signal[:tp]
+          message += "Take Profit: ₹#{@signal[:tp].round(2)}\n"
+        end
+        
+        if @signal[:confidence]
+          message += "Confidence: #{@signal[:confidence].round(1)}%\n"
+        end
+        
+        if @signal[:rr]
+          message += "Risk-Reward: #{@signal[:rr]}:1\n"
+        end
+        
+        if @signal[:holding_days_estimate]
+          message += "Est. Holding: #{@signal[:holding_days_estimate]} days\n"
+        end
+        
+        message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        message += "❌ <b>Balance Check Failed</b>\n"
         message += "Unable to verify account balance.\n"
         message += "Error: #{error}\n\n"
         message += "Required for order: ₹#{required_amount.round(2)}\n"
-        message += "Symbol: #{@instrument.symbol_name}\n\n"
-        message += "⚠️ Order not placed. Please check your account balance manually."
+        message += "\n⚠️ <b>Trade Not Executed</b> - Balance check failed\n"
+        message += "\n💡 Please check your account balance manually."
 
-        Telegram::Notifier.send_error_alert(message, context: "Balance Check Failed")
+        Telegram::Notifier.send_error_alert(message, context: "Trading Recommendation - Balance Check Failed")
       rescue StandardError => e
         Rails.logger.error("[Strategies::Swing::Executor] Failed to send balance check notification: #{e.message}")
       end

@@ -52,20 +52,50 @@ module PaperTrading
 
       instrument = Instrument.find_by(id: @signal[:instrument_id])
       symbol = instrument&.symbol_name || "Unknown"
+      shortfall = required_amount - available_balance
+      order_value = @signal[:entry_price] * @signal[:qty]
 
-      message = "⚠️ <b>PAPER TRADING: INSUFFICIENT BALANCE</b>\n\n"
+      message = "📊 <b>PAPER TRADING RECOMMENDATION</b>\n\n"
+      message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+      message += "📈 <b>Signal Details:</b>\n"
+      message += "Symbol: <b>#{symbol}</b>\n"
+      message += "Direction: <b>#{@signal[:direction].to_s.upcase}</b>\n"
+      message += "Entry Price: ₹#{@signal[:entry_price].round(2)}\n"
+      message += "Quantity: #{@signal[:qty]}\n"
+      message += "Order Value: ₹#{order_value.round(2)}\n"
+      
+      if @signal[:sl]
+        message += "Stop Loss: ₹#{@signal[:sl].round(2)}\n"
+      end
+      
+      if @signal[:tp]
+        message += "Take Profit: ₹#{@signal[:tp].round(2)}\n"
+      end
+      
+      if @signal[:confidence]
+        message += "Confidence: #{@signal[:confidence].round(1)}%\n"
+      end
+      
+      if @signal[:rr]
+        message += "Risk-Reward: #{@signal[:rr]}:1\n"
+      end
+      
+      if @signal[:holding_days_estimate]
+        message += "Est. Holding: #{@signal[:holding_days_estimate]} days\n"
+      end
+      
+      message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+      message += "💰 <b>Portfolio Balance:</b>\n"
       message += "Required: ₹#{required_amount.round(2)}\n"
       message += "Available: ₹#{available_balance.round(2)}\n"
-      message += "Shortfall: ₹#{(required_amount - available_balance).round(2)}\n\n"
-      message += "Symbol: #{symbol}\n"
-      message += "Order Value: ₹#{(@signal[:entry_price] * @signal[:qty]).round(2)}\n"
-      message += "Direction: #{@signal[:direction].to_s.upcase}\n\n"
-      message += "Portfolio: #{@portfolio.name}\n"
+      message += "Shortfall: <b>₹#{shortfall.round(2)}</b>\n"
+      message += "\nPortfolio: #{@portfolio.name}\n"
       message += "Total Equity: ₹#{@portfolio.total_equity.round(2)}\n"
-      message += "Capital: ₹#{@portfolio.capital.round(2)}\n\n"
-      message += "⚠️ Paper trade not executed. Add capital to portfolio to continue."
+      message += "Capital: ₹#{@portfolio.capital.round(2)}\n"
+      message += "\n⚠️ <b>Trade Not Executed</b> - Insufficient balance\n"
+      message += "\n💡 Add ₹#{shortfall.round(2)} to portfolio to execute this trade."
 
-      Telegram::Notifier.send_error_alert(message, context: "Paper Trading: Insufficient Balance")
+      Telegram::Notifier.send_error_alert(message, context: "Paper Trading Recommendation - Insufficient Balance")
     rescue StandardError => e
       Rails.logger.error("[PaperTrading::RiskManager] Failed to send balance notification: #{e.message}")
     end

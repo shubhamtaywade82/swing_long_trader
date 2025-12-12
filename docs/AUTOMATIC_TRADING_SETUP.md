@@ -85,21 +85,36 @@ production:
 
 **Example Telegram Notification:**
 ```
-⚠️ PAPER TRADING: INSUFFICIENT BALANCE
+📊 PAPER TRADING RECOMMENDATION
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 Signal Details:
+Symbol: RELIANCE
+Direction: LONG
+Entry Price: ₹2,500.00
+Quantity: 20
+Order Value: ₹50,000.00
+Stop Loss: ₹2,300.00
+Take Profit: ₹2,875.00
+Confidence: 85.5%
+Risk-Reward: 2.5:1
+Est. Holding: 12 days
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 Portfolio Balance:
 Required: ₹50,000.00
 Available: ₹25,000.00
 Shortfall: ₹25,000.00
-
-Symbol: RELIANCE
-Order Value: ₹50,000.00
-Direction: LONG
 
 Portfolio: default
 Total Equity: ₹75,000.00
 Capital: ₹25,000.00
 
-⚠️ Paper trade not executed. Add capital to portfolio to continue.
+⚠️ Trade Not Executed - Insufficient balance
+
+💡 Add ₹25,000.00 to portfolio to execute this trade.
 ```
 
 ### Live Trading Mode
@@ -116,17 +131,32 @@ Capital: ₹25,000.00
 
 **Example Telegram Notification:**
 ```
-⚠️ INSUFFICIENT BALANCE
+📊 TRADING RECOMMENDATION
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 Signal Details:
+Symbol: RELIANCE
+Direction: LONG
+Entry Price: ₹2,500.00
+Quantity: 20
+Order Value: ₹50,000.00
+Stop Loss: ₹2,300.00
+Take Profit: ₹2,875.00
+Confidence: 85.5%
+Risk-Reward: 2.5:1
+Est. Holding: 12 days
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 Balance Information:
 Required: ₹50,000.00
 Available: ₹25,000.00
 Shortfall: ₹25,000.00
 
-Symbol: RELIANCE
-Order Value: ₹50,000.00
-Direction: LONG
+⚠️ Trade Not Executed - Insufficient balance
 
-⚠️ Please add funds to your trading account to continue trading.
+💡 Add ₹25,000.00 to your account to execute this trade.
 ```
 
 ---
