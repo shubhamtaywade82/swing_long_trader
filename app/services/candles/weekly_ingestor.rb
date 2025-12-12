@@ -8,11 +8,14 @@ module Candles
       new(instruments: instruments, weeks_back: weeks_back).call
     end
 
+    # rubocop:disable Lint/MissingSuper
     def initialize(instruments: nil, weeks_back: nil)
+      # ApplicationService doesn't define initialize, so super is not needed
       # Filter by segment (equity/index) instead of instrument_type
       # instrument_type values from CSV are like "ES", "Other" which don't match "EQUITY"/"INDEX"
       @instruments = instruments || Instrument.where(segment: %w[equity index])
       @weeks_back = weeks_back || DEFAULT_WEEKS_BACK
+      @total_count = @instruments.count
     end
 
     def call
@@ -23,6 +26,10 @@ module Candles
         total_candles: 0,
         errors: [],
       }
+
+      start_time = Time.current
+      puts "\n📊 Starting weekly candle ingestion for #{@total_count} instruments..."
+      puts "   Aggregating from daily candles (no API calls needed)\n"
 
       @instruments.find_each(batch_size: 100) do |instrument|
         result = fetch_and_store_weekly_candles(instrument)
@@ -36,13 +43,22 @@ module Candles
           results[:errors] << { instrument: instrument.symbol_name, error: result[:error] }
         end
 
-        # Rate limiting: delay to avoid API throttling (same as DailyIngestor)
-        delay_seconds = (AlgoConfig.fetch[:dhanhq] || {})[:candle_ingestion_delay_seconds] || 0.5
-        delay_interval = (AlgoConfig.fetch[:dhanhq] || {})[:candle_ingestion_delay_interval] || 5
-        sleep(delay_seconds) if (results[:processed] % delay_interval).zero? && results[:processed] < @total_count
+        # Progress logging every 10 instruments
+        if (results[:processed] % 10).zero?
+          elapsed = Time.current - start_time
+          rate = results[:processed].to_f / elapsed
+          remaining = begin
+            (@total_count - results[:processed]) / rate
+          rescue StandardError
+            0
+          end
+          puts "   Progress: #{results[:processed]}/#{@total_count} (#{(results[:processed].to_f / @total_count * 100).round(1)}%) | " \
+               "Success: #{results[:success]} | Failed: #{results[:failed]} | " \
+               "ETA: #{(remaining / 60).round(1)} min"
+        end
       end
 
-      log_summary(results)
+      log_summary(results, Time.current - start_time)
       results
     end
 
@@ -92,11 +108,33 @@ module Candles
     end
 
     def fetch_daily_candles(instrument:, from_date:, to_date:)
-      # Use Instrument's historical_ohlc method to fetch daily candles
-      instrument.historical_ohlc(from_date: from_date, to_date: to_date, oi: false)
+      # Load daily candles from database (already ingested by DailyIngestor)
+      # No API calls needed - just aggregate existing daily candles
+      daily_series = instrument.load_daily_candles(limit: 1000)
+      return nil if daily_series.blank? || daily_series.candles.blank?
+
+      # Filter candles by date range
+      filtered_candles = daily_series.candles.select do |candle|
+        candle_time = candle.timestamp
+        candle_time >= from_date.beginning_of_day && candle_time <= to_date.end_of_day
+      end
+
+      return nil if filtered_candles.empty?
+
+      # Convert to hash format for aggregation
+      filtered_candles.map do |candle|
+        {
+          timestamp: candle.timestamp,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          volume: candle.volume,
+        }
+      end
     rescue StandardError => e
       Rails.logger.error(
-        "[Candles::WeeklyIngestor] DhanHQ API error for #{instrument.symbol_name}: #{e.message}",
+        "[Candles::WeeklyIngestor] Error loading daily candles for #{instrument.symbol_name}: #{e.message}",
       )
       nil
     end
@@ -191,16 +229,29 @@ module Candles
       Time.zone.now
     end
 
-    def log_summary(results)
+    def log_summary(results, duration)
+      puts "\n✅ Weekly candle ingestion completed!"
+      puts "   Duration: #{(duration / 60).round(1)} minutes"
+      puts "   Processed: #{results[:processed]}"
+      puts "   Success: #{results[:success]}"
+      puts "   Failed: #{results[:failed]}"
+      puts "   Total candles: #{results[:total_candles]}"
+
       Rails.logger.info(
         "[Candles::WeeklyIngestor] Summary: " \
         "processed=#{results[:processed]}, " \
         "success=#{results[:success]}, " \
         "failed=#{results[:failed]}, " \
-        "total_candles=#{results[:total_candles]}",
+        "total_candles=#{results[:total_candles]}, " \
+        "duration=#{duration.round(2)}s",
       )
 
       return unless results[:errors].any?
+
+      puts "\n⚠️  Errors encountered (#{results[:errors].size}):"
+      results[:errors].first(10).each do |error|
+        puts "   - #{error[:instrument]}: #{error[:error][0..100]}"
+      end
 
       Rails.logger.warn(
         "[Candles::WeeklyIngestor] Errors (#{results[:errors].size}): " \
