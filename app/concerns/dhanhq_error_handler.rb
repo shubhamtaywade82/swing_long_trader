@@ -4,24 +4,24 @@
 module DhanhqErrorHandler
   extend ActiveSupport::Concern
 
-    # Error codes that indicate token expiry
-    TOKEN_EXPIRY_CODES = %w[DH-901 401].freeze
-    TOKEN_EXPIRY_KEYWORDS = [
-      'access token.*expired',
-      'token.*invalid',
-      'Client ID.*invalid',
-      'authentication.*failed',
-      'unauthorized'
-    ].freeze
+  # Error codes that indicate token expiry
+  TOKEN_EXPIRY_CODES = %w[DH-901 401].freeze
+  TOKEN_EXPIRY_KEYWORDS = [
+    'access token.*expired',
+    'token.*invalid',
+    'Client ID.*invalid',
+    'authentication.*failed',
+    'unauthorized'
+  ].freeze
 
-    # Notification cooldown (prevent spam) - 1 hour
-    NOTIFICATION_COOLDOWN = 1.hour
+  # Notification cooldown (prevent spam) - 1 hour
+  NOTIFICATION_COOLDOWN = 1.hour
 
-    class_methods do
-      # Check if error indicates token expiry
-      # @param error [StandardError, String] Error object or message
-      # @return [Boolean]
-      def token_expired?(error)
+  class_methods do
+    # Check if error indicates token expiry
+    # @param error [StandardError, String] Error object or message
+    # @return [Boolean]
+    def token_expired?(error)
         error_msg = error.is_a?(String) ? error : error.message.to_s
         return false if error_msg.blank?
 
@@ -32,13 +32,13 @@ module DhanhqErrorHandler
         TOKEN_EXPIRY_KEYWORDS.any? do |keyword|
           error_msg.match?(/#{keyword}/i)
         end
-      end
+    end
 
-      # Send Telegram notification for token expiry (with cooldown)
-      # @param context [String] Context where error occurred (e.g., "intraday_ohlc", "fetch_option_chain")
-      # @param error [StandardError, String] Error object or message
-      # @return [Boolean] true if notification was sent, false otherwise
-      def notify_token_expiry(context: 'API', error: nil)
+    # Send Telegram notification for token expiry (with cooldown)
+    # @param context [String] Context where error occurred (e.g., "intraday_ohlc", "fetch_option_chain")
+    # @param error [StandardError, String] Error object or message
+    # @return [Boolean] true if notification was sent, false otherwise
+    def notify_token_expiry(context: 'API', error: nil)
         return false unless TelegramNotifier.enabled?
 
         # Check cooldown to prevent spam
@@ -76,16 +76,16 @@ module DhanhqErrorHandler
           Rails.logger.error("[DhanhqErrorHandler] Failed to send token expiry notification")
           false
         end
-      rescue StandardError => e
-        Rails.logger.error("[DhanhqErrorHandler] Error sending token expiry notification: #{e.class} - #{e.message}")
-        false
-      end
+    rescue StandardError => e
+      Rails.logger.error("[DhanhqErrorHandler] Error sending token expiry notification: #{e.class} - #{e.message}")
+      false
+    end
 
-      # Handle DhanHQ errors with token expiry detection and notification
-      # @param error [StandardError] Error object
-      # @param context [String] Context where error occurred
-      # @return [Hash] Error information hash
-      def handle_dhanhq_error(error, context: 'API')
+    # Handle DhanHQ errors with token expiry detection and notification
+    # @param error [StandardError] Error object
+    # @param context [String] Context where error occurred
+    # @return [Hash] Error information hash
+    def handle_dhanhq_error(error, context: 'API')
         error_msg = error.message.to_s
         is_token_expiry = token_expired?(error)
 
@@ -100,7 +100,7 @@ module DhanhqErrorHandler
           error: error,
           message: error_msg,
           token_expired: is_token_expiry
-        }
-      end
+      }
     end
   end
+end

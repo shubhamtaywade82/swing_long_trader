@@ -205,7 +205,7 @@ module Notifications
       symbol = tracker.symbol || 'N/A'
       entry_price = tracker.entry_price&.to_f || 0.0
       current_price = tracker.avg_price&.to_f || entry_price
-      quantity = tracker.quantity || 0
+      _quantity = tracker.quantity || 0
       pnl_value = pnl.to_f
       pnl_pct_value = pnl_pct&.to_f || 0.0
 

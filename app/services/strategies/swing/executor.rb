@@ -59,7 +59,7 @@ module Strategies
         return { success: true } if Rails.configuration.x.paper_trading.enabled
 
         # Check max position size per instrument
-        instrument_exposure = calculate_instrument_exposure
+        _instrument_exposure = calculate_instrument_exposure
         max_per_instrument = @risk_config[:max_position_size_pct] || 10.0
         max_value = (get_current_capital * max_per_instrument / 100.0)
         order_value = @signal[:entry_price] * @signal[:qty]

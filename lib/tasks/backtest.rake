@@ -350,7 +350,7 @@ namespace :backtest do
       exit 1
     end
 
-    results = run.results_hash
+    _results = run.results_hash
 
     puts "=" * 60
     puts "📊 BACKTEST RUN ##{run.id}"

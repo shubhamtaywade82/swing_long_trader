@@ -41,7 +41,7 @@ RSpec.describe 'Telegram Notifier Integration', type: :integration do
         allow(::TelegramNotifier).to receive(:enabled?).and_return(true)
         allow(::TelegramNotifier).to receive(:send_message).and_return(true)
 
-        result = Telegram::Notifier.send_daily_candidates(candidates)
+        _result = Telegram::Notifier.send_daily_candidates(candidates)
 
         expect(::TelegramNotifier).to have_received(:send_message).with(
           anything,

@@ -6,8 +6,8 @@ Rails.application.configure do
     algo_config = YAML.load_file(Rails.root.join('config', 'algo.yml'), aliases: true)
     config.x.algo = ActiveSupport::InheritableOptions.new(algo_config.deep_symbolize_keys)
     # Rails.logger.info("[AlgoConfig] Loaded algo configuration with #{algo_config[:indices]&.size || 0} indices")
-  rescue StandardError => e
-    # Rails.logger.error("[AlgoConfig] Failed to load algo configuration: #{e.message}")
+  rescue StandardError => _e
+    # Rails.logger.error("[AlgoConfig] Failed to load algo configuration: #{_e.message}")
     config.x.algo = ActiveSupport::InheritableOptions.new({})
   end
 end

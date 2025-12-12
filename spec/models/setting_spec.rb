@@ -60,7 +60,7 @@ RSpec.describe Setting, type: :model do
 
   describe '.put' do
     it 'updates value and clears cache' do
-      setting = create(:setting, key: 'put_key', value: 'original')
+      _setting = create(:setting, key: 'put_key', value: 'original')
       Setting.fetch('put_key') # Populate cache
 
       Setting.put('put_key', 'updated')

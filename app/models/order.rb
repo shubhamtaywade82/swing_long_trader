@@ -54,10 +54,6 @@ class Order < ApplicationRecord
     status == 'executed'
   end
 
-  def rejected?
-    status == 'rejected'
-  end
-
   def cancelled?
     status == 'cancelled'
   end

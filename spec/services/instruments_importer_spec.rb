@@ -58,7 +58,7 @@ RSpec.describe InstrumentsImporter do
 
         allow(InstrumentsImporter).to receive(:fetch_csv_with_cache).and_return(sample_csv)
 
-        result = InstrumentsImporter.import_from_url
+        _result = InstrumentsImporter.import_from_url
 
         # Should only import instruments in universe
         expect(Instrument.pluck(:symbol_name)).to contain_exactly('RELIANCE', 'TCS')
@@ -197,7 +197,7 @@ RSpec.describe InstrumentsImporter do
       FileUtils.mkdir_p(universe_file.dirname)
       File.write(universe_file, YAML.dump(['RELIANCE']))
 
-      result = importer.import_from_csv(sample_csv)
+      _result = importer.import_from_csv(sample_csv)
 
       # Should only import RELIANCE
       expect(Instrument.count).to eq(1)

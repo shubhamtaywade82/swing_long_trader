@@ -95,7 +95,7 @@ module Screeners
     end
 
     def calculate_indicators(series)
-      last_index = series.candles.size - 1
+      _last_index = series.candles.size - 1
 
       {
         ema20: series.ema(20),

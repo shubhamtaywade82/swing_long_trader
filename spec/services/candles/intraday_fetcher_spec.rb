@@ -34,7 +34,7 @@ RSpec.describe Candles::IntradayFetcher do
       it 'fetches intraday candles without writing to database' do
         initial_count = CandleSeriesRecord.count
 
-        result = described_class.call(
+        _result = described_class.call(
           instrument: instrument,
           interval: '15',
           days: 1

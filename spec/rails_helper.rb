@@ -3,7 +3,20 @@
 # This file is copied to spec/ when you run 'rails generate rspec:install'
 require 'spec_helper'
 ENV['RAILS_ENV'] ||= 'test'
-require_relative '../config/environment'
+
+# Suppress warnings from third-party gems while loading Rails
+# These warnings come from:
+# - mail gem: parser warnings (statement not reached)
+# - technical-analysis gem: unused variable warnings
+# - DhanHQ gem: method redefinition and circular require warnings
+# - ActiveRecord: enum scope redefinition (fixed in code, but may still appear)
+original_verbose = $VERBOSE
+begin
+  $VERBOSE = nil
+  require_relative '../config/environment'
+ensure
+  $VERBOSE = original_verbose
+end
 # Prevent database truncation if the environment is production
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 require 'rspec/rails'

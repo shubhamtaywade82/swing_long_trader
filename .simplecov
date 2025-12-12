@@ -20,6 +20,6 @@ SimpleCov.configure do
   add_filter '/test/'
 
   # Minimum coverage percentage
-  minimum_coverage 80
+  minimum_coverage 90
 end
 

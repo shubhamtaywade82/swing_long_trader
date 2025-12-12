@@ -68,7 +68,7 @@ module Backtesting
       # Apply commission on exit
       commission = calculate_commission(proceeds)
       @total_commission += commission
-      net_proceeds = proceeds - commission
+      _net_proceeds = proceeds - commission
 
       # Return capital + P&L (P&L already accounts for entry/exit price difference)
       @current_capital += (position.entry_price * position.quantity) + pnl - commission

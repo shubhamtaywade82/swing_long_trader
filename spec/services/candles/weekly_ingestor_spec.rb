@@ -32,7 +32,7 @@ RSpec.describe Candles::WeeklyIngestor do
       end
 
       it 'aggregates daily candles into weekly candles' do
-        result = described_class.call(instruments: instruments, weeks_back: 1)
+        _result = described_class.call(instruments: instruments, weeks_back: 1)
 
         expect(result[:processed]).to eq(1)
         expect(result[:success]).to be > 0
@@ -40,7 +40,7 @@ RSpec.describe Candles::WeeklyIngestor do
       end
 
       it 'creates weekly candles with correct OHLC' do
-        result = described_class.call(instruments: instruments, weeks_back: 1)
+        _result = described_class.call(instruments: instruments, weeks_back: 1)
 
         weekly_candle = CandleSeriesRecord.where(instrument: instrument, timeframe: '1W').first
         expect(weekly_candle).to be_present
@@ -52,7 +52,7 @@ RSpec.describe Candles::WeeklyIngestor do
       end
 
       it 'aggregates from Monday to Sunday' do
-        result = described_class.call(instruments: instruments, weeks_back: 1)
+        _result = described_class.call(instruments: instruments, weeks_back: 1)
 
         weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: '1W')
         expect(weekly_candles).to be_any
