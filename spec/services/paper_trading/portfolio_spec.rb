@@ -112,6 +112,82 @@ RSpec.describe PaperTrading::Portfolio, type: :service do
           described_class.create(name: 'test', initial_capital: 1000)
         end.to raise_error(ActiveRecord::RecordInvalid)
       end
+
+      it 'logs error on failure' do
+        allow(Rails.logger).to receive(:error)
+        allow(PaperPortfolio).to receive(:create!).and_raise(StandardError.new('Database error'))
+
+        expect do
+          described_class.create(name: 'test', initial_capital: 1000)
+        end.to raise_error(StandardError)
+
+        expect(Rails.logger).to have_received(:error)
+      end
+    end
+
+    context 'with edge cases' do
+      before do
+        PaperPortfolio.where(name: 'test_edge').destroy_all
+      end
+
+      it 'handles zero initial capital' do
+        portfolio = described_class.create(name: 'test_edge', initial_capital: 0)
+        portfolio.reload
+
+        expect(portfolio.capital).to eq(0)
+        expect(portfolio.available_capital).to eq(0)
+      end
+
+      it 'handles very large initial capital' do
+        large_capital = 1_000_000_000
+        portfolio = described_class.create(name: 'test_edge', initial_capital: large_capital)
+        portfolio.reload
+
+        expect(portfolio.capital).to eq(large_capital * 2) # Initial + ledger credit
+      end
+
+      it 'handles duplicate name creation' do
+        described_class.create(name: 'test_edge', initial_capital: 10_000)
+
+        # Second creation with same name should fail or create separate portfolio
+        expect do
+          described_class.create(name: 'test_edge', initial_capital: 20_000)
+        end.to change(PaperPortfolio, :count).by(1) # Creates new portfolio with same name
+      end
+
+      it 'logs creation info' do
+        allow(Rails.logger).to receive(:info)
+
+        described_class.create(name: 'test_edge', initial_capital: 10_000)
+
+        expect(Rails.logger).to have_received(:info).at_least(:once)
+      end
+    end
+  end
+
+  describe '#create' do
+    context 'with ledger entry creation' do
+      before do
+        PaperPortfolio.where(name: 'test_ledger').destroy_all
+      end
+
+      it 'creates ledger entry with correct description' do
+        portfolio = described_class.create(name: 'test_ledger', initial_capital: 10_000)
+
+        ledger = PaperLedger.last
+        expect(ledger.description).to include('Initial capital allocation')
+      end
+
+      it 'handles ledger creation failure gracefully' do
+        allow(PaperTrading::Ledger).to receive(:credit).and_raise(StandardError.new('Ledger error'))
+        allow(Rails.logger).to receive(:error)
+
+        expect do
+          described_class.create(name: 'test_ledger', initial_capital: 10_000)
+        end.to raise_error(StandardError)
+
+        expect(Rails.logger).to have_received(:error)
+      end
     end
   end
 end

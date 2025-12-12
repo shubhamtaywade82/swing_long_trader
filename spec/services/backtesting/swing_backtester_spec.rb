@@ -456,6 +456,248 @@ RSpec.describe Backtesting::SwingBacktester, type: :service do
         # Position should be closed if SL hit
       end
     end
+
+    context 'with edge cases' do
+      it 'handles insufficient data gracefully' do
+        # Create instrument with only 10 candles (less than 50 required)
+        create_list(:candle_series_record, 10,
+          instrument: instrument,
+          timeframe: '1D',
+          timestamp: (9.days.ago..Time.current).step(1.day).to_a)
+
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: 10.days.ago.to_date,
+          to_date: Date.today
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Insufficient data')
+      end
+
+      it 'handles empty instruments list' do
+        result = described_class.call(
+          instruments: Instrument.none,
+          from_date: 10.days.ago.to_date,
+          to_date: Date.today
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Insufficient data')
+      end
+
+      it 'handles date range with no trading days' do
+        # Create candles but outside the date range
+        create_list(:candle_series_record, 100,
+          instrument: instrument,
+          timeframe: '1D',
+          timestamp: (200.days.ago..150.days.ago).step(1.day).to_a)
+
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: 10.days.ago.to_date,
+          to_date: Date.today
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Insufficient data')
+      end
+
+      it 'handles commission and slippage calculations' do
+        create_list(:candle_series_record, 100,
+          instrument: instrument,
+          timeframe: '1D',
+          timestamp: (99.days.ago..Time.current).step(1.day).to_a)
+
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          {
+            success: true,
+            signal: {
+              instrument_id: instrument.id,
+              direction: :long,
+              entry_price: 100.0,
+              sl: 95.0,
+              tp: 110.0,
+              qty: 100
+            }
+          }
+        )
+
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: 100.days.ago.to_date,
+          to_date: Date.today,
+          commission_rate: 0.1,
+          slippage_pct: 0.05
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:results]).to have_key(:total_commission)
+        expect(result[:results]).to have_key(:total_slippage)
+        expect(result[:results]).to have_key(:total_trading_costs)
+      end
+
+      it 'closes all positions at end date' do
+        create_list(:candle_series_record, 100,
+          instrument: instrument,
+          timeframe: '1D',
+          timestamp: (99.days.ago..Time.current).step(1.day).to_a)
+
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          {
+            success: true,
+            signal: {
+              instrument_id: instrument.id,
+              direction: :long,
+              entry_price: 100.0,
+              sl: 95.0,
+              tp: 110.0,
+              qty: 100
+            }
+          }
+        )
+
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: 100.days.ago.to_date,
+          to_date: Date.today
+        )
+
+        expect(result[:success]).to be true
+        # All positions should be closed at end date
+        open_positions = result[:positions].select { |p| p[:status] == 'open' }
+        expect(open_positions).to be_empty
+      end
+
+      it 'handles multiple instruments' do
+        instrument2 = create(:instrument)
+        create_list(:candle_series_record, 100,
+          instrument: instrument,
+          timeframe: '1D',
+          timestamp: (99.days.ago..Time.current).step(1.day).to_a)
+        create_list(:candle_series_record, 100,
+          instrument: instrument2,
+          timeframe: '1D',
+          timestamp: (99.days.ago..Time.current).step(1.day).to_a)
+
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          {
+            success: true,
+            signal: {
+              instrument_id: instrument.id,
+              direction: :long,
+              entry_price: 100.0,
+              sl: 95.0,
+              tp: 110.0,
+              qty: 100
+            }
+          }
+        )
+
+        result = described_class.call(
+          instruments: Instrument.where(id: [instrument.id, instrument2.id]),
+          from_date: 100.days.ago.to_date,
+          to_date: Date.today
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:positions]).to be_an(Array)
+      end
+
+      it 'handles no signals generated' do
+        create_list(:candle_series_record, 100,
+          instrument: instrument,
+          timeframe: '1D',
+          timestamp: (99.days.ago..Time.current).step(1.day).to_a)
+
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          { success: false, error: 'No signal' }
+        )
+
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: 100.days.ago.to_date,
+          to_date: Date.today
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:positions]).to be_empty
+      end
+    end
+
+    context 'with position management' do
+      before do
+        create_list(:candle_series_record, 100,
+          instrument: instrument,
+          timeframe: '1D',
+          timestamp: (99.days.ago..Time.current).step(1.day).to_a)
+      end
+
+      it 'prevents duplicate positions for same instrument' do
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          {
+            success: true,
+            signal: {
+              instrument_id: instrument.id,
+              direction: :long,
+              entry_price: 100.0,
+              sl: 95.0,
+              tp: 110.0,
+              qty: 100
+            }
+          }
+        )
+
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: 100.days.ago.to_date,
+          to_date: Date.today
+        )
+
+        expect(result[:success]).to be true
+        # Should only have one position per instrument
+        positions_for_instrument = result[:positions].select { |p| p[:instrument_id] == instrument.id }
+        expect(positions_for_instrument.size).to be <= 1
+      end
+
+      it 'handles position exit at take profit' do
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          {
+            success: true,
+            signal: {
+              instrument_id: instrument.id,
+              direction: :long,
+              entry_price: 100.0,
+              sl: 95.0,
+              tp: 110.0,
+              qty: 100
+            }
+          }
+        )
+
+        # Mock candles that hit TP
+        allow_any_instance_of(CandleSeries).to receive(:candles).and_return(
+          Array.new(100) do |i|
+            Candle.new(
+              timestamp: i.days.ago,
+              open: 100.0,
+              high: 115.0, # Hits TP
+              low: 99.0,
+              close: 112.0,
+              volume: 1_000_000
+            )
+          end
+        )
+
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: 100.days.ago.to_date,
+          to_date: Date.today
+        )
+
+        expect(result[:success]).to be true
+      end
+    end
   end
 end
 
