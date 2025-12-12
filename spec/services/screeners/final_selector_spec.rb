@@ -20,18 +20,22 @@ RSpec.describe Screeners::FinalSelector do
     end
 
     context 'with swing and longterm candidates' do
-      it 'returns selected candidates for both types' do
-        result = described_class.call(
+      before do
+        # Call the service once for the basic test
+        @result = described_class.call(
           swing_candidates: swing_candidates,
           longterm_candidates: longterm_candidates
         )
+      end
 
-        expect(result).to have_key(:swing)
-        expect(result).to have_key(:longterm)
-        expect(result).to have_key(:summary)
+      it 'returns selected candidates for both types' do
+        expect(@result).to have_key(:swing)
+        expect(@result).to have_key(:longterm)
+        expect(@result).to have_key(:summary)
       end
 
       it 'selects top swing candidates by combined score' do
+        # This test needs a different limit, so call separately
         result = described_class.call(
           swing_candidates: swing_candidates,
           swing_limit: 2
@@ -43,6 +47,7 @@ RSpec.describe Screeners::FinalSelector do
       end
 
       it 'calculates combined score correctly' do
+        # This test needs limit: 1, so call separately
         result = described_class.call(
           swing_candidates: swing_candidates,
           swing_limit: 1
@@ -54,6 +59,7 @@ RSpec.describe Screeners::FinalSelector do
       end
 
       it 'assigns ranks to selected candidates' do
+        # This test needs limit: 3, so call separately
         result = described_class.call(
           swing_candidates: swing_candidates,
           swing_limit: 3
@@ -65,6 +71,7 @@ RSpec.describe Screeners::FinalSelector do
       end
 
       it 'selects top longterm candidates' do
+        # This test needs longterm candidates only, so call separately
         result = described_class.call(
           longterm_candidates: longterm_candidates,
           longterm_limit: 2

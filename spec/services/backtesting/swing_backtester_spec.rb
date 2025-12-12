@@ -46,33 +46,27 @@ RSpec.describe Backtesting::SwingBacktester, type: :service do
               }
             }
           )
+          
+          # Call the service once for all tests in this context
+          @result = described_class.call(
+            instruments: Instrument.where(id: instrument.id),
+            from_date: from_date,
+            to_date: to_date,
+            initial_capital: initial_capital
+          )
         end
 
         it 'runs backtest successfully' do
-          result = described_class.call(
-            instruments: Instrument.where(id: instrument.id),
-            from_date: from_date,
-            to_date: to_date,
-            initial_capital: initial_capital
-          )
-
-          expect(result[:success]).to be true
-          expect(result[:results]).to be_present
-          expect(result[:positions]).to be_an(Array)
-          expect(result[:portfolio]).to be_present
+          expect(@result[:success]).to be true
+          expect(@result[:results]).to be_present
+          expect(@result[:positions]).to be_an(Array)
+          expect(@result[:portfolio]).to be_present
         end
 
         it 'calculates performance metrics' do
-          result = described_class.call(
-            instruments: Instrument.where(id: instrument.id),
-            from_date: from_date,
-            to_date: to_date,
-            initial_capital: initial_capital
-          )
-
-          expect(result[:results][:total_return]).to be_a(Numeric)
-          expect(result[:results][:total_trades]).to be >= 0
-          expect(result[:results][:win_rate]).to be_a(Numeric)
+          expect(@result[:results][:total_return]).to be_a(Numeric)
+          expect(@result[:results][:total_trades]).to be >= 0
+          expect(@result[:results][:win_rate]).to be_a(Numeric)
         end
 
         it 'tracks trading costs' do

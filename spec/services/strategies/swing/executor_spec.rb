@@ -44,19 +44,18 @@ RSpec.describe Strategies::Swing::Executor, type: :service do
           success: true,
           order: create(:order, instrument: instrument, status: 'placed')
         )
+        
+        # Call the service once for all tests in this context
+        @result = described_class.call(signal)
       end
 
       it 'executes order successfully' do
-        result = described_class.call(signal)
-
-        expect(result[:success]).to be true
-        expect(result[:order]).to be_present
+        expect(@result[:success]).to be true
+        expect(@result[:order]).to be_present
       end
 
       it 'validates signal before execution' do
-        result = described_class.call(signal)
-
-        expect(result[:success]).to be true
+        expect(@result[:success]).to be true
         expect(Dhan::Orders).to have_received(:place_order)
       end
     end

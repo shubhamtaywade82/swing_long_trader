@@ -26,10 +26,10 @@ end
 module WarningFilter
   def self.setup
     return unless defined?(Warning) && Warning.respond_to?(:warn)
-    
+
     # Store original warn method
     original_warn = Warning.method(:warn)
-    
+
     # Override Warning.warn to filter rake task warnings
     Warning.define_singleton_method(:warn) do |message, category: nil|
       # Filter out method redefinition warnings from rake tasks
@@ -45,7 +45,7 @@ module WarningFilter
         message.match?(/railties.*tasks.*log\.rake/) ||
         message.match?(/railties.*tasks.*misc\.rake/)
       )
-      
+
       # Call original warning handler
       original_warn.call(message, category: category)
     end

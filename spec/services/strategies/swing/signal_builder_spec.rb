@@ -34,47 +34,38 @@ RSpec.describe Strategies::Swing::SignalBuilder do
         })
         allow(AlgoConfig).to receive(:fetch).with([:swing_trading, :strategy]).and_return({})
         allow(AlgoConfig).to receive(:fetch).with(:risk).and_return({})
+        
+        # Call the service once for all tests in this context
+        @result = described_class.call(
+          instrument: instrument,
+          daily_series: series
+        )
       end
 
       it 'returns a signal hash' do
-        result = described_class.call(
-          instrument: instrument,
-          daily_series: series
-        )
-
         # SignalBuilder may return nil if no trend is detected
         # This is expected behavior - the test should handle this case
-        if result.nil?
+        if @result.nil?
           skip 'No signal generated - trend may not be detected with test data'
         end
 
-        expect(result).to be_a(Hash)
-        expect(result).to have_key(:symbol)
-        expect(result).to have_key(:direction)
-        expect(result).to have_key(:entry_price)
+        expect(@result).to be_a(Hash)
+        expect(@result).to have_key(:symbol)
+        expect(@result).to have_key(:direction)
+        expect(@result).to have_key(:entry_price)
       end
 
       it 'sets direction to long for bullish signals' do
-        result = described_class.call(
-          instrument: instrument,
-          daily_series: series
-        )
+        next if @result.nil? # Skip if no signal generated (may not detect bullish trend)
 
-        next if result.nil? # Skip if no signal generated (may not detect bullish trend)
-
-        expect(result[:direction]).to eq(:long)
+        expect(@result[:direction]).to eq(:long)
       end
 
       it 'calculates entry price from latest close' do
-        result = described_class.call(
-          instrument: instrument,
-          daily_series: series
-        )
+        next if @result.nil? # Skip if no signal generated
 
-        next if result.nil? # Skip if no signal generated
-
-        expect(result[:entry_price]).to be_a(Numeric)
-        expect(result[:entry_price]).to be > 0
+        expect(@result[:entry_price]).to be_a(Numeric)
+        expect(@result[:entry_price]).to be > 0
       end
 
       it 'calculates stop loss based on ATR' do
@@ -165,74 +156,60 @@ RSpec.describe Strategies::Swing::SignalBuilder do
           period: 10,
           multiplier: 3.0
         })
-      end
-
-      it 'calculates stop loss at correct distance for long position' do
-        result = described_class.call(
+        
+        # Call the service once for all tests in this context
+        @result = described_class.call(
           instrument: instrument,
           daily_series: bullish_series
         )
+      end
 
-        next if result.nil? # Skip if no signal generated
+      it 'calculates stop loss at correct distance for long position' do
+        next if @result.nil? # Skip if no signal generated
 
         # Stop loss should be below entry price for long
-        expect(result[:sl]).to be < result[:entry_price]
+        expect(@result[:sl]).to be < @result[:entry_price]
         # Stop loss distance should be reasonable (based on ATR)
-        stop_loss_distance = result[:entry_price] - result[:sl]
+        stop_loss_distance = @result[:entry_price] - @result[:sl]
         expect(stop_loss_distance).to be > 0
       end
 
       it 'calculates take profit based on risk-reward ratio' do
-        result = described_class.call(
-          instrument: instrument,
-          daily_series: bullish_series
-        )
-
-        next if result.nil? # Skip if no signal generated
+        next if @result.nil? # Skip if no signal generated
 
         # Risk-reward ratio should meet minimum (default 1.5)
-        expect(result[:rr]).to be >= 1.5
+        expect(@result[:rr]).to be >= 1.5
         # Take profit should be above entry for long
-        expect(result[:tp]).to be > result[:entry_price]
+        expect(@result[:tp]).to be > @result[:entry_price]
         # Verify risk-reward calculation
-        risk = result[:entry_price] - result[:sl]
-        reward = result[:tp] - result[:entry_price]
+        risk = @result[:entry_price] - @result[:sl]
+        reward = @result[:tp] - @result[:entry_price]
         expect(reward / risk).to be >= 1.5
       end
 
       it 'calculates position size based on risk per trade' do
-        result = described_class.call(
-          instrument: instrument,
-          daily_series: bullish_series
-        )
-
-        next if result.nil? # Skip if no signal generated
+        next if @result.nil? # Skip if no signal generated
 
         # Position size should be calculated
-        expect(result[:qty]).to be_a(Integer)
-        expect(result[:qty]).to be > 0
+        expect(@result[:qty]).to be_a(Integer)
+        expect(@result[:qty]).to be > 0
 
         # Risk amount = account_size * risk_per_trade_pct / 100
         risk_amount = 100_000 * (2.0 / 100.0) # 2000
         # Risk per share = entry_price - stop_loss
-        risk_per_share = result[:entry_price] - result[:sl]
+        risk_per_share = @result[:entry_price] - @result[:sl]
         # Expected quantity should be close to risk_amount / risk_per_share
         if risk_per_share > 0
           expected_quantity = (risk_amount / risk_per_share).floor
           # Allow some variance due to lot size rounding
-          expect(result[:qty]).to be <= (expected_quantity * 1.1).ceil
+          expect(@result[:qty]).to be <= (expected_quantity * 1.1).ceil
         end
       end
 
       it 'calculates position value correctly' do
-        result = described_class.call(
-          instrument: instrument,
-          daily_series: bullish_series
-        )
+        next if @result.nil? # Skip if no signal generated
 
-        next if result.nil? # Skip if no signal generated
-
-        position_value = result[:qty] * result[:entry_price]
+        position_value = @result[:qty] * @result[:entry_price]
         # Position value should be reasonable (not exceed account size by too much)
         expect(position_value).to be > 0
         expect(position_value).to be < 200_000 # Reasonable upper bound

@@ -36,28 +36,25 @@ RSpec.describe Candles::DailyIngestor do
           to_date: anything,
           oi: false
         ).and_return(mock_candles)
+        
+        # Call the service once for all tests in this context
+        @result = described_class.call(instruments: instruments, days_back: 2)
       end
 
       it 'fetches and stores daily candles' do
-        result = described_class.call(instruments: instruments, days_back: 2)
-
-        expect(result[:success]).to eq(1) # Count of successful instruments
-        expect(result[:processed]).to eq(1)
+        expect(@result[:success]).to eq(1) # Count of successful instruments
+        expect(@result[:processed]).to eq(1)
         expect(CandleSeriesRecord.where(instrument: instrument, timeframe: '1D').count).to eq(2)
       end
 
       it 'returns summary with processed count' do
-        result = described_class.call(instruments: instruments, days_back: 2)
-
-        expect(result).to have_key(:processed)
-        expect(result).to have_key(:success)
-        expect(result).to have_key(:failed)
-        expect(result).to have_key(:total_candles)
+        expect(@result).to have_key(:processed)
+        expect(@result).to have_key(:success)
+        expect(@result).to have_key(:failed)
+        expect(@result).to have_key(:total_candles)
       end
 
       it 'upserts candles without creating duplicates' do
-        # First import
-        described_class.call(instruments: instruments, days_back: 2)
         initial_count = CandleSeriesRecord.count
 
         # Second import with same data
@@ -68,13 +65,7 @@ RSpec.describe Candles::DailyIngestor do
       end
 
       it 'handles custom days_back parameter' do
-        # Mock the API call
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).with(
-          from_date: anything,
-          to_date: anything,
-          oi: false
-        ).and_return(mock_candles)
-
+        # This test needs a different days_back, so call separately
         result = described_class.call(instruments: instruments, days_back: 5)
 
         expect(result[:processed]).to eq(1)

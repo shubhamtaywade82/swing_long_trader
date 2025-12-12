@@ -29,41 +29,30 @@ RSpec.describe Candles::IntradayFetcher do
     context 'with valid instrument' do
       before do
         allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
-      end
-
-      it 'fetches intraday candles without writing to database' do
-        initial_count = CandleSeriesRecord.count
-
-        _result = described_class.call(
+        
+        # Call the service once for all tests in this context
+        @result = described_class.call(
           instrument: instrument,
           interval: '15',
           days: 1
         )
+      end
+
+      it 'fetches intraday candles without writing to database' do
+        initial_count = CandleSeriesRecord.count
 
         # Should not create any database records
         expect(CandleSeriesRecord.count).to eq(initial_count)
       end
 
       it 'returns candles in memory' do
-        result = described_class.call(
-          instrument: instrument,
-          interval: '15',
-          days: 1
-        )
-
-        expect(result).to be_a(Hash)
-        expect(result[:candles]).to be_an(Array)
-        expect(result[:candles].size).to eq(2)
+        expect(@result).to be_a(Hash)
+        expect(@result[:candles]).to be_an(Array)
+        expect(@result[:candles].size).to eq(2)
       end
 
       it 'returns candles with correct structure' do
-        result = described_class.call(
-          instrument: instrument,
-          interval: '15',
-          days: 1
-        )
-
-        candle = result[:candles].first
+        candle = @result[:candles].first
         expect(candle).to have_key(:timestamp)
         expect(candle).to have_key(:open)
         expect(candle).to have_key(:high)

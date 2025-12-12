@@ -7,9 +7,8 @@ RSpec.describe Candles::WeeklyIngestor do
   let(:instruments) { Instrument.where(id: instrument.id) }
 
   describe '.call' do
-    context 'with valid daily candles' do
+    context 'when daily candles are valid' do
       let(:mock_daily_candles) do
-        # Create 7 days of candles (one week)
         7.times.map do |i|
           {
             timestamp: i.days.ago.to_i,
@@ -22,8 +21,9 @@ RSpec.describe Candles::WeeklyIngestor do
         end
       end
 
+      let(:result) { described_class.call(instruments: instruments, weeks_back: 1) }
+
       before do
-        # Use allow_any_instance_of since find_each reloads the instrument
         allow_any_instance_of(Instrument).to receive(:historical_ohlc).with(
           from_date: anything,
           to_date: anything,
@@ -31,86 +31,116 @@ RSpec.describe Candles::WeeklyIngestor do
         ).and_return(mock_daily_candles)
       end
 
-      it 'aggregates daily candles into weekly candles' do
-        described_class.call(instruments: instruments, weeks_back: 1)
+      it { expect(result[:processed]).to eq(1) }
 
-        expect(result[:processed]).to eq(1)
-        expect(result[:success]).to be > 0
+      it { expect(result[:success]).to be > 0 }
+
+      it 'creates weekly candles' do
+        result
         expect(CandleSeriesRecord.where(instrument: instrument, timeframe: '1W').count).to be > 0
       end
 
-      it 'creates weekly candles with correct OHLC' do
-        described_class.call(instruments: instruments, weeks_back: 1)
+      describe 'weekly candle attributes' do
+        let(:weekly_candle) do
+          result
+          CandleSeriesRecord.where(instrument: instrument, timeframe: '1W').first
+        end
 
-        weekly_candle = CandleSeriesRecord.where(instrument: instrument, timeframe: '1W').first
+        it { expect(weekly_candle).to be_present }
 
-        expect(weekly_candle).to be_present
-        expect(weekly_candle.open).to be_a(Numeric)
-        expect(weekly_candle.high).to be_a(Numeric)
-        expect(weekly_candle.low).to be_a(Numeric)
-        expect(weekly_candle.close).to be_a(Numeric)
-        expect(weekly_candle.volume).to be_a(Numeric)
+        it { expect(weekly_candle.open).to be_a(Numeric) }
+
+        it { expect(weekly_candle.high).to be_a(Numeric) }
+
+        it { expect(weekly_candle.low).to be_a(Numeric) }
+
+        it { expect(weekly_candle.close).to be_a(Numeric) }
+
+        it { expect(weekly_candle.volume).to be_a(Numeric) }
       end
 
       it 'aggregates from Monday to Sunday' do
-        described_class.call(instruments: instruments, weeks_back: 1)
-
+        result
         weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: '1W')
+
         expect(weekly_candles).to be_any
-        # Weekly candle should have timestamp of Monday
         weekly_candles.each do |candle|
-          expect(candle.timestamp.wday).to eq(1) # Monday
+          expect(candle.timestamp.wday).to eq(1)
+        end
+      end
+    end
+
+    context 'when weeks_back is custom' do
+      let(:mock_daily_candles) do
+        28.times.map do |i|
+          {
+            timestamp: i.days.ago.to_i,
+            open: 100.0 + i,
+            high: 105.0 + i,
+            low: 99.0 + i,
+            close: 103.0 + i,
+            volume: 1_000_000
+          }
         end
       end
 
-      it 'handles custom weeks_back parameter' do
-        result = described_class.call(instruments: instruments, weeks_back: 4)
+      let(:result) { described_class.call(instruments: instruments, weeks_back: 4) }
 
-        expect(result[:processed]).to eq(1)
-        expect(result[:success]).to be > 0
-        # Should fetch enough daily candles for 4 weeks
-        # The before block already mocks historical_ohlc via allow_any_instance_of
+      before do
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).with(
+          from_date: anything,
+          to_date: anything,
+          oi: false
+        ).and_return(mock_daily_candles)
       end
+
+      it { expect(result[:processed]).to eq(1) }
+
+      it { expect(result[:success]).to be > 0 }
     end
 
-    context 'with insufficient daily candles' do
-      it 'handles instruments without daily candles' do
-        instrument_no_candles = create(:instrument, security_id: '99999')
+    context 'when daily candles are insufficient' do
+      let(:instrument_no_candles) { create(:instrument, security_id: '99999') }
+      let(:instruments_empty) { Instrument.where(id: instrument_no_candles.id) }
+      let(:result) { described_class.call(instruments: instruments_empty, weeks_back: 1) }
+
+      before do
         allow(instrument_no_candles).to receive(:historical_ohlc).and_return([])
-
-        result = described_class.call(
-          instruments: Instrument.where(id: instrument_no_candles.id),
-          weeks_back: 1
-        )
-
-        expect(result[:failed]).to be >= 0
       end
+
+      it { expect(result[:failed]).to be >= 0 }
     end
 
-    context 'with multiple instruments' do
+    context 'when instrument has no security_id' do
+      let(:instrument_no_security) { create(:instrument, symbol_name: 'NO_SEC', security_id: nil) }
+      let(:instruments_no_security) { Instrument.where(id: instrument_no_security.id) }
+      let(:result) { described_class.call(instruments: instruments_no_security, weeks_back: 1) }
+
+      it { expect(result[:failed]).to be >= 0 }
+    end
+
+    context 'when multiple instruments are provided' do
       let(:instrument2) { create(:instrument, symbol_name: 'TEST2', security_id: '12346') }
       let(:multiple_instruments) { Instrument.where(id: [instrument.id, instrument2.id]) }
+      let(:result) { described_class.call(instruments: multiple_instruments, weeks_back: 1) }
 
       before do
         allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return([])
       end
 
-      it 'processes all instruments' do
-        result = described_class.call(instruments: multiple_instruments, weeks_back: 1)
-
-        expect(result[:processed]).to eq(2)
-      end
+      it { expect(result[:processed]).to eq(2) }
     end
 
-    context 'with default parameters' do
-      it 'uses all equity/index instruments if none provided' do
+    context 'when no instruments are provided' do
+      let(:result) { described_class.call }
+
+      before do
         allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return([])
-
-        result = described_class.call
-
-        expect(result).to be_a(Hash)
-        expect(result[:processed]).to be >= 0
       end
+
+      it { expect(result).to be_a(Hash) }
+
+      it { expect(result[:processed]).to be >= 0 }
     end
   end
 end
