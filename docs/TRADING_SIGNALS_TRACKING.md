@@ -382,6 +382,90 @@ signal.mark_as_pending_approval!(
 
 ---
 
+## Simulation & What-If Analysis
+
+### Simulate Not-Executed Signals
+
+You can simulate what would have happened if you had executed signals that weren't executed (due to insufficient balance, etc.):
+
+```ruby
+# Simulate a specific signal
+signal = TradingSignal.find(123)
+result = signal.simulate!
+
+# Simulate all not-executed signals
+TradingSignals::Simulator.simulate_all_not_executed
+
+# Simulate with custom end date
+signal.simulate!(end_date: Date.today - 5.days)
+```
+
+### Simulation Results
+
+After simulation, the signal record includes:
+- `simulated_exit_price` - Price at which it would have exited
+- `simulated_exit_date` - Date of exit
+- `simulated_exit_reason` - Why it exited (sl_hit, tp_hit, time_based)
+- `simulated_pnl` - Profit/Loss amount
+- `simulated_pnl_pct` - Profit/Loss percentage
+- `simulated_holding_days` - Days held
+
+### Performance Analysis
+
+Compare executed vs simulated performance:
+
+```ruby
+# Analyze all signals
+analysis = TradingSignals::PerformanceAnalyzer.analyze
+
+# Compare executed vs simulated
+comparison = analysis[:comparison]
+puts "Executed P&L: ₹#{comparison[:executed_total_pnl]}"
+puts "Simulated P&L: ₹#{comparison[:simulated_total_pnl]}"
+puts "Opportunity Cost: ₹#{comparison[:opportunity_cost]}"
+```
+
+### Rake Tasks
+
+```bash
+# Simulate all not-executed signals
+rails trading_signals:simulate_all
+
+# Simulate a specific signal
+rails trading_signals:simulate[123]
+
+# Analyze performance
+rails trading_signals:analyze
+
+# List signals with insufficient balance
+rails trading_signals:list_insufficient_balance
+```
+
+### Example: Understanding Paper Mode Performance
+
+```ruby
+# Get all signals that weren't executed due to balance
+missed_signals = TradingSignal.not_executed
+  .where("execution_reason LIKE ?", "%Insufficient%")
+  .where(simulated: true)
+
+# Calculate what you would have made
+total_missed_pnl = missed_signals.sum(:simulated_pnl)
+puts "Total missed opportunity: ₹#{total_missed_pnl}"
+
+# Compare with what you actually made
+executed_signals = TradingSignal.executed.paper
+  .joins(:paper_position)
+  .where.not(paper_positions: { status: "open" })
+
+actual_pnl = executed_signals.sum { |s| s.paper_position.realized_pnl || 0 }
+puts "Actual P&L: ₹#{actual_pnl}"
+puts "What-if P&L: ₹#{total_missed_pnl}"
+puts "Combined potential: ₹#{actual_pnl + total_missed_pnl}"
+```
+
+---
+
 ## Summary
 
 All trading recommendations are now:
@@ -389,6 +473,7 @@ All trading recommendations are now:
 - ✅ **Tracked** with execution status
 - ✅ **Linked** to orders (live) or positions (paper)
 - ✅ **Annotated** with balance information
+- ✅ **Simulated** for what-if analysis
 - ✅ **Queryable** for analysis
 
 This provides complete visibility into:
@@ -396,4 +481,6 @@ This provides complete visibility into:
 - Which ones were executed
 - Why some weren't executed
 - Balance requirements and shortfalls
+- **What would have happened if you had executed them** (simulation)
+- **Comparison of actual vs simulated performance**
 - Historical performance of recommendations

@@ -21,6 +21,8 @@ class TradingSignal < ApplicationRecord
   scope :recent, -> { order(signal_generated_at: :desc) }
   scope :by_symbol, ->(symbol) { where(symbol: symbol) }
   scope :by_direction, ->(direction) { where(direction: direction) }
+  scope :simulated, -> { where(simulated: true) }
+  scope :not_simulated, -> { where(simulated: false) }
 
   def signal_metadata_hash
     return {} if signal_metadata.blank?
@@ -76,6 +78,34 @@ class TradingSignal < ApplicationRecord
 
   def risk_limit_exceeded?
     execution_reason&.include?("risk") || execution_reason&.include?("limit")
+  end
+
+  def simulated?
+    simulated == true
+  end
+
+  def simulation_metadata_hash
+    return {} if simulation_metadata.blank?
+
+    JSON.parse(simulation_metadata)
+  rescue JSON::ParserError
+    {}
+  end
+
+  def simulate!(end_date: nil)
+    TradingSignals::Simulator.simulate(self, end_date: end_date)
+  end
+
+  def simulated_profit?
+    simulated_pnl&.positive? == true
+  end
+
+  def simulated_loss?
+    simulated_pnl&.negative? == true
+  end
+
+  def simulated_breakeven?
+    simulated_pnl&.zero? == true
   end
 
   def mark_as_executed!(execution_type:, order: nil, paper_position: nil, metadata: {})
