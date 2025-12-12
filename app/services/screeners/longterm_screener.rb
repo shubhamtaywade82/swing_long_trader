@@ -34,14 +34,14 @@ module Screeners
     private
 
     def load_universe
-      # Load from master_universe.yml if available
-      universe_file = Rails.root.join("config/universe/master_universe.yml")
-      if universe_file.exist?
-        universe_symbols = YAML.load_file(universe_file).to_set
-        Instrument.where(symbol_name: universe_symbols.to_a)
+      # Load from IndexConstituent database table (preferred)
+      if IndexConstituent.exists?
+        universe_symbols = IndexConstituent.distinct.pluck(:symbol).map(&:upcase)
+        Instrument.where(symbol_name: universe_symbols)
+                 .or(Instrument.where(isin: IndexConstituent.where.not(isin_code: nil).distinct.pluck(:isin_code).map(&:upcase)))
       else
-        # Fallback: use all equity/index instruments
-        Instrument.where(instrument_type: %w[EQUITY INDEX])
+        # Fallback: use all equity/index instruments from NSE
+        Instrument.where(segment: %w[equity index], exchange: "NSE")
       end
     end
 
