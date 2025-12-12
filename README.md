@@ -364,7 +364,9 @@ rails console
 
 ## Documentation
 
-- **[Getting Started](docs/GETTING_STARTED.md)** - Complete step-by-step setup guide for new users
+- **[Quick Start](docs/QUICK_START.md)** - Get running in 5 minutes
+- **[Local Development Guide](docs/LOCAL_DEVELOPMENT_GUIDE.md)** - Complete guide to run locally on your machine
+- **[Getting Started](docs/GETTING_STARTED.md)** - Detailed step-by-step setup guide for new users
 - **[System Overview](docs/SYSTEM_OVERVIEW.md)** - Complete system guide, quick reference, and troubleshooting
 - **[Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)** - Complete implementation summary and status
 - **[Architecture](docs/architecture.md)** - System architecture and component overview
