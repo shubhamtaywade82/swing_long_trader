@@ -9,7 +9,9 @@ module Candles
     end
 
     def initialize(instruments: nil, weeks_back: nil)
-      @instruments = instruments || Instrument.where(instrument_type: %w[EQUITY INDEX])
+      # Filter by segment (equity/index) instead of instrument_type
+      # instrument_type values from CSV are like "ES", "Other" which don't match "EQUITY"/"INDEX"
+      @instruments = instruments || Instrument.where(segment: %w[equity index])
       @weeks_back = weeks_back || DEFAULT_WEEKS_BACK
     end
 
@@ -34,8 +36,10 @@ module Candles
           results[:errors] << { instrument: instrument.symbol_name, error: result[:error] }
         end
 
-        # Rate limiting: small delay to avoid API throttling
-        sleep(0.1) if (results[:processed] % 10).zero?
+        # Rate limiting: delay to avoid API throttling (same as DailyIngestor)
+        delay_seconds = (AlgoConfig.fetch[:dhanhq] || {})[:candle_ingestion_delay_seconds] || 0.5
+        delay_interval = (AlgoConfig.fetch[:dhanhq] || {})[:candle_ingestion_delay_interval] || 5
+        sleep(delay_seconds) if (results[:processed] % delay_interval).zero? && results[:processed] < @total_count
       end
 
       log_summary(results)

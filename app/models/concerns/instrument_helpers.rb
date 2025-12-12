@@ -162,18 +162,53 @@ module InstrumentHelpers
   end
 
   def historical_ohlc(from_date: nil, to_date: nil, oi: false) # rubocop:disable Naming/MethodParameterName
+    # Use resolve_instrument_code to ensure valid DhanHQ instrument code (EQUITY/INDEX)
+    # instrument_type from CSV may be "ES", "Other" which are not valid for DhanHQ API
+    resolved_instrument = resolve_instrument_code
+
+    # Ensure dates are in YYYY-MM-DD format (string)
+    from_date_str = (from_date || (Time.zone.today - 365)).to_s
+    to_date_str = (to_date || (Time.zone.today - 1)).to_s
+
+    # Ensure security_id is a string (DhanHQ API expects string)
+    security_id_str = security_id.to_s
+
+    # Validate required parameters before API call
+    raise "Invalid security_id: #{security_id} (cannot be blank)" if security_id_str.blank?
+
+    raise "Missing exchange_segment for instrument #{symbol_name || security_id}" if exchange_segment.blank?
+
+    # Log parameters for debugging (only in development)
+    if Rails.env.development?
+      Rails.logger.debug do
+        "[InstrumentHelpers] Calling HistoricalData.daily with: " \
+          "security_id=#{security_id_str}, exchange_segment=#{exchange_segment}, " \
+          "instrument=#{resolved_instrument}, from_date=#{from_date_str}, to_date=#{to_date_str}"
+      end
+    end
+
+    # DhanHQ API expects snake_case parameters with string security_id
     DhanHQ::Models::HistoricalData.daily(
-      securityId: security_id,
-      exchangeSegment: exchange_segment,
-      instrument: instrument_type || resolve_instrument_code,
+      security_id: security_id_str,
+      exchange_segment: exchange_segment,
+      instrument: resolved_instrument,
       oi: oi,
-      fromDate: from_date || (Time.zone.today - 365).to_s,
-      toDate: to_date || (Time.zone.today - 1).to_s,
-      expiryCode: 0,
+      from_date: from_date_str,
+      to_date: to_date_str,
+      expiry_code: 0,
     )
   rescue StandardError => e
-    Rails.logger.error("Failed to fetch Historical OHLC for #{self.class.name} #{security_id}: #{e.message}")
-    nil
+    error_msg = e.message.to_s
+    is_rate_limit = error_msg.include?("429") || error_msg.include?("rate limit") || error_msg.include?("Rate limit") || error_msg.include?("too many requests")
+
+    if is_rate_limit
+      # Re-raise rate limit errors so they can be handled with retry logic
+      Rails.logger.warn("Rate limit error fetching Historical OHLC for #{self.class.name} #{security_id}")
+      raise
+    else
+      Rails.logger.error("Failed to fetch Historical OHLC for #{self.class.name} #{security_id}: #{error_msg}")
+      nil
+    end
   end
 
   def intraday_ohlc(interval: "5", oi: false, from_date: nil, to_date: nil, days: 2) # rubocop:disable Naming/MethodParameterName
