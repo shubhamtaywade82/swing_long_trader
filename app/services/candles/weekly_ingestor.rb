@@ -109,11 +109,16 @@ module Candles
 
     def fetch_daily_candles(instrument:, from_date:, to_date:)
       # Load daily candles from database (already ingested by DailyIngestor)
-      # No API calls needed - just aggregate existing daily candles
-      daily_series = instrument.load_daily_candles(limit: 1000)
+      # Use date range to load only relevant candles efficiently
+      daily_series = instrument.load_daily_candles(
+        limit: nil, # Load all candles in date range
+        from_date: from_date,
+        to_date: to_date,
+      )
       return nil if daily_series.blank? || daily_series.candles.blank?
 
-      # Filter candles by date range
+      # Additional filtering to ensure we only get candles in the date range
+      # (load_daily_candles should handle this, but double-check for safety)
       filtered_candles = daily_series.candles.select do |candle|
         candle_time = candle.timestamp
         candle_time >= from_date.beginning_of_day && candle_time <= to_date.end_of_day
@@ -181,11 +186,16 @@ module Candles
     end
 
     def normalize_hash_format(data)
+      # Handles DhanHQ API format: hash with arrays
+      # { "timestamp" => [epoch1, epoch2, ...], "open" => [...], "high" => [...], ... }
+      # Timestamps are Unix epoch (Float or Integer)
+      # Note: Weekly ingestor typically loads from DB (Time objects), but this handles edge cases
       size = data["high"]&.size || 0
       return [] if size.zero?
 
       (0...size).map do |i|
         {
+          # Parse epoch timestamp (Integer or Float) to Time object
           timestamp: parse_timestamp(data["timestamp"]&.[](i)),
           open: data["open"]&.[](i)&.to_f || 0,
           high: data["high"]&.[](i)&.to_f || 0,
@@ -212,20 +222,39 @@ module Candles
       nil
     end
 
+    # Parses timestamp from various formats (epoch, Time, String) to Time object
+    # Handles epoch timestamps (Integer or Float) from API responses
+    # Daily candles from DB are already Time objects, but this handles edge cases
+    # @param timestamp [Integer, Float, String, Time, ActiveSupport::TimeWithZone] Timestamp in various formats
+    # @return [ActiveSupport::TimeWithZone] Parsed timestamp in application timezone
     def parse_timestamp(timestamp)
       return Time.zone.now if timestamp.blank?
 
       case timestamp
       when Time, ActiveSupport::TimeWithZone
         timestamp
-      when Integer
-        Time.zone.at(timestamp)
+      when Integer, Float
+        # Handle Unix epoch timestamps (both Integer and Float)
+        # DhanHQ API returns Float epoch values like 1765132200.0
+        Time.zone.at(timestamp.to_f)
       when String
-        Time.zone.parse(timestamp)
+        # Try parsing as Unix epoch first (numeric string like "1765132200" or "1765132200.0")
+        if timestamp.match?(/\A\d+(\.\d+)?\z/)
+          Time.zone.at(timestamp.to_f)
+        else
+          Time.zone.parse(timestamp)
+        end
       else
-        Time.zone.parse(timestamp.to_s)
+        # Fallback: try to convert to numeric (for Unix epoch)
+        numeric = timestamp.to_s.strip
+        if numeric.match?(/\A\d+(\.\d+)?\z/)
+          Time.zone.at(numeric.to_f)
+        else
+          Time.zone.parse(timestamp.to_s)
+        end
       end
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[Candles::WeeklyIngestor] Failed to parse timestamp #{timestamp.inspect}: #{e.message}")
       Time.zone.now
     end
 

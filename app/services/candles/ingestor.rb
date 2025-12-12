@@ -131,6 +131,9 @@ module Candles
       end
     end
 
+    # Check if candle data has changed (for upsert logic)
+    # Uses float comparison for prices - acceptable for detecting changes in stored values
+    # rubocop:disable Lint/FloatComparison
     def candle_data_changed?(existing, open:, high:, low:, close:, volume:)
       existing.open.to_f != open.to_f ||
         existing.high.to_f != high.to_f ||
@@ -138,6 +141,7 @@ module Candles
         existing.close.to_f != close.to_f ||
         existing.volume.to_i != volume.to_i
     end
+    # rubocop:enable Lint/FloatComparison
 
     def normalize_candles(data)
       return [] if data.blank?
@@ -157,11 +161,15 @@ module Candles
     end
 
     def normalize_hash_format(data)
+      # DhanHQ API returns data as hash with arrays:
+      # { "timestamp" => [epoch1, epoch2, ...], "open" => [...], "high" => [...], ... }
+      # Timestamps are Unix epoch (Float or Integer)
       size = data["high"]&.size || 0
       return [] if size.zero?
 
       (0...size).map do |i|
         {
+          # Parse epoch timestamp (Integer or Float) to Time object
           timestamp: parse_timestamp(data["timestamp"]&.[](i)),
           open: data["open"]&.[](i)&.to_f || 0,
           high: data["high"]&.[](i)&.to_f || 0,
@@ -188,20 +196,38 @@ module Candles
       nil
     end
 
+    # Parses timestamp from various formats (epoch, Time, String) to Time object
+    # DhanHQ API returns timestamps as Unix epoch (Integer or Float)
+    # @param timestamp [Integer, Float, String, Time, ActiveSupport::TimeWithZone] Timestamp in various formats
+    # @return [ActiveSupport::TimeWithZone] Parsed timestamp in application timezone
     def parse_timestamp(timestamp)
       return Time.zone.now if timestamp.blank?
 
       case timestamp
       when Time, ActiveSupport::TimeWithZone
         timestamp
-      when Integer
-        Time.zone.at(timestamp)
+      when Integer, Float
+        # Handle Unix epoch timestamps (both Integer and Float)
+        # DhanHQ API returns Float epoch values like 1765132200.0
+        Time.zone.at(timestamp.to_f)
       when String
-        Time.zone.parse(timestamp)
+        # Try parsing as Unix epoch first (numeric string like "1765132200" or "1765132200.0")
+        if timestamp.match?(/\A\d+(\.\d+)?\z/)
+          Time.zone.at(timestamp.to_f)
+        else
+          Time.zone.parse(timestamp)
+        end
       else
-        Time.zone.parse(timestamp.to_s)
+        # Fallback: try to convert to numeric (for Unix epoch)
+        numeric = timestamp.to_s.strip
+        if numeric.match?(/\A\d+(\.\d+)?\z/)
+          Time.zone.at(numeric.to_f)
+        else
+          Time.zone.parse(numeric)
+        end
       end
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[Candles::Ingestor] Failed to parse timestamp #{timestamp.inspect}: #{e.message}")
       Time.zone.now
     end
   end

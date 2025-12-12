@@ -142,27 +142,93 @@ end
 namespace :indicators do
   desc "Test indicators with sample instrument (requires candles in DB)"
   task test: :environment do
-    # Find an instrument with candles
-    candle_record = CandleSeriesRecord.for_timeframe("1D").first
-    unless candle_record
+    # Find instruments with candles, sorted by candle count (descending)
+    candle_counts = CandleSeriesRecord
+                    .where(timeframe: "1D")
+                    .group(:instrument_id)
+                    .count
+                    .sort_by { |_id, count| -count }
+
+    if candle_counts.empty?
       puts "❌ No instruments with daily candles found in database"
-      puts "   Run: rails candles:daily:ingest first"
+      puts "   Run: rails runner \"Candles::DailyIngestor.call(days_back: 365)\" to ingest data"
       exit 1
     end
 
-    instrument = candle_record.instrument
+    # Try to find an instrument with sufficient candles (50+)
+    # If none found, use the one with most candles
+    best_id, best_count = candle_counts.first
+    min_required = 50
+
+    # Try multiple instruments until we find one with enough candles
+    instrument = nil
+    tested_count = 0
+    max_attempts = [candle_counts.size, 10].min # Try up to 10 instruments
+
+    candle_counts.first(max_attempts).each do |inst_id, count|
+      tested_count += 1
+      candidate = Instrument.find_by(id: inst_id)
+      next unless candidate
+
+      daily_series = candidate.load_daily_candles(limit: 200)
+      next unless daily_series&.candles&.any?
+
+      candle_count = daily_series.candles.size
+      if candle_count >= min_required
+        instrument = candidate
+        best_count = candle_count
+        puts "✅ Found instrument with #{candle_count} candles (after checking #{tested_count} instrument(s))"
+        break
+      end
+    end
+
+    # Fallback: use instrument with most candles (even if < 50)
+    unless instrument
+      best_id, best_count = candle_counts.first
+      instrument = Instrument.find_by(id: best_id)
+      unless instrument
+        puts "❌ Failed to find any instrument with candles"
+        exit 1
+      end
+    end
 
     puts "📊 Testing indicators for: #{instrument.symbol_name}"
     puts "=" * 60
 
     # Load daily candles
-    daily_series = instrument.load_daily_candles(limit: 100)
+    daily_series = instrument.load_daily_candles(limit: 200)
     unless daily_series
       puts "❌ Failed to load daily candles"
       exit 1
     end
 
-    puts "✅ Loaded #{daily_series.candles.size} daily candles"
+    candle_count = daily_series.candles.size
+    puts "✅ Loaded #{candle_count} daily candles"
+
+    if candle_count < 50
+      puts ""
+      puts "⚠️  WARNING: Only #{candle_count} candle(s) available!"
+      puts ""
+      puts "   Indicator requirements:"
+      puts "   - RSI: needs 15+ candles"
+      puts "   - MACD: needs 26+ candles"
+      puts "   - Supertrend: needs 50+ candles"
+      puts "   - ADX: needs 14+ candles"
+      puts ""
+      if candle_count == 1
+        puts "   🔍 Issue detected: Only 1 candle per instrument was ingested."
+        puts "   This suggests the daily ingestion didn't fetch full history."
+        puts ""
+        puts "   🔧 Solution: Re-run daily ingestion with proper date range:"
+        puts "   rails runner \"Candles::DailyIngestor.call(days_back: 365)\""
+      else
+        puts "   💡 Tip: More candles = better indicator accuracy"
+        puts "   Re-run ingestion with more days: rails runner \"Candles::DailyIngestor.call(days_back: 800)\""
+      end
+      puts ""
+      puts "   Continuing with limited testing (some indicators may fail)..."
+      puts ""
+    end
     puts ""
 
     # Test each indicator
