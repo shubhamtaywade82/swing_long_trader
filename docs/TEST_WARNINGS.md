@@ -68,11 +68,14 @@ Warnings from third-party gems are suppressed in the test environment by tempora
 
 The following warnings from your own rake tasks have been **fixed**:
 
-1. **`lib/tasks/backtest.rake`** - Already uses `BacktestHelpers` module (no changes needed)
-2. **`lib/tasks/hardening.rake`** - Wrapped helper methods in `HardeningHelpers` module
-3. **`lib/tasks/indicators.rake`** - Wrapped helper methods in `IndicatorHelpers` module
+1. **`lib/tasks/backtest.rake`** - Wrapped `format_comparison_row` and `determine_winner` methods in `unless respond_to?` guards
+2. **`lib/tasks/hardening.rake`** - Wrapped all helper methods (`check_env_vars`, `check_database`, etc.) in `HardeningHelpers` module with `unless respond_to?` guards
+3. **`lib/tasks/indicators.rake`** - Wrapped all helper methods (`find_instrument_with_candles`, `test_indicators`, `test_indicator_wrappers`) in `IndicatorHelpers` module with `unless respond_to?` guards
 
-**Solution:** Helper methods are now defined in modules outside the namespace, preventing redefinition warnings when rake files are loaded multiple times.
+**Solution:**
+- Helper methods are defined in modules outside the namespace
+- Each method is wrapped in `unless respond_to?(:method_name)` to prevent redefinition when rake files are loaded multiple times
+- This ensures methods are only defined once, even if the rake file is loaded multiple times during a rake task execution
 
 ### Remaining Warnings
 

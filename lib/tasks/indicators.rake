@@ -4,22 +4,25 @@
 module IndicatorHelpers
   module_function
 
-  def find_instrument_with_candles
-    # Use CandleSeriesRecord directly since association might not be loaded
-    candle_record = CandleSeriesRecord.for_timeframe('1D').first
-    return nil unless candle_record
+  unless respond_to?(:find_instrument_with_candles)
+    def find_instrument_with_candles
+      # Use CandleSeriesRecord directly since association might not be loaded
+      candle_record = CandleSeriesRecord.for_timeframe('1D').first
+      return nil unless candle_record
 
-    instrument = candle_record.instrument
-    unless instrument
-      puts "❌ No instruments with daily candles found in database"
-      puts "   Run: rails candles:daily:ingest first"
-      return nil
+      instrument = candle_record.instrument
+      unless instrument
+        puts "❌ No instruments with daily candles found in database"
+        puts "   Run: rails candles:daily:ingest first"
+        return nil
+      end
+
+      instrument
     end
-
-    instrument
   end
 
-  def test_indicators(series)
+  unless respond_to?(:test_indicators)
+    def test_indicators(series)
     last_index = series.candles.size - 1
 
     # Test EMA
@@ -91,9 +94,11 @@ module IndicatorHelpers
     # Test Indicator Wrappers
     puts "📈 Indicator Wrappers Test:"
     test_indicator_wrappers(series, last_index)
+    end
   end
 
-  def test_indicator_wrappers(series, index)
+  unless respond_to?(:test_indicator_wrappers)
+    def test_indicator_wrappers(series, index)
     # Test RSI Indicator
     begin
       rsi_indicator = Indicators::RsiIndicator.new(series: series, config: { period: 14 })
@@ -129,6 +134,7 @@ module IndicatorHelpers
       end
     rescue StandardError => e
       puts "   ❌ Supertrend Indicator Error: #{e.message}"
+    end
     end
   end
 end

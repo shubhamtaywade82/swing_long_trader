@@ -2,11 +2,14 @@
 
 # Helper methods for backtest tasks
 module BacktestHelpers
-  def self.format_comparison_row(metric, value1, value2)
-    "  #{metric.ljust(25)} | Run 1: #{value1.rjust(15)} | Run 2: #{value2.rjust(15)}"
+  unless respond_to?(:format_comparison_row)
+    def self.format_comparison_row(metric, value1, value2)
+      "  #{metric.ljust(25)} | Run 1: #{value1.rjust(15)} | Run 2: #{value2.rjust(15)}"
+    end
   end
 
-  def self.determine_winner(run1, run2)
+  unless respond_to?(:determine_winner)
+    def self.determine_winner(run1, run2)
     # Compare multiple metrics
     score1 = 0
     score2 = 0
@@ -37,6 +40,7 @@ module BacktestHelpers
       "Run 2 (ID: #{run2.id})"
     else
       "Tie (both runs perform similarly)"
+    end
     end
   end
 end
