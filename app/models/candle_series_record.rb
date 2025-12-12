@@ -4,7 +4,7 @@
 # Note: This is separate from the CandleSeries class which is a plain Ruby class
 # for working with candle data in memory
 class CandleSeriesRecord < ApplicationRecord
-  self.table_name = 'candle_series'
+  self.table_name = "candle_series"
 
   belongs_to :instrument
 
@@ -20,9 +20,9 @@ class CandleSeriesRecord < ApplicationRecord
   scope :ordered, -> { order(timestamp: :asc) }
 
   # Find candles for a date range
-  scope :between_dates, ->(from_date, to_date) do
+  scope :between_dates, lambda { |from_date, to_date|
     where(timestamp: from_date.beginning_of_day..to_date.end_of_day)
-  end
+  }
 
   # Get latest candle for an instrument and timeframe
   def self.latest_for(instrument:, timeframe:)
@@ -40,8 +40,7 @@ class CandleSeriesRecord < ApplicationRecord
       high: high,
       low: low,
       close: close,
-      volume: volume
+      volume: volume,
     )
   end
 end
-

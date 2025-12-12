@@ -47,9 +47,9 @@ module PaperTrading
 
       open_positions.each do |position|
         latest_candle = CandleSeriesRecord
-          .where(instrument_id: position.instrument_id, timeframe: '1D')
-          .order(timestamp: :desc)
-          .first
+                        .where(instrument_id: position.instrument_id, timeframe: "1D")
+                        .order(timestamp: :desc)
+                        .first
 
         next unless latest_candle
 
@@ -75,7 +75,7 @@ module PaperTrading
         open_positions_count: @portfolio.open_positions.count,
         closed_positions_count: @portfolio.closed_positions.count,
         total_exposure: @portfolio.total_exposure.round(2),
-        available_capital: @portfolio.available_capital.round(2)
+        available_capital: @portfolio.available_capital.round(2),
       }
     end
 
@@ -96,7 +96,7 @@ module PaperTrading
       message += "Total Exposure: ₹#{summary[:total_exposure]}\n"
       message += "Available Capital: ₹#{summary[:available_capital]}"
 
-      Telegram::Notifier.send_error_alert(message, context: 'Daily Paper Trading Summary')
+      Telegram::Notifier.send_error_alert(message, context: "Daily Paper Trading Summary")
     rescue StandardError => e
       log_error("Failed to send daily summary: #{e.message}")
     end

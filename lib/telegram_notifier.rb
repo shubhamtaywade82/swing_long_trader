@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-require 'net/http'
-require 'uri'
+require "net/http"
+require "uri"
 
 # Simple Telegram notifier using Net::HTTP
 # Provides class methods for sending messages and chat actions
 class TelegramNotifier
-  TELEGRAM_API = 'https://api.telegram.org'
+  TELEGRAM_API = "https://api.telegram.org"
   MAX_LEN      = 4000 # keep margin below Telegram's 4096 limit
 
   # Send a message to Telegram
@@ -15,13 +15,13 @@ class TelegramNotifier
   # @param extra_params [Hash] Additional parameters (parse_mode, etc.)
   # @return [Net::HTTPResponse, nil]
   def self.send_message(text, chat_id: nil, **extra_params)
-    return unless text.present?
+    return if text.blank?
 
-    chat_id ||= ENV.fetch('TELEGRAM_CHAT_ID', nil)
-    return unless chat_id.present?
+    chat_id ||= ENV.fetch("TELEGRAM_CHAT_ID", nil)
+    return if chat_id.blank?
 
     chunks(text).each do |chunk|
-      post('sendMessage',
+      post("sendMessage",
            chat_id: chat_id,
            text: chunk,
            **extra_params)
@@ -33,16 +33,16 @@ class TelegramNotifier
   # @param chat_id [String, Integer, nil] Chat ID (falls back to ENV)
   # @return [Net::HTTPResponse, nil]
   def self.send_chat_action(action:, chat_id: nil)
-    chat_id ||= ENV.fetch('TELEGRAM_CHAT_ID', nil)
-    return unless chat_id.present?
+    chat_id ||= ENV.fetch("TELEGRAM_CHAT_ID", nil)
+    return if chat_id.blank?
 
-    post('sendChatAction', chat_id: chat_id, action: action)
+    post("sendChatAction", chat_id: chat_id, action: action)
   end
 
   # Check if Telegram is enabled (has bot token and chat ID)
   # @return [Boolean]
   def self.enabled?
-    ENV['TELEGRAM_BOT_TOKEN'].present? && ENV['TELEGRAM_CHAT_ID'].present?
+    ENV["TELEGRAM_BOT_TOKEN"].present? && ENV["TELEGRAM_CHAT_ID"].present?
   end
 
   # -- PRIVATE --------------------------------------------------------------
@@ -52,8 +52,8 @@ class TelegramNotifier
   # @param params [Hash] Parameters to send
   # @return [Net::HTTPResponse, nil]
   def self.post(method, **params)
-    bot_token = ENV.fetch('TELEGRAM_BOT_TOKEN', nil)
-    return unless bot_token.present?
+    bot_token = ENV.fetch("TELEGRAM_BOT_TOKEN", nil)
+    return if bot_token.blank?
 
     uri = URI("#{TELEGRAM_API}/bot#{bot_token}/#{method}")
     res = Net::HTTP.post_form(uri, params)
@@ -80,7 +80,7 @@ class TelegramNotifier
 
     lines = text.split("\n")
     chunks = []
-    buf = ''
+    buf = ""
 
     lines.each do |line|
       test_buf = buf.empty? ? line : "#{buf}\n#{line}"
@@ -98,4 +98,3 @@ class TelegramNotifier
 
   private_class_method :chunks
 end
-

@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
-  let(:instrument) { create(:instrument, symbol_name: 'TEST') }
+  let(:instrument) { create(:instrument, symbol_name: "TEST") }
   let(:series) do
-    cs = CandleSeries.new(symbol: 'TEST', interval: '1D')
+    cs = CandleSeries.new(symbol: "TEST", interval: "1D")
     # Add enough candles (at least 50 required by SignalBuilder)
     60.times do |i|
-      base_price = 100.0 + (i * 0.5)  # Uptrend for bullish signal
+      base_price = 100.0 + (i * 0.5) # Uptrend for bullish signal
       cs.add_candle(
         Candle.new(
           timestamp: i.days.ago,
@@ -16,38 +16,36 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
           high: base_price + 2.0,
           low: base_price - 1.0,
           close: base_price + 1.5,
-          volume: 1_000_000
-        )
+          volume: 1_000_000,
+        ),
       )
     end
     cs
   end
 
-  describe '.call' do
-    context 'with bullish trend' do
+  describe ".call" do
+    context "with bullish trend" do
       before do
         # Mock AlgoConfig for Supertrend
         allow(AlgoConfig).to receive(:fetch).and_call_original
-        allow(AlgoConfig).to receive(:fetch).with([:indicators, :supertrend]).and_return({
+        allow(AlgoConfig).to receive(:fetch).with(%i[indicators supertrend]).and_return({
           period: 10,
-          multiplier: 3.0
+          multiplier: 3.0,
         })
-        allow(AlgoConfig).to receive(:fetch).with([:swing_trading, :strategy]).and_return({})
+        allow(AlgoConfig).to receive(:fetch).with(%i[swing_trading strategy]).and_return({})
         allow(AlgoConfig).to receive(:fetch).with(:risk).and_return({})
 
         # Call the service once for all tests in this context
         @result = described_class.call(
           instrument: instrument,
-          daily_series: series
+          daily_series: series,
         )
       end
 
-      it 'returns a signal hash' do
+      it "returns a signal hash" do
         # SignalBuilder may return nil if no trend is detected
         # This is expected behavior - the test should handle this case
-        if @result.nil?
-          skip 'No signal generated - trend may not be detected with test data'
-        end
+        skip "No signal generated - trend may not be detected with test data" if @result.nil?
 
         expect(@result).to be_a(Hash)
         expect(@result).to have_key(:symbol)
@@ -55,23 +53,23 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(@result).to have_key(:entry_price)
       end
 
-      it 'sets direction to long for bullish signals' do
+      it "sets direction to long for bullish signals" do
         next if @result.nil? # Skip if no signal generated (may not detect bullish trend)
 
         expect(@result[:direction]).to eq(:long)
       end
 
-      it 'calculates entry price from latest close' do
+      it "calculates entry price from latest close" do
         next if @result.nil? # Skip if no signal generated
 
         expect(@result[:entry_price]).to be_a(Numeric)
         expect(@result[:entry_price]).to be > 0
       end
 
-      it 'calculates stop loss based on ATR' do
+      it "calculates stop loss based on ATR" do
         result = described_class.call(
           instrument: instrument,
-          daily_series: series
+          daily_series: series,
         )
 
         next if result.nil? # Skip if no signal generated
@@ -80,10 +78,10 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result[:sl]).to be_a(Numeric)
       end
 
-      it 'calculates take profit based on risk-reward ratio' do
+      it "calculates take profit based on risk-reward ratio" do
         result = described_class.call(
           instrument: instrument,
-          daily_series: series
+          daily_series: series,
         )
 
         next if result.nil? # Skip if no signal generated
@@ -91,13 +89,13 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result[:tp]).to be > result[:entry_price] if result[:direction] == :long
         risk = result[:entry_price] - result[:sl]
         reward = result[:tp] - result[:entry_price]
-        expect(reward / risk).to be >= 1.5  # Minimum RR is 1.5
+        expect(reward / risk).to be >= 1.5 # Minimum RR is 1.5
       end
 
-      it 'calculates position size' do
+      it "calculates position size" do
         result = described_class.call(
           instrument: instrument,
-          daily_series: series
+          daily_series: series,
         )
 
         next if result.nil? # Skip if no signal generated
@@ -106,26 +104,24 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result[:qty]).to be > 0
       end
 
-      it 'calculates confidence score' do
+      it "calculates confidence score" do
         result = described_class.call(
           instrument: instrument,
-          daily_series: series
+          daily_series: series,
         )
 
         # SignalBuilder may return nil if no trend is detected
-        if result.nil?
-          skip 'No signal generated - trend may not be detected with test data'
-        end
+        skip "No signal generated - trend may not be detected with test data" if result.nil?
 
         expect(result[:confidence]).to be_a(Numeric)
         expect(result[:confidence]).to be_between(0, 100)
       end
     end
 
-    describe 'entry/SL/TP calculations' do
+    describe "entry/SL/TP calculations" do
       # Create a proper candle series with enough candles for indicators
       let(:bullish_series) do
-        series = CandleSeries.new(symbol: 'TEST', interval: '1D')
+        series = CandleSeries.new(symbol: "TEST", interval: "1D")
         # Create 60 candles with bullish trend (EMA20 > EMA50)
         base_price = 100.0
         60.times do |i|
@@ -137,8 +133,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
               high: price + 2.0,
               low: price - 1.0,
               close: price + 1.0,
-              volume: 1_000_000
-            )
+              volume: 1_000_000,
+            ),
           )
         end
         series
@@ -147,24 +143,24 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       before do
         # Mock AlgoConfig to return test config
         allow(AlgoConfig).to receive(:fetch).and_return({})
-        allow(AlgoConfig).to receive(:fetch).with([:swing_trading, :strategy]).and_return({})
+        allow(AlgoConfig).to receive(:fetch).with(%i[swing_trading strategy]).and_return({})
         allow(AlgoConfig).to receive(:fetch).with(:risk).and_return({
           risk_per_trade_pct: 2.0,
-          account_size: 100_000
+          account_size: 100_000,
         })
-        allow(AlgoConfig).to receive(:fetch).with([:indicators, :supertrend]).and_return({
+        allow(AlgoConfig).to receive(:fetch).with(%i[indicators supertrend]).and_return({
           period: 10,
-          multiplier: 3.0
+          multiplier: 3.0,
         })
 
         # Call the service once for all tests in this context
         @result = described_class.call(
           instrument: instrument,
-          daily_series: bullish_series
+          daily_series: bullish_series,
         )
       end
 
-      it 'calculates stop loss at correct distance for long position' do
+      it "calculates stop loss at correct distance for long position" do
         next if @result.nil? # Skip if no signal generated
 
         # Stop loss should be below entry price for long
@@ -174,7 +170,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(stop_loss_distance).to be > 0
       end
 
-      it 'calculates take profit based on risk-reward ratio' do
+      it "calculates take profit based on risk-reward ratio" do
         next if @result.nil? # Skip if no signal generated
 
         # Risk-reward ratio should meet minimum (default 1.5)
@@ -187,7 +183,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(reward / risk).to be >= 1.5
       end
 
-      it 'calculates position size based on risk per trade' do
+      it "calculates position size based on risk per trade" do
         next if @result.nil? # Skip if no signal generated
 
         # Position size should be calculated
@@ -206,7 +202,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         end
       end
 
-      it 'calculates position value correctly' do
+      it "calculates position value correctly" do
         next if @result.nil? # Skip if no signal generated
 
         position_value = @result[:qty] * @result[:entry_price]
@@ -215,10 +211,10 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(position_value).to be < 200_000 # Reasonable upper bound
       end
 
-      it 'returns valid signal structure' do
+      it "returns valid signal structure" do
         result = described_class.call(
           instrument: instrument,
-          daily_series: bullish_series
+          daily_series: bullish_series,
         )
 
         next if result.nil? # Skip if no signal generated
@@ -237,7 +233,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result).to have_key(:metadata)
 
         # Verify data types
-        expect(result[:direction]).to be_in([:long, :short])
+        expect(result[:direction]).to be_in(%i[long short])
         expect(result[:entry_price]).to be_a(Numeric)
         expect(result[:sl]).to be_a(Numeric)
         expect(result[:tp]).to be_a(Numeric)
@@ -248,58 +244,56 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context 'when inputs are invalid' do
-      it 'returns nil for insufficient candles' do
-        small_series = CandleSeries.new(symbol: 'TEST', interval: '1D')
+    context "when inputs are invalid" do
+      it "returns nil for insufficient candles" do
+        small_series = CandleSeries.new(symbol: "TEST", interval: "1D")
         30.times { small_series.add_candle(create(:candle)) }
 
         result = described_class.call(
           instrument: instrument,
-          daily_series: small_series
+          daily_series: small_series,
         )
 
         expect(result).to be_nil
       end
 
-      it 'returns nil when instrument is missing' do
+      it "returns nil when instrument is missing" do
         result = described_class.call(
           instrument: nil,
-          daily_series: series
+          daily_series: series,
         )
 
         expect(result).to be_nil
       end
 
-      it 'returns nil when daily_series is missing' do
+      it "returns nil when daily_series is missing" do
         result = described_class.call(
           instrument: instrument,
-          daily_series: nil
+          daily_series: nil,
         )
 
         expect(result).to be_nil
       end
     end
 
-    context 'when risk-reward is too low' do
+    context "when risk-reward is too low" do
       before do
         allow(AlgoConfig).to receive(:fetch).and_call_original
-        allow(AlgoConfig).to receive(:fetch).with([:indicators, :supertrend]).and_return({
+        allow(AlgoConfig).to receive(:fetch).with(%i[indicators supertrend]).and_return({
           period: 10,
-          multiplier: 3.0
+          multiplier: 3.0,
         })
-        allow(AlgoConfig).to receive(:fetch).with([:swing_trading, :strategy]).and_return({
-          min_risk_reward: 2.0
+        allow(AlgoConfig).to receive(:fetch).with(%i[swing_trading strategy]).and_return({
+          min_risk_reward: 2.0,
         })
         allow(AlgoConfig).to receive(:fetch).with(:risk).and_return({})
-        allow(series).to receive(:supertrend_signal).and_return({ direction: :bullish })
-        allow(series).to receive(:ema).and_return(100.0)
-        allow(series).to receive(:atr).and_return(2.0)
+        allow(series).to receive_messages(supertrend_signal: { direction: :bullish }, ema: 100.0, atr: 2.0)
       end
 
-      it 'returns nil' do
+      it "returns nil" do
         result = described_class.call(
           instrument: instrument,
-          daily_series: series
+          daily_series: series,
         )
 
         # May return nil if RR is too low
@@ -307,17 +301,17 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context 'when supertrend calculation fails' do
+    context "when supertrend calculation fails" do
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({})
-        allow(series).to receive(:supertrend_signal).and_raise(StandardError, 'Calculation error')
+        allow(series).to receive(:supertrend_signal).and_raise(StandardError, "Calculation error")
         allow(Rails.logger).to receive(:warn)
       end
 
-      it 'handles error gracefully' do
+      it "handles error gracefully" do
         _result = described_class.call(
           instrument: instrument,
-          daily_series: series
+          daily_series: series,
         )
 
         expect(Rails.logger).to have_received(:warn)
@@ -325,8 +319,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context '#calculate_entry_price' do
-      it 'calculates entry price for long position' do
+    describe "#calculate_entry_price" do
+      it "calculates entry price for long position" do
         builder = described_class.new(instrument: instrument, daily_series: series)
         allow(series).to receive(:atr).and_return(2.0)
 
@@ -336,7 +330,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result).to be > 0
       end
 
-      it 'calculates entry price for short position' do
+      it "calculates entry price for short position" do
         builder = described_class.new(instrument: instrument, daily_series: series)
         allow(series).to receive(:atr).and_return(2.0)
 
@@ -346,7 +340,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result).to be > 0
       end
 
-      it 'handles missing ATR' do
+      it "handles missing ATR" do
         builder = described_class.new(instrument: instrument, daily_series: series)
         allow(series).to receive(:atr).and_return(nil)
 
@@ -356,8 +350,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context '#calculate_stop_loss' do
-      it 'calculates stop loss for long position' do
+    describe "#calculate_stop_loss" do
+      it "calculates stop loss for long position" do
         builder = described_class.new(instrument: instrument, daily_series: series)
         allow(series).to receive(:atr).and_return(2.0)
 
@@ -367,7 +361,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result).to be < 100.0
       end
 
-      it 'calculates stop loss for short position' do
+      it "calculates stop loss for short position" do
         builder = described_class.new(instrument: instrument, daily_series: series)
         allow(series).to receive(:atr).and_return(2.0)
 
@@ -378,8 +372,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context '#calculate_take_profit' do
-      it 'calculates take profit for long position' do
+    describe "#calculate_take_profit" do
+      it "calculates take profit for long position" do
         builder = described_class.new(instrument: instrument, daily_series: series)
         allow(series).to receive(:atr).and_return(2.0)
 
@@ -389,7 +383,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result).to be > 100.0
       end
 
-      it 'calculates take profit for short position' do
+      it "calculates take profit for short position" do
         builder = described_class.new(instrument: instrument, daily_series: series)
         allow(series).to receive(:atr).and_return(2.0)
 
@@ -400,12 +394,12 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context '#calculate_position_size' do
-      it 'calculates position size for long position' do
+    describe "#calculate_position_size" do
+      it "calculates position size for long position" do
         builder = described_class.new(instrument: instrument, daily_series: series)
         allow(AlgoConfig).to receive(:fetch).with(:risk).and_return({
           risk_per_trade_pct: 2.0,
-          account_size: 100_000
+          account_size: 100_000,
         })
 
         result = builder.send(:calculate_position_size, 100.0, 95.0)
@@ -414,12 +408,12 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result).to be > 0
       end
 
-      it 'applies lot size when available' do
+      it "applies lot size when available" do
         instrument.lot_size = 10
         builder = described_class.new(instrument: instrument, daily_series: series)
         allow(AlgoConfig).to receive(:fetch).with(:risk).and_return({
           risk_per_trade_pct: 2.0,
-          account_size: 100_000
+          account_size: 100_000,
         })
 
         result = builder.send(:calculate_position_size, 100.0, 95.0)
@@ -427,11 +421,11 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result % 10).to eq(0) # Should be multiple of lot size
       end
 
-      it 'returns minimum 1 share' do
+      it "returns minimum 1 share" do
         builder = described_class.new(instrument: instrument, daily_series: series)
         allow(AlgoConfig).to receive(:fetch).with(:risk).and_return({
           risk_per_trade_pct: 0.01,
-          account_size: 1000
+          account_size: 1000,
         })
 
         result = builder.send(:calculate_position_size, 100.0, 99.0)
@@ -440,8 +434,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context '#calculate_risk_reward' do
-      it 'calculates risk-reward for long position' do
+    describe "#calculate_risk_reward" do
+      it "calculates risk-reward for long position" do
         builder = described_class.new(instrument: instrument, daily_series: series)
 
         result = builder.send(:calculate_risk_reward, 100.0, 95.0, 110.0, :long)
@@ -450,7 +444,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result).to eq(2.0) # (110-100)/(100-95) = 10/5 = 2.0
       end
 
-      it 'calculates risk-reward for short position' do
+      it "calculates risk-reward for short position" do
         builder = described_class.new(instrument: instrument, daily_series: series)
 
         result = builder.send(:calculate_risk_reward, 100.0, 105.0, 95.0, :short)
@@ -459,7 +453,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(result).to eq(1.0) # (100-95)/(105-100) = 5/5 = 1.0
       end
 
-      it 'returns 0 for zero or negative risk' do
+      it "returns 0 for zero or negative risk" do
         builder = described_class.new(instrument: instrument, daily_series: series)
 
         result = builder.send(:calculate_risk_reward, 100.0, 100.0, 110.0, :long)
@@ -468,24 +462,21 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context '#calculate_confidence' do
+    describe "#calculate_confidence" do
       let(:builder) { described_class.new(instrument: instrument, daily_series: series) }
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({})
       end
 
-      it 'calculates confidence for bullish setup' do
+      it "calculates confidence for bullish setup" do
         allow(series).to receive(:ema).with(20).and_return(110.0)
         allow(series).to receive(:ema).with(50).and_return(100.0)
         allow(series).to receive(:ema).with(200).and_return(90.0)
-        allow(series).to receive(:atr).and_return(2.0)
-        allow(series).to receive(:adx).and_return(30.0)
-        allow(series).to receive(:rsi).and_return(60.0)
-        allow(series).to receive(:macd).and_return([1.0, 0.5, 0.3])
+        allow(series).to receive_messages(atr: 2.0, adx: 30.0, rsi: 60.0, macd: [1.0, 0.5, 0.3])
         allow(builder).to receive(:calculate_supertrend).and_return({
           trend: :bullish,
-          direction: :bullish
+          direction: :bullish,
         })
 
         confidence = builder.send(:calculate_confidence, :long)
@@ -494,12 +485,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(confidence).to be_between(0, 100)
       end
 
-      it 'handles missing indicators gracefully' do
-        allow(series).to receive(:ema).and_return(nil)
-        allow(series).to receive(:atr).and_return(nil)
-        allow(series).to receive(:adx).and_return(nil)
-        allow(series).to receive(:rsi).and_return(nil)
-        allow(series).to receive(:macd).and_return(nil)
+      it "handles missing indicators gracefully" do
+        allow(series).to receive_messages(ema: nil, atr: nil, adx: nil, rsi: nil, macd: nil)
         allow(builder).to receive(:calculate_supertrend).and_return(nil)
 
         confidence = builder.send(:calculate_confidence, :long)
@@ -507,14 +494,11 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(confidence).to eq(0.0)
       end
 
-      it 'adds points for EMA alignment' do
+      it "adds points for EMA alignment" do
         allow(series).to receive(:ema).with(20).and_return(110.0)
         allow(series).to receive(:ema).with(50).and_return(100.0)
         allow(series).to receive(:ema).with(200).and_return(90.0)
-        allow(series).to receive(:atr).and_return(2.0)
-        allow(series).to receive(:adx).and_return(nil)
-        allow(series).to receive(:rsi).and_return(nil)
-        allow(series).to receive(:macd).and_return(nil)
+        allow(series).to receive_messages(atr: 2.0, adx: nil, rsi: nil, macd: nil)
         allow(builder).to receive(:calculate_supertrend).and_return(nil)
 
         confidence = builder.send(:calculate_confidence, :long)
@@ -522,12 +506,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(confidence).to be >= 30 # EMA20 > EMA50 (15) + EMA20 > EMA200 (15)
       end
 
-      it 'adds points for ADX strength' do
-        allow(series).to receive(:ema).and_return(nil)
-        allow(series).to receive(:atr).and_return(2.0)
-        allow(series).to receive(:adx).and_return(30.0)
-        allow(series).to receive(:rsi).and_return(nil)
-        allow(series).to receive(:macd).and_return(nil)
+      it "adds points for ADX strength" do
+        allow(series).to receive_messages(ema: nil, atr: 2.0, adx: 30.0, rsi: nil, macd: nil)
         allow(builder).to receive(:calculate_supertrend).and_return(nil)
 
         confidence = builder.send(:calculate_confidence, :long)
@@ -535,12 +515,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(confidence).to be >= 20 # ADX > 25
       end
 
-      it 'adds points for RSI in optimal range' do
-        allow(series).to receive(:ema).and_return(nil)
-        allow(series).to receive(:atr).and_return(2.0)
-        allow(series).to receive(:adx).and_return(nil)
-        allow(series).to receive(:rsi).and_return(60.0)
-        allow(series).to receive(:macd).and_return(nil)
+      it "adds points for RSI in optimal range" do
+        allow(series).to receive_messages(ema: nil, atr: 2.0, adx: nil, rsi: 60.0, macd: nil)
         allow(builder).to receive(:calculate_supertrend).and_return(nil)
 
         confidence = builder.send(:calculate_confidence, :long)
@@ -548,12 +524,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(confidence).to be >= 15 # RSI between 50-70
       end
 
-      it 'adds points for MACD bullish crossover' do
-        allow(series).to receive(:ema).and_return(nil)
-        allow(series).to receive(:atr).and_return(2.0)
-        allow(series).to receive(:adx).and_return(nil)
-        allow(series).to receive(:rsi).and_return(nil)
-        allow(series).to receive(:macd).and_return([1.0, 0.5, 0.3])
+      it "adds points for MACD bullish crossover" do
+        allow(series).to receive_messages(ema: nil, atr: 2.0, adx: nil, rsi: nil, macd: [1.0, 0.5, 0.3])
         allow(builder).to receive(:calculate_supertrend).and_return(nil)
 
         confidence = builder.send(:calculate_confidence, :long)
@@ -562,14 +534,14 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context '#estimate_holding_days' do
+    describe "#estimate_holding_days" do
       let(:builder) { described_class.new(instrument: instrument, daily_series: series) }
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({})
       end
 
-      it 'estimates holding days based on profit target and volatility' do
+      it "estimates holding days based on profit target and volatility" do
         allow(series).to receive(:atr).and_return(2.0)
         allow(series.candles.last).to receive(:close).and_return(100.0)
 
@@ -579,7 +551,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(holding_days).to be_between(5, 20)
       end
 
-      it 'handles missing ATR' do
+      it "handles missing ATR" do
         allow(series).to receive(:atr).and_return(nil)
         allow(series.candles.last).to receive(:close).and_return(100.0)
 
@@ -589,7 +561,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(holding_days).to be_between(5, 20)
       end
 
-      it 'clamps to minimum 5 days' do
+      it "clamps to minimum 5 days" do
         allow(series).to receive(:atr).and_return(10.0)
         allow(series.candles.last).to receive(:close).and_return(100.0)
 
@@ -598,7 +570,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(holding_days).to be >= 5
       end
 
-      it 'clamps to maximum 20 days' do
+      it "clamps to maximum 20 days" do
         allow(series).to receive(:atr).and_return(0.1)
         allow(series.candles.last).to receive(:close).and_return(100.0)
 
@@ -608,21 +580,21 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context '#build_metadata' do
+    describe "#build_metadata" do
       let(:builder) { described_class.new(instrument: instrument, daily_series: series) }
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({})
       end
 
-      it 'builds metadata hash with indicators' do
+      it "builds metadata hash with indicators" do
         allow(series).to receive(:ema).with(20).and_return(110.0)
         allow(series).to receive(:ema).with(50).and_return(100.0)
         allow(series).to receive(:ema).with(200).and_return(90.0)
         allow(series).to receive(:atr).and_return(2.0)
         allow(series.candles.last).to receive(:close).and_return(100.0)
         allow(builder).to receive(:calculate_supertrend).and_return({
-          direction: :bullish
+          direction: :bullish,
         })
 
         metadata = builder.send(:build_metadata, 100.0, 95.0, 110.0, :long)
@@ -638,11 +610,10 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(metadata).to have_key(:created_at)
       end
 
-      it 'calculates risk amount correctly' do
+      it "calculates risk amount correctly" do
         allow(series).to receive(:atr).and_return(2.0)
         allow(series.candles.last).to receive(:close).and_return(100.0)
-        allow(builder).to receive(:calculate_position_size).and_return(10)
-        allow(builder).to receive(:calculate_supertrend).and_return(nil)
+        allow(builder).to receive_messages(calculate_position_size: 10, calculate_supertrend: nil)
 
         metadata = builder.send(:build_metadata, 100.0, 95.0, 110.0, :long)
 
@@ -650,18 +621,18 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context '#determine_direction' do
+    describe "#determine_direction" do
       let(:builder) { described_class.new(instrument: instrument, daily_series: series) }
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({})
       end
 
-      it 'returns :long for bullish setup' do
+      it "returns :long for bullish setup" do
         allow(series).to receive(:ema).with(20).and_return(110.0)
         allow(series).to receive(:ema).with(50).and_return(100.0)
         allow(builder).to receive(:calculate_supertrend).and_return({
-          direction: :bullish
+          direction: :bullish,
         })
 
         direction = builder.send(:determine_direction)
@@ -669,11 +640,11 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(direction).to eq(:long)
       end
 
-      it 'returns :short for bearish setup' do
+      it "returns :short for bearish setup" do
         allow(series).to receive(:ema).with(20).and_return(90.0)
         allow(series).to receive(:ema).with(50).and_return(100.0)
         allow(builder).to receive(:calculate_supertrend).and_return({
-          direction: :bearish
+          direction: :bearish,
         })
 
         direction = builder.send(:determine_direction)
@@ -681,7 +652,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(direction).to eq(:short)
       end
 
-      it 'returns nil when no trend detected' do
+      it "returns nil when no trend detected" do
         allow(series).to receive(:ema).and_return(nil)
         allow(builder).to receive(:calculate_supertrend).and_return(nil)
 
@@ -690,11 +661,11 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
         expect(direction).to be_nil
       end
 
-      it 'returns nil when EMA alignment is wrong' do
+      it "returns nil when EMA alignment is wrong" do
         allow(series).to receive(:ema).with(20).and_return(90.0)
         allow(series).to receive(:ema).with(50).and_return(100.0)
         allow(builder).to receive(:calculate_supertrend).and_return({
-          direction: :bullish
+          direction: :bullish,
         })
 
         direction = builder.send(:determine_direction)
@@ -703,11 +674,11 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context 'with short direction' do
+    context "with short direction" do
       let(:bearish_series) do
-        cs = CandleSeries.new(symbol: 'TEST', interval: '1D')
+        cs = CandleSeries.new(symbol: "TEST", interval: "1D")
         60.times do |i|
-          base_price = 100.0 - (i * 0.5)  # Downtrend for bearish signal
+          base_price = 100.0 - (i * 0.5) # Downtrend for bearish signal
           cs.add_candle(
             Candle.new(
               timestamp: i.days.ago,
@@ -715,8 +686,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
               high: base_price + 1.0,
               low: base_price - 2.0,
               close: base_price - 1.5,
-              volume: 1_000_000
-            )
+              volume: 1_000_000,
+            ),
           )
         end
         cs
@@ -724,18 +695,18 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_call_original
-        allow(AlgoConfig).to receive(:fetch).with([:indicators, :supertrend]).and_return({
+        allow(AlgoConfig).to receive(:fetch).with(%i[indicators supertrend]).and_return({
           period: 10,
-          multiplier: 3.0
+          multiplier: 3.0,
         })
-        allow(AlgoConfig).to receive(:fetch).with([:swing_trading, :strategy]).and_return({})
+        allow(AlgoConfig).to receive(:fetch).with(%i[swing_trading strategy]).and_return({})
         allow(AlgoConfig).to receive(:fetch).with(:risk).and_return({})
       end
 
-      it 'generates short signal when bearish trend detected' do
+      it "generates short signal when bearish trend detected" do
         result = described_class.call(
           instrument: instrument,
-          daily_series: bearish_series
+          daily_series: bearish_series,
         )
 
         # May return nil if no bearish trend is detected
@@ -747,9 +718,9 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
     end
 
-    context 'with weekly series' do
+    context "with weekly series" do
       let(:weekly_series) do
-        cs = CandleSeries.new(symbol: 'TEST', interval: '1W')
+        cs = CandleSeries.new(symbol: "TEST", interval: "1W")
         20.times do |i|
           base_price = 100.0 + (i * 2.0)
           cs.add_candle(
@@ -759,8 +730,8 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
               high: base_price + 5.0,
               low: base_price - 3.0,
               close: base_price + 3.0,
-              volume: 5_000_000
-            )
+              volume: 5_000_000,
+            ),
           )
         end
         cs
@@ -768,19 +739,19 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
 
       before do
         allow(AlgoConfig).to receive(:fetch).and_call_original
-        allow(AlgoConfig).to receive(:fetch).with([:indicators, :supertrend]).and_return({
+        allow(AlgoConfig).to receive(:fetch).with(%i[indicators supertrend]).and_return({
           period: 10,
-          multiplier: 3.0
+          multiplier: 3.0,
         })
-        allow(AlgoConfig).to receive(:fetch).with([:swing_trading, :strategy]).and_return({})
+        allow(AlgoConfig).to receive(:fetch).with(%i[swing_trading strategy]).and_return({})
         allow(AlgoConfig).to receive(:fetch).with(:risk).and_return({})
       end
 
-      it 'accepts weekly series for multi-timeframe analysis' do
+      it "accepts weekly series for multi-timeframe analysis" do
         result = described_class.call(
           instrument: instrument,
           daily_series: series,
-          weekly_series: weekly_series
+          weekly_series: weekly_series,
         )
 
         # Weekly series is optional, so result may or may not be nil
@@ -792,4 +763,3 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
     end
   end
 end
-

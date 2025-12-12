@@ -13,10 +13,10 @@ module Screeners
 
     def initialize(candidates:, limit: nil)
       @candidates = candidates
-      @limit = limit || AlgoConfig.fetch([:swing_trading, :ai_ranking, :max_candidates]) || 20
-      @config = AlgoConfig.fetch([:swing_trading, :ai_ranking]) || {}
+      @limit = limit || AlgoConfig.fetch(%i[swing_trading ai_ranking max_candidates]) || 20
+      @config = AlgoConfig.fetch(%i[swing_trading ai_ranking]) || {}
       @enabled = @config[:enabled] != false
-      @model = @config[:model] || 'gpt-4o-mini'
+      @model = @config[:model] || "gpt-4o-mini"
       @temperature = @config[:temperature] || 0.3
     end
 
@@ -37,7 +37,7 @@ module Screeners
           ai_confidence: result[:confidence],
           ai_summary: result[:summary],
           ai_holding_days: result[:holding_days],
-          ai_risk: result[:risk]
+          ai_risk: result[:risk],
         )
       end
 
@@ -80,7 +80,7 @@ module Screeners
       indicators = candidate[:indicators] || candidate[:daily_indicators] || {}
       metadata = candidate[:metadata] || {}
 
-      prompt = <<~PROMPT
+      <<~PROMPT
         You are a technical analysis expert for swing trading (holding period: 5-20 days).
 
         Analyze this stock candidate and provide a JSON response with:
@@ -102,13 +102,9 @@ module Screeners
         - ATR: #{indicators[:atr]&.round(2) || 'N/A'}
         - Supertrend: #{indicators[:supertrend]&.dig(:direction) || 'N/A'}
 
-        #{if metadata[:trend_alignment]
-            "Trend Alignment: #{metadata[:trend_alignment].join(', ')}"
-          end}
+        #{"Trend Alignment: #{metadata[:trend_alignment].join(', ')}" if metadata[:trend_alignment]}
 
-        #{if metadata[:momentum]
-            "Momentum: #{metadata[:momentum][:change_5d] || 'N/A'}% (5-day change)"
-          end}
+        #{"Momentum: #{metadata[:momentum][:change_5d] || 'N/A'}% (5-day change)" if metadata[:momentum]}
 
         Provide ONLY valid JSON in this format:
         {
@@ -119,29 +115,27 @@ module Screeners
           "risk": "medium"
         }
       PROMPT
-
-      prompt
     end
 
     def call_openai(prompt)
       return nil unless openai_api_key
 
-      require 'ruby/openai' unless defined?(Ruby::OpenAI)
+      require "ruby/openai" unless defined?(Ruby::OpenAI)
 
       client = Ruby::OpenAI::Client.new(access_token: openai_api_key)
       response = client.chat(
         parameters: {
           model: @model,
           messages: [
-            { role: 'system', content: 'You are a technical analysis expert. Always respond with valid JSON only.' },
-            { role: 'user', content: prompt }
+            { role: "system", content: "You are a technical analysis expert. Always respond with valid JSON only." },
+            { role: "user", content: prompt },
           ],
           temperature: @temperature,
-          max_tokens: 200
-        }
+          max_tokens: 200,
+        },
       )
 
-      response.dig('choices', 0, 'message', 'content')
+      response.dig("choices", 0, "message", "content")
     rescue StandardError => e
       Rails.logger.error("[Screeners::AIRanker] OpenAI API error: #{e.message}")
       nil
@@ -152,19 +146,19 @@ module Screeners
 
       # Try to extract JSON from response (handle markdown code blocks)
       json_text = response.strip
-      json_text = json_text.gsub(/```json\s*/, '').gsub(/```\s*$/, '') if json_text.include?('```')
+      json_text = json_text.gsub(/```json\s*/, "").gsub(/```\s*$/, "") if json_text.include?("```")
 
       parsed = JSON.parse(json_text)
       {
-        score: parsed['score']&.to_f || 0,
-        confidence: parsed['confidence']&.to_f || 0,
-        summary: parsed['summary'] || '',
-        holding_days: parsed['holding_days']&.to_i || 10,
-        risk: parsed['risk']&.downcase || 'medium'
+        score: parsed["score"]&.to_f || 0,
+        confidence: parsed["confidence"]&.to_f || 0,
+        summary: parsed["summary"] || "",
+        holding_days: parsed["holding_days"]&.to_i || 10,
+        risk: parsed["risk"]&.downcase || "medium",
       }
     rescue JSON::ParserError => e
       Rails.logger.error("[Screeners::AIRanker] Failed to parse JSON response: #{e.message}")
-      Rails.logger.debug("[Screeners::AIRanker] Response: #{response}")
+      Rails.logger.debug { "[Screeners::AIRanker] Response: #{response}" }
       nil
     rescue StandardError => e
       Rails.logger.error("[Screeners::AIRanker] Error parsing response: #{e.message}")
@@ -172,18 +166,18 @@ module Screeners
     end
 
     def openai_api_key
-      ENV['OPENAI_API_KEY']
+      ENV.fetch("OPENAI_API_KEY", nil)
     end
 
     def rate_limit_exceeded?
-      today = Date.today.to_s
+      today = Time.zone.today.to_s
       cache_key = "ai_ranker_calls:#{today}"
       calls_today = Rails.cache.read(cache_key) || 0
       calls_today >= MAX_CALLS_PER_DAY
     end
 
     def track_api_call
-      today = Date.today.to_s
+      today = Time.zone.today.to_s
       cache_key = "ai_ranker_calls:#{today}"
       calls_today = Rails.cache.read(cache_key) || 0
       Rails.cache.write(cache_key, calls_today + 1, expires_in: 1.day)
@@ -196,4 +190,3 @@ module Screeners
     end
   end
 end
-

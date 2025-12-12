@@ -1,94 +1,94 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
-RSpec.describe Order, type: :model do
-  let(:instrument) { create(:instrument, symbol_name: 'RELIANCE', security_id: '11536', exchange: 'NSE', segment: 'E') }
+RSpec.describe Order do
+  let(:instrument) { create(:instrument, symbol_name: "RELIANCE", security_id: "11536", exchange: "NSE", segment: "E") }
   let(:order) do
     create(:order,
-      instrument: instrument,
-      symbol: 'RELIANCE',
-      security_id: '11536',
-      product_type: 'EQUITY',
-      order_type: 'MARKET',
-      transaction_type: 'BUY',
-      quantity: 100,
-      status: 'pending')
+           instrument: instrument,
+           symbol: "RELIANCE",
+           security_id: "11536",
+           product_type: "EQUITY",
+           order_type: "MARKET",
+           transaction_type: "BUY",
+           quantity: 100,
+           status: "pending")
   end
 
-  describe 'validations' do
-    it 'is valid with valid attributes' do
+  describe "validations" do
+    it "is valid with valid attributes" do
       expect(order).to be_valid
     end
 
-    it 'requires client_order_id' do
+    it "requires client_order_id" do
       order.client_order_id = nil
       expect(order).not_to be_valid
       expect(order.errors[:client_order_id]).to include("can't be blank")
     end
 
-    it 'requires unique client_order_id' do
+    it "requires unique client_order_id" do
       duplicate_id = "B-11536-#{SecureRandom.hex(6)}"
       create(:order, client_order_id: duplicate_id, instrument: instrument)
       order.client_order_id = duplicate_id
       expect(order).not_to be_valid
-      expect(order.errors[:client_order_id]).to include('has already been taken')
+      expect(order.errors[:client_order_id]).to include("has already been taken")
     end
 
-    it 'requires transaction_type to be BUY or SELL' do
-      order.transaction_type = 'INVALID'
+    it "requires transaction_type to be BUY or SELL" do
+      order.transaction_type = "INVALID"
       expect(order).not_to be_valid
-      expect(order.errors[:transaction_type]).to include('is not included in the list')
+      expect(order.errors[:transaction_type]).to include("is not included in the list")
     end
 
-    it 'requires order_type to be valid' do
-      order.order_type = 'INVALID'
+    it "requires order_type to be valid" do
+      order.order_type = "INVALID"
       expect(order).not_to be_valid
-      expect(order.errors[:order_type]).to include('is not included in the list')
+      expect(order.errors[:order_type]).to include("is not included in the list")
     end
 
-    it 'requires quantity to be positive' do
+    it "requires quantity to be positive" do
       order.quantity = 0
       expect(order).not_to be_valid
-      expect(order.errors[:quantity]).to include('must be greater than 0')
+      expect(order.errors[:quantity]).to include("must be greater than 0")
     end
   end
 
-  describe 'scopes' do
+  describe "scopes" do
     before do
-      create(:order, status: 'pending', instrument: instrument)
-      create(:order, status: 'placed', instrument: instrument)
-      create(:order, status: 'executed', instrument: instrument)
-      create(:order, status: 'rejected', instrument: instrument)
-      create(:order, status: 'cancelled', instrument: instrument)
-      create(:order, status: 'failed', instrument: instrument)
-      create(:order, status: 'pending', dry_run: true, instrument: instrument)
+      create(:order, status: "pending", instrument: instrument)
+      create(:order, status: "placed", instrument: instrument)
+      create(:order, status: "executed", instrument: instrument)
+      create(:order, status: "rejected", instrument: instrument)
+      create(:order, status: "cancelled", instrument: instrument)
+      create(:order, status: "failed", instrument: instrument)
+      create(:order, status: "pending", dry_run: true, instrument: instrument)
     end
 
-    it 'filters by status' do
-      expect(Order.pending.count).to eq(2)
-      expect(Order.placed.count).to eq(1)
-      expect(Order.executed.count).to eq(1)
-      expect(Order.rejected.count).to eq(1)
-      expect(Order.cancelled.count).to eq(1)
-      expect(Order.failed.count).to eq(1)
+    it "filters by status" do
+      expect(described_class.pending.count).to eq(2)
+      expect(described_class.placed.count).to eq(1)
+      expect(described_class.executed.count).to eq(1)
+      expect(described_class.rejected.count).to eq(1)
+      expect(described_class.cancelled.count).to eq(1)
+      expect(described_class.failed.count).to eq(1)
     end
 
-    it 'filters active orders' do
-      expect(Order.active.count).to eq(3) # 2 pending + 1 placed
+    it "filters active orders" do
+      expect(described_class.active.count).to eq(3) # 2 pending + 1 placed
     end
 
-    it 'filters dry-run orders' do
-      expect(Order.dry_run.count).to eq(1)
-      expect(Order.real.count).to eq(6)
+    it "filters dry-run orders" do
+      expect(described_class.dry_run.count).to eq(1)
+      expect(described_class.real.count).to eq(6)
     end
 
-    it 'filters recent orders' do
+    it "filters recent orders" do
       # Create orders with explicit timestamps to ensure ordering
       old_order = create(:order, instrument: instrument, created_at: 10.days.ago)
       new_order = create(:order, instrument: instrument, created_at: 1.day.ago)
 
-      recent = Order.recent.to_a
+      recent = described_class.recent.to_a
       # Verify scope returns orders ordered by created_at desc
       expect(recent).to include(new_order)
       expect(recent).to include(old_order)
@@ -98,127 +98,127 @@ RSpec.describe Order, type: :model do
     end
   end
 
-  describe 'helper methods' do
-    it 'returns metadata as hash' do
-      order.update(metadata: { test: 'value' }.to_json)
-      expect(order.metadata_hash).to eq({ 'test' => 'value' })
+  describe "helper methods" do
+    it "returns metadata as hash" do
+      order.update!(metadata: { test: "value" }.to_json)
+      expect(order.metadata_hash).to eq({ "test" => "value" })
     end
 
-    it 'returns empty hash for nil metadata' do
-      order.update(metadata: nil)
+    it "returns empty hash for nil metadata" do
+      order.update!(metadata: nil)
       expect(order.metadata_hash).to eq({})
     end
 
-    it 'returns dhan_response as hash' do
-      order.update(dhan_response: { orderId: '123' }.to_json)
-      expect(order.dhan_response_hash).to eq({ 'orderId' => '123' })
+    it "returns dhan_response as hash" do
+      order.update!(dhan_response: { orderId: "123" }.to_json)
+      expect(order.dhan_response_hash).to eq({ "orderId" => "123" })
     end
 
-    it 'checks status methods' do
-      order.status = 'pending'
+    it "checks status methods" do
+      order.status = "pending"
       expect(order.pending?).to be true
       expect(order.active?).to be true
 
-      order.status = 'placed'
+      order.status = "placed"
       expect(order.placed?).to be true
       expect(order.active?).to be true
 
-      order.status = 'executed'
+      order.status = "executed"
       expect(order.executed?).to be true
       expect(order.active?).to be false
     end
 
-    it 'checks transaction type' do
-      order.transaction_type = 'BUY'
+    it "checks transaction type" do
+      order.transaction_type = "BUY"
       expect(order.buy?).to be true
       expect(order.sell?).to be false
 
-      order.transaction_type = 'SELL'
+      order.transaction_type = "SELL"
       expect(order.buy?).to be false
       expect(order.sell?).to be true
     end
 
-    it 'calculates total value' do
+    it "calculates total value" do
       order.price = 100.0
       order.quantity = 10
       expect(order.total_value).to eq(1000.0)
     end
 
-    it 'calculates filled value' do
+    it "calculates filled value" do
       order.average_price = 105.0
       order.filled_quantity = 5
       expect(order.filled_value).to eq(525.0)
     end
 
-    it 'calculates total value with nil price' do
+    it "calculates total value with nil price" do
       order.price = nil
       order.quantity = 10
       expect(order.total_value).to eq(0)
     end
 
-    it 'calculates filled value with nil average_price' do
+    it "calculates filled value with nil average_price" do
       order.average_price = nil
       order.filled_quantity = 5
       expect(order.filled_value).to eq(0)
     end
 
-    it 'checks cancelled status' do
-      order.status = 'cancelled'
+    it "checks cancelled status" do
+      order.status = "cancelled"
       expect(order.cancelled?).to be true
       expect(order.active?).to be false
     end
 
-    it 'checks failed status' do
-      order.status = 'failed'
+    it "checks failed status" do
+      order.status = "failed"
       expect(order.failed?).to be true
       expect(order.active?).to be false
     end
 
-    it 'checks requires_approval?' do
+    it "checks requires_approval?" do
       order.requires_approval = true
       order.approved_at = nil
       order.rejected_at = nil
       expect(order.requires_approval?).to be true
     end
 
-    it 'returns false for requires_approval? if already approved' do
+    it "returns false for requires_approval? if already approved" do
       order.requires_approval = true
       order.approved_at = Time.current
       order.rejected_at = nil
       expect(order.requires_approval?).to be false
     end
 
-    it 'returns false for requires_approval? if already rejected' do
+    it "returns false for requires_approval? if already rejected" do
       order.requires_approval = true
       order.approved_at = nil
       order.rejected_at = Time.current
       expect(order.requires_approval?).to be false
     end
 
-    it 'checks approved status' do
+    it "checks approved status" do
       order.approved_at = Time.current
       expect(order.approved?).to be true
     end
 
-    it 'checks rejected status' do
+    it "checks rejected status" do
       order.rejected_at = Time.current
       expect(order.rejected?).to be true
     end
 
-    it 'checks approval_pending status' do
+    it "checks approval_pending status" do
       order.requires_approval = true
       order.approved_at = nil
       order.rejected_at = nil
       expect(order.approval_pending?).to be true
     end
 
-    it 'returns false for approval_pending? if not requires_approval' do
+    it "returns false for approval_pending? if not requires_approval" do
       order.requires_approval = false
       expect(order.approval_pending?).to be false
     end
   end
 
-  describe 'approval scopes' do
+  describe "approval scopes" do
     before do
       create(:order, requires_approval: true, approved_at: nil, rejected_at: nil, instrument: instrument)
       create(:order, requires_approval: true, approved_at: Time.current, rejected_at: nil, instrument: instrument)
@@ -226,86 +226,86 @@ RSpec.describe Order, type: :model do
       create(:order, requires_approval: false, instrument: instrument)
     end
 
-    it 'filters orders requiring approval' do
-      expect(Order.requires_approval.count).to eq(1)
+    it "filters orders requiring approval" do
+      expect(described_class.requires_approval.count).to eq(1)
     end
 
-    it 'filters approved orders' do
-      expect(Order.approved.count).to eq(1)
+    it "filters approved orders" do
+      expect(described_class.approved.count).to eq(1)
     end
 
-    it 'filters rejected orders' do
-      expect(Order.rejected_for_approval.count).to eq(1)
+    it "filters rejected orders" do
+      expect(described_class.rejected_for_approval.count).to eq(1)
     end
 
-    it 'filters pending approval orders' do
-      expect(Order.pending_approval.count).to eq(1)
+    it "filters pending approval orders" do
+      expect(described_class.pending_approval.count).to eq(1)
     end
   end
 
-  describe '#dhan_response_hash' do
-    it 'returns empty hash for nil dhan_response' do
+  describe "#dhan_response_hash" do
+    it "returns empty hash for nil dhan_response" do
       order.dhan_response = nil
       expect(order.dhan_response_hash).to eq({})
     end
 
-    it 'returns empty hash for invalid JSON' do
-      order.dhan_response = 'invalid json'
+    it "returns empty hash for invalid JSON" do
+      order.dhan_response = "invalid json"
       expect(order.dhan_response_hash).to eq({})
     end
   end
 
-  describe 'edge cases' do
-    it 'handles metadata with invalid JSON gracefully' do
-      order.update(metadata: 'invalid json')
+  describe "edge cases" do
+    it "handles metadata with invalid JSON gracefully" do
+      order.update!(metadata: "invalid json")
       expect(order.metadata_hash).to eq({})
     end
 
-    it 'handles empty string metadata' do
-      order.update(metadata: '')
+    it "handles empty string metadata" do
+      order.update!(metadata: "")
       expect(order.metadata_hash).to eq({})
     end
 
-    it 'handles dhan_response with empty string' do
-      order.update(dhan_response: '')
+    it "handles dhan_response with empty string" do
+      order.update!(dhan_response: "")
       expect(order.dhan_response_hash).to eq({})
     end
 
-    it 'handles total_value with zero quantity' do
+    it "handles total_value with zero quantity" do
       order.price = 100.0
       order.quantity = 0
       expect(order.total_value).to eq(0)
     end
 
-    it 'handles filled_value with zero filled_quantity' do
+    it "handles filled_value with zero filled_quantity" do
       order.average_price = 105.0
       order.filled_quantity = 0
       expect(order.filled_value).to eq(0)
     end
 
-    it 'handles requires_approval? when requires_approval is false' do
+    it "handles requires_approval? when requires_approval is false" do
       order.requires_approval = false
       expect(order.requires_approval?).to be false
     end
 
-    it 'handles approved? when approved_at is nil' do
+    it "handles approved? when approved_at is nil" do
       order.approved_at = nil
       expect(order.approved?).to be false
     end
 
-    it 'handles rejected? when rejected_at is nil' do
+    it "handles rejected? when rejected_at is nil" do
       order.rejected_at = nil
       expect(order.rejected?).to be false
     end
 
-    it 'handles approval_pending? when already approved' do
+    it "handles approval_pending? when already approved" do
       order.requires_approval = true
       order.approved_at = Time.current
       order.rejected_at = nil
       expect(order.approval_pending?).to be false
     end
 
-    it 'handles approval_pending? when already rejected' do
+    it "handles approval_pending? when already rejected" do
       order.requires_approval = true
       order.approved_at = nil
       order.rejected_at = Time.current
@@ -313,4 +313,3 @@ RSpec.describe Order, type: :model do
     end
   end
 end
-

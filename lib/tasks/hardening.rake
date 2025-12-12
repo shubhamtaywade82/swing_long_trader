@@ -11,40 +11,40 @@ module HardeningHelpers
 
       {
         passed: missing.empty?,
-        message: missing.empty? ? 'All required vars set' : "Missing: #{missing.join(', ')}"
+        message: missing.empty? ? "All required vars set" : "Missing: #{missing.join(', ')}",
       }
     end
   end
 
   unless respond_to?(:check_database)
     def check_database
-      ActiveRecord::Base.connection.execute('SELECT 1')
+      ActiveRecord::Base.connection.execute("SELECT 1")
       {
         passed: true,
-        message: 'Connected successfully'
+        message: "Connected successfully",
       }
     rescue StandardError => e
       {
         passed: false,
-        message: "Connection failed: #{e.message}"
+        message: "Connection failed: #{e.message}",
       }
     end
   end
 
   unless respond_to?(:check_api_credentials)
     def check_api_credentials
-      dhan_ok = ENV['DHANHQ_CLIENT_ID'].present? && ENV['DHANHQ_ACCESS_TOKEN'].present?
-      telegram_ok = ENV['TELEGRAM_BOT_TOKEN'].present? && ENV['TELEGRAM_CHAT_ID'].present?
-      openai_ok = ENV['OPENAI_API_KEY'].present?
+      dhan_ok = ENV["DHANHQ_CLIENT_ID"].present? && ENV["DHANHQ_ACCESS_TOKEN"].present?
+      telegram_ok = ENV["TELEGRAM_BOT_TOKEN"].present? && ENV["TELEGRAM_CHAT_ID"].present?
+      openai_ok = ENV["OPENAI_API_KEY"].present?
 
       status = []
-      status << 'DhanHQ' if dhan_ok
-      status << 'Telegram' if telegram_ok
-      status << 'OpenAI' if openai_ok
+      status << "DhanHQ" if dhan_ok
+      status << "Telegram" if telegram_ok
+      status << "OpenAI" if openai_ok
 
       {
         passed: dhan_ok, # At least DhanHQ required
-        message: "Configured: #{status.join(', ')}"
+        message: "Configured: #{status.join(', ')}",
       }
     end
   end
@@ -53,18 +53,18 @@ module HardeningHelpers
     def check_secrets_in_code
       # Basic check - look for hardcoded credentials
       found = false
-      Dir.glob('app/**/*.rb').each do |file|
+      Dir.glob("app/**/*.rb").each do |file|
         content = File.read(file)
-        if content.match?(/password.*=.*['"][^'"]{8,}['"]/i) ||
-           content.match?(/api[_-]?key.*=.*['"][^'"]{10,}['"]/i)
-          found = true
-          break
-        end
+        next unless content.match?(/password.*=.*['"][^'"]{8,}['"]/i) ||
+                    content.match?(/api[_-]?key.*=.*['"][^'"]{10,}['"]/i)
+
+        found = true
+        break
       end
 
       {
         passed: !found,
-        message: found ? 'Potential secrets found' : 'No secrets in code'
+        message: found ? "Potential secrets found" : "No secrets in code",
       }
     end
   end
@@ -72,10 +72,10 @@ module HardeningHelpers
   unless respond_to?(:check_tests)
     def check_tests
       # Check if test files exist
-      test_files = Dir.glob('spec/**/*_spec.rb')
+      test_files = Dir.glob("spec/**/*_spec.rb")
       {
         passed: test_files.any?,
-        message: "#{test_files.size} test files found"
+        message: "#{test_files.size} test files found",
       }
     end
   end
@@ -87,51 +87,51 @@ module HardeningHelpers
         pending = ActiveRecord::Base.connection.migration_context.needs_migration?
       else
         # Rails 8.1+ approach
-        migration_context = ActiveRecord::MigrationContext.new(Rails.root.join('db', 'migrate'))
+        migration_context = ActiveRecord::MigrationContext.new(Rails.root.join("db/migrate"))
         pending = migration_context.needs_migration?
       end
       {
         passed: !pending,
-        message: pending ? 'Pending migrations' : 'All migrations applied'
+        message: pending ? "Pending migrations" : "All migrations applied",
       }
     rescue StandardError => e
       {
         passed: false,
-        message: "Migration check failed: #{e.message}"
+        message: "Migration check failed: #{e.message}",
       }
     end
   end
 
   unless respond_to?(:check_configuration)
     def check_configuration
-      config_file = Rails.root.join('config', 'algo.yml')
+      config_file = Rails.root.join("config/algo.yml")
       {
         passed: config_file.exist?,
-        message: config_file.exist? ? 'Configuration file exists' : 'Missing config/algo.yml'
+        message: config_file.exist? ? "Configuration file exists" : "Missing config/algo.yml",
       }
     end
   end
 end
 
 namespace :hardening do
-  desc 'Run pre-production checks'
+  desc "Run pre-production checks"
   task check: :environment do
     puts "🔒 Running Pre-Production Checks"
     puts "=" * 60
 
     checks = {
-      'Environment Variables' => HardeningHelpers.check_env_vars,
-      'Database Connection' => HardeningHelpers.check_database,
-      'API Credentials' => HardeningHelpers.check_api_credentials,
-      'Secrets in Code' => HardeningHelpers.check_secrets_in_code,
-      'Test Coverage' => HardeningHelpers.check_tests,
-      'Migrations' => HardeningHelpers.check_migrations,
-      'Configuration' => HardeningHelpers.check_configuration
+      "Environment Variables" => HardeningHelpers.check_env_vars,
+      "Database Connection" => HardeningHelpers.check_database,
+      "API Credentials" => HardeningHelpers.check_api_credentials,
+      "Secrets in Code" => HardeningHelpers.check_secrets_in_code,
+      "Test Coverage" => HardeningHelpers.check_tests,
+      "Migrations" => HardeningHelpers.check_migrations,
+      "Configuration" => HardeningHelpers.check_configuration,
     }
 
     all_passed = true
     checks.each do |name, result|
-      status = result[:passed] ? '✅' : '❌'
+      status = result[:passed] ? "✅" : "❌"
       puts "#{status} #{name}: #{result[:message]}"
       all_passed = false unless result[:passed]
     end
@@ -145,7 +145,7 @@ namespace :hardening do
     end
   end
 
-  desc 'Check for secrets in code'
+  desc "Check for secrets in code"
   task secrets: :environment do
     puts "🔍 Checking for secrets in code..."
 
@@ -153,12 +153,12 @@ namespace :hardening do
       /password\s*=\s*['"][^'"]+['"]/i,
       /api[_-]?key\s*=\s*['"][^'"]+['"]/i,
       /token\s*=\s*['"][^'"]+['"]/i,
-      /secret\s*=\s*['"][^'"]+['"]/i
+      /secret\s*=\s*['"][^'"]+['"]/i,
     ]
 
     found = false
-    Dir.glob('app/**/*.rb').each do |file|
-      next if file.include?('test') || file.include?('spec')
+    Dir.glob("app/**/*.rb").each do |file|
+      next if file.include?("test") || file.include?("spec")
 
       content = File.read(file)
       patterns.each do |pattern|
@@ -177,16 +177,16 @@ namespace :hardening do
     end
   end
 
-  desc 'Verify database indexes'
+  desc "Verify database indexes"
   task indexes: :environment do
     puts "📊 Checking database indexes..."
 
     required_indexes = [
-      ['instruments', 'security_id'],
-      ['instruments', ['security_id', 'symbol_name', 'exchange', 'segment']],
-      ['candle_series', ['instrument_id', 'timeframe', 'timestamp']],
-      ['candle_series', ['instrument_id', 'timeframe']],
-      ['candle_series', 'timestamp']
+      %w[instruments security_id],
+      ["instruments", %w[security_id symbol_name exchange segment]],
+      ["candle_series", %w[instrument_id timeframe timestamp]],
+      ["candle_series", %w[instrument_id timeframe]],
+      %w[candle_series timestamp],
     ]
 
     missing = []
@@ -197,9 +197,7 @@ namespace :hardening do
       exists = ActiveRecord::Base.connection.index_exists?(table, columns_array, name: index_name) ||
                ActiveRecord::Base.connection.index_exists?(table, columns_array)
 
-      unless exists
-        missing << "#{table}.#{columns_array.join(', ')}"
-      end
+      missing << "#{table}.#{columns_array.join(', ')}" unless exists
     end
 
     if missing.any?
@@ -211,5 +209,3 @@ namespace :hardening do
     end
   end
 end
-
-

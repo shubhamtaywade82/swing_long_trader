@@ -4,7 +4,8 @@ module Backtesting
   # Parameter optimization using grid search
   # Uses walk-forward analysis to avoid overfitting
   class Optimizer < ApplicationService
-    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, parameter_ranges: {}, optimization_metric: :sharpe_ratio, use_walk_forward: true, backtester_class: SwingBacktester, save_to_db: false)
+    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, parameter_ranges: {},
+                  optimization_metric: :sharpe_ratio, use_walk_forward: true, backtester_class: SwingBacktester, save_to_db: false)
       new(
         instruments: instruments,
         from_date: from_date,
@@ -13,11 +14,12 @@ module Backtesting
         parameter_ranges: parameter_ranges,
         optimization_metric: optimization_metric,
         use_walk_forward: use_walk_forward,
-        backtester_class: backtester_class
+        backtester_class: backtester_class,
       ).call(save_to_db: save_to_db)
     end
 
-    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, parameter_ranges: {}, optimization_metric: :sharpe_ratio, use_walk_forward: true, backtester_class: SwingBacktester)
+    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, parameter_ranges: {},
+                   optimization_metric: :sharpe_ratio, use_walk_forward: true, backtester_class: SwingBacktester)
       @instruments = instruments
       @from_date = from_date
       @to_date = to_date
@@ -49,7 +51,7 @@ module Backtesting
         @results << {
           parameters: params,
           metrics: result[:metrics],
-          score: calculate_score(result[:metrics])
+          score: calculate_score(result[:metrics]),
         }
       end
 
@@ -65,7 +67,7 @@ module Backtesting
         best_metrics: @results.first&.dig(:metrics),
         all_results: @results,
         sensitivity_analysis: sensitivity,
-        total_combinations_tested: @results.size
+        total_combinations_tested: @results.size,
       }
 
       # Save to database if requested
@@ -96,10 +98,10 @@ module Backtesting
       if keys.size == 1
         first_values.map { |v| { first_key => v } }
       else
-        remaining_keys = keys[1..]
-        remaining_values = values[1..]
+        remaining_keys = keys.drop(1)
+        remaining_values = values.drop(1)
         remaining_combinations = generate_combinations(
-          remaining_keys.zip(remaining_values).to_h
+          remaining_keys.zip(remaining_values).to_h,
         )
 
         first_values.flat_map do |first_value|
@@ -122,7 +124,7 @@ module Backtesting
           in_sample_days: 90,
           out_of_sample_days: 30,
           backtester_class: @backtester_class,
-          backtester_options: build_backtester_options(params)
+          backtester_options: build_backtester_options(params),
         )
 
         return { success: false } unless walk_forward_result[:success]
@@ -139,9 +141,9 @@ module Backtesting
             sortino_ratio: oos_agg[:avg_sortino_ratio] || 0,
             win_rate: oos_agg[:avg_win_rate] || 0,
             profit_factor: oos_agg[:avg_profit_factor] || 0,
-            total_trades: oos_agg[:total_trades] || 0
+            total_trades: oos_agg[:total_trades] || 0,
           },
-          walk_forward: walk_forward_result
+          walk_forward: walk_forward_result,
         }
       else
         # Simple backtest (faster but may overfit)
@@ -150,14 +152,14 @@ module Backtesting
           from_date: @from_date,
           to_date: @to_date,
           initial_capital: @initial_capital,
-          **build_backtester_options(params)
+          **build_backtester_options(params),
         )
 
         return { success: false } unless backtest_result[:success]
 
         {
           success: true,
-          metrics: backtest_result[:results]
+          metrics: backtest_result[:results],
         }
       end
     end
@@ -203,10 +205,10 @@ module Backtesting
         metrics[:win_rate] || 0
       when :composite
         # Composite score: weighted combination
-        (metrics[:sharpe_ratio] || 0) * 0.4 +
-          (metrics[:total_return] || 0) * 0.2 +
-          (metrics[:win_rate] || 0) * 0.2 +
-          (metrics[:profit_factor] || 0) * 0.2
+        ((metrics[:sharpe_ratio] || 0) * 0.4) +
+          ((metrics[:total_return] || 0) * 0.2) +
+          ((metrics[:win_rate] || 0) * 0.2) +
+          ((metrics[:profit_factor] || 0) * 0.2)
       else
         metrics[@optimization_metric] || 0
       end
@@ -231,14 +233,14 @@ module Backtesting
           {
             value: value,
             avg_score: avg_score.round(2),
-            count: results.size
+            count: results.size,
           }
         end.sort_by { |s| -s[:avg_score] }
 
         sensitivity[param_name] = {
           best_value: param_sensitivity.first[:value],
           best_score: param_sensitivity.first[:avg_score],
-          all_values: param_sensitivity
+          all_values: param_sensitivity,
         }
       end
 
@@ -246,4 +248,3 @@ module Backtesting
     end
   end
 end
-

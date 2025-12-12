@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 namespace :verify do
-  desc 'Verify all critical risk items are addressed'
+  desc "Verify all critical risk items are addressed"
   task risks: :environment do
     puts "\n=== 🔍 RISK ITEMS VERIFICATION ===\n\n"
 
@@ -33,7 +33,7 @@ namespace :verify do
 
     # 2. Verify intraday fetch is only for finalists
     puts "\n2. Checking intraday fetcher usage..."
-    intraday_files = Dir.glob('app/**/*.rb').select { |f| File.read(f).include?('IntradayFetcher') }
+    intraday_files = Dir.glob("app/**/*.rb").select { |f| File.read(f).include?("IntradayFetcher") }
     if intraday_files.any?
       puts "   ✅ IntradayFetcher found in: #{intraday_files.size} file(s)"
       puts "      - Verify it's only called for finalists (top candidates)"
@@ -44,10 +44,10 @@ namespace :verify do
 
     # 3. Verify OpenAI cost controls
     puts "\n3. Checking OpenAI cost controls..."
-    openai_client = File.read('app/services/openai/client.rb')
-    has_cache = openai_client.include?('fetch_from_cache') || openai_client.include?('cache_result')
-    has_rate_limit = openai_client.include?('rate_limit_exceeded?') || openai_client.include?('MAX_CALLS_PER_DAY')
-    has_cost_monitoring = openai_client.include?('check_cost_thresholds') || openai_client.include?('calculate_cost')
+    openai_client = File.read("app/services/openai/client.rb")
+    has_cache = openai_client.include?("fetch_from_cache") || openai_client.include?("cache_result")
+    has_rate_limit = openai_client.include?("rate_limit_exceeded?") || openai_client.include?("MAX_CALLS_PER_DAY")
+    has_cost_monitoring = openai_client.include?("check_cost_thresholds") || openai_client.include?("calculate_cost")
 
     if has_cache && has_rate_limit && has_cost_monitoring
       puts "   ✅ OpenAI cost controls implemented:"
@@ -66,7 +66,7 @@ namespace :verify do
     puts "\n4. Checking job backend..."
     if defined?(SolidQueue)
       puts "   ✅ SolidQueue is configured"
-    elsif File.read('config/application.rb').include?('solid_queue')
+    elsif File.read("config/application.rb").include?("solid_queue")
       puts "   ✅ SolidQueue configured in application.rb"
     else
       puts "   ❌ SolidQueue not found - using in-memory jobs?"
@@ -75,9 +75,9 @@ namespace :verify do
 
     # 5. Verify job failure alerts
     puts "\n5. Checking job failure alerts..."
-    job_logging = File.read('app/jobs/concerns/job_logging.rb')
-    has_error_handling = job_logging.include?('rescue') || job_logging.include?('error')
-    has_telegram_alert = job_logging.include?('Telegram') || job_logging.include?('send_error_alert')
+    job_logging = File.read("app/jobs/concerns/job_logging.rb")
+    has_error_handling = job_logging.include?("rescue") || job_logging.include?("error")
+    has_telegram_alert = job_logging.include?("Telegram") || job_logging.include?("send_error_alert")
 
     if has_error_handling && has_telegram_alert
       puts "   ✅ Job failure alerts implemented"
@@ -89,8 +89,8 @@ namespace :verify do
 
     # 6. Verify idempotency (order placement)
     puts "\n6. Checking order idempotency..."
-    orders_service = File.read('app/services/dhan/orders.rb')
-    has_idempotency = orders_service.include?('client_order_id') || orders_service.include?('check_duplicate_order') || orders_service.include?('idempotent')
+    orders_service = File.read("app/services/dhan/orders.rb")
+    has_idempotency = orders_service.include?("client_order_id") || orders_service.include?("check_duplicate_order") || orders_service.include?("idempotent")
 
     if has_idempotency
       puts "   ✅ Order idempotency implemented (client_order_id check)"
@@ -101,8 +101,8 @@ namespace :verify do
 
     # 7. Verify risk limits
     puts "\n7. Checking risk limits..."
-    executor = File.read('app/services/strategies/swing/executor.rb')
-    has_risk_checks = executor.include?('check_risk_limits') || executor.include?('max_position_size') || executor.include?('max_exposure') || executor.include?('circuit_breaker')
+    executor = File.read("app/services/strategies/swing/executor.rb")
+    has_risk_checks = executor.include?("check_risk_limits") || executor.include?("max_position_size") || executor.include?("max_exposure") || executor.include?("circuit_breaker")
 
     if has_risk_checks
       puts "   ✅ Risk limits implemented"
@@ -113,8 +113,8 @@ namespace :verify do
 
     # 8. Verify auto-execution safeguards
     puts "\n8. Checking auto-execution safeguards..."
-    has_dry_run = orders_service.include?('dry_run') || File.read('config/algo.yml').include?('dry_run')
-    has_manual_accept = executor.include?('manual') || executor.include?('confirmation')
+    has_dry_run = orders_service.include?("dry_run") || File.read("config/algo.yml").include?("dry_run")
+    has_manual_accept = executor.include?("manual") || executor.include?("confirmation")
 
     if has_dry_run
       puts "   ✅ Dry-run mode available"
@@ -138,4 +138,3 @@ namespace :verify do
     puts "\n"
   end
 end
-

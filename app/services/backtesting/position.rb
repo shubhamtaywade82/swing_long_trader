@@ -6,7 +6,8 @@ module Backtesting
     attr_reader :instrument_id, :entry_date, :entry_price, :quantity, :direction, :stop_loss, :take_profit
     attr_accessor :exit_date, :exit_price, :exit_reason, :trailing_stop_pct, :trailing_stop_amount
 
-    def initialize(instrument_id:, entry_date:, entry_price:, quantity:, direction:, stop_loss:, take_profit:, trailing_stop_pct: nil, trailing_stop_amount: nil)
+    def initialize(instrument_id:, entry_date:, entry_price:, quantity:, direction:, stop_loss:, take_profit:,
+                   trailing_stop_pct: nil, trailing_stop_amount: nil)
       @instrument_id = instrument_id
       @entry_date = entry_date
       @entry_price = entry_price.to_f
@@ -67,7 +68,7 @@ module Backtesting
       end
     end
 
-    def check_exit(current_price, current_date)
+    def check_exit(current_price, _current_date)
       return nil if closed?
 
       # Update trailing stop if enabled
@@ -75,18 +76,18 @@ module Backtesting
 
       # Check stop loss (may have been updated by trailing stop)
       if @direction == :long && current_price <= @stop_loss
-        reason = (@stop_loss != @initial_stop_loss) ? 'trailing_stop' : 'stop_loss'
+        reason = @stop_loss == @initial_stop_loss ? "stop_loss" : "trailing_stop"
         return { exit_price: @stop_loss, exit_reason: reason }
       elsif @direction == :short && current_price >= @stop_loss
-        reason = (@stop_loss != @initial_stop_loss) ? 'trailing_stop' : 'stop_loss'
+        reason = @stop_loss == @initial_stop_loss ? "stop_loss" : "trailing_stop"
         return { exit_price: @stop_loss, exit_reason: reason }
       end
 
       # Check take profit
       if @direction == :long && current_price >= @take_profit
-        return { exit_price: @take_profit, exit_reason: 'take_profit' }
+        return { exit_price: @take_profit, exit_reason: "take_profit" }
       elsif @direction == :short && current_price <= @take_profit
-        return { exit_price: @take_profit, exit_reason: 'take_profit' }
+        return { exit_price: @take_profit, exit_reason: "take_profit" }
       end
 
       nil
@@ -102,7 +103,7 @@ module Backtesting
 
         # Calculate new trailing stop
         new_stop = if @trailing_stop_pct
-                     @highest_price * (1 - @trailing_stop_pct / 100.0)
+                     @highest_price * (1 - (@trailing_stop_pct / 100.0))
                    elsif @trailing_stop_amount
                      @highest_price - @trailing_stop_amount
                    else
@@ -117,7 +118,7 @@ module Backtesting
 
         # Calculate new trailing stop
         new_stop = if @trailing_stop_pct
-                     @lowest_price * (1 + @trailing_stop_pct / 100.0)
+                     @lowest_price * (1 + (@trailing_stop_pct / 100.0))
                    elsif @trailing_stop_amount
                      @lowest_price + @trailing_stop_amount
                    else
@@ -134,9 +135,8 @@ module Backtesting
     end
 
     def holding_days(current_date = nil)
-      end_date = current_date || @exit_date || Date.today
+      end_date = current_date || @exit_date || Time.zone.today
       (end_date.to_date - @entry_date.to_date).to_i
     end
   end
 end
-

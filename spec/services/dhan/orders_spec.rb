@@ -1,20 +1,20 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe Dhan::Orders, type: :service do
-  let(:instrument) { create(:instrument, symbol_name: 'RELIANCE', security_id: '11536', exchange: 'NSE', segment: 'E') }
+  let(:instrument) { create(:instrument, symbol_name: "RELIANCE", security_id: "11536", exchange: "NSE", segment: "E") }
   let(:client_order_id) { "B-#{instrument.security_id}-#{Time.current.to_i.to_s[-6..]}" }
 
-  describe '.place_order' do
-    context 'with valid parameters' do
-      let(:dhan_client) { double('DhanHQ::Client') }
+  describe ".place_order" do
+    context "with valid parameters" do
+      let(:dhan_client) { double("DhanHQ::Client") }
       let(:success_response) do
         {
-          'status' => 'success',
-          'orderId' => 'DHAN_123456',
-          'exchangeOrderId' => 'EXCH_789',
-          'message' => 'Order placed successfully'
+          "status" => "success",
+          "orderId" => "DHAN_123456",
+          "exchangeOrderId" => "EXCH_789",
+          "message" => "Order placed successfully",
         }
       end
 
@@ -23,82 +23,82 @@ RSpec.describe Dhan::Orders, type: :service do
         allow(dhan_client).to receive(:place_order).and_return(success_response)
       end
 
-      it 'places a market order successfully' do
+      it "places a market order successfully" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
         )
 
         expect(result[:success]).to be true
         expect(result[:order]).to be_present
-        expect(result[:order].status).to eq('placed')
-        expect(result[:order].dhan_order_id).to eq('DHAN_123456')
+        expect(result[:order].status).to eq("placed")
+        expect(result[:order].dhan_order_id).to eq("DHAN_123456")
       end
 
-      it 'creates order record with correct attributes' do
+      it "creates order record with correct attributes" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
+          order_type: "MARKET",
+          transaction_type: "BUY",
           quantity: 100,
-          client_order_id: client_order_id
+          client_order_id: client_order_id,
         )
 
         order = result[:order]
         expect(order.instrument).to eq(instrument)
         expect(order.client_order_id).to eq(client_order_id)
         expect(order.symbol).to eq(instrument.symbol_name)
-        expect(order.order_type).to eq('MARKET')
-        expect(order.transaction_type).to eq('BUY')
+        expect(order.order_type).to eq("MARKET")
+        expect(order.transaction_type).to eq("BUY")
         expect(order.quantity).to eq(100)
       end
 
-      it 'places a limit order with price' do
+      it "places a limit order with price" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'LIMIT',
-          transaction_type: 'BUY',
+          order_type: "LIMIT",
+          transaction_type: "BUY",
           quantity: 100,
-          price: 100.0
+          price: 100.0,
         )
 
         expect(result[:success]).to be true
-        expect(result[:order].order_type).to eq('LIMIT')
+        expect(result[:order].order_type).to eq("LIMIT")
         expect(result[:order].price).to eq(100.0)
       end
 
-      it 'places a stop-loss order with trigger price' do
+      it "places a stop-loss order with trigger price" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'SL',
-          transaction_type: 'SELL',
+          order_type: "SL",
+          transaction_type: "SELL",
           quantity: 100,
-          trigger_price: 95.0
+          trigger_price: 95.0,
         )
 
         expect(result[:success]).to be true
-        expect(result[:order].order_type).to eq('SL')
+        expect(result[:order].order_type).to eq("SL")
         expect(result[:order].trigger_price).to eq(95.0)
       end
     end
 
-    context 'with idempotency' do
+    context "with idempotency" do
       let!(:existing_order) do
         create(:order,
-          instrument: instrument,
-          client_order_id: client_order_id,
-          status: 'placed')
+               instrument: instrument,
+               client_order_id: client_order_id,
+               status: "placed")
       end
 
-      it 'returns existing order if client_order_id matches' do
+      it "returns existing order if client_order_id matches" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
+          order_type: "MARKET",
+          transaction_type: "BUY",
           quantity: 100,
-          client_order_id: client_order_id
+          client_order_id: client_order_id,
         )
 
         expect(result[:success]).to be true
@@ -107,34 +107,34 @@ RSpec.describe Dhan::Orders, type: :service do
       end
     end
 
-    context 'with dry-run mode' do
+    context "with dry-run mode" do
       before do
         allow(ENV).to receive(:[]).and_call_original
-        allow(ENV).to receive(:[]).with('DRY_RUN').and_return('true')
+        allow(ENV).to receive(:[]).with("DRY_RUN").and_return("true")
       end
 
-      it 'simulates order placement without calling DhanHQ API' do
+      it "simulates order placement without calling DhanHQ API" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
         )
 
         expect(result[:success]).to be true
         expect(result[:dry_run]).to be true
         expect(result[:order].dry_run).to be true
-        expect(result[:order].dhan_order_id).to start_with('DRY_RUN_')
-        expect(result[:dhan_response]['status']).to eq('success')
+        expect(result[:order].dhan_order_id).to start_with("DRY_RUN_")
+        expect(result[:dhan_response]["status"]).to eq("success")
       end
 
-      it 'allows explicit dry_run parameter to override ENV' do
+      it "allows explicit dry_run parameter to override ENV" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
+          order_type: "MARKET",
+          transaction_type: "BUY",
           quantity: 100,
-          dry_run: false
+          dry_run: false,
         )
 
         # Should still be dry-run if ENV is set, but we can test explicit override
@@ -142,62 +142,62 @@ RSpec.describe Dhan::Orders, type: :service do
       end
     end
 
-    context 'with validation errors' do
-      it 'rejects invalid quantity' do
+    context "with validation errors" do
+      it "rejects invalid quantity" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 0
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 0,
         )
 
         expect(result[:success]).to be false
-        expect(result[:error]).to include('Invalid quantity')
+        expect(result[:error]).to include("Invalid quantity")
       end
 
-      it 'rejects limit order without price' do
+      it "rejects limit order without price" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'LIMIT',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "LIMIT",
+          transaction_type: "BUY",
+          quantity: 100,
         )
 
         expect(result[:success]).to be false
-        expect(result[:error]).to include('Price required')
+        expect(result[:error]).to include("Price required")
       end
 
-      it 'rejects stop-loss order without trigger price' do
+      it "rejects stop-loss order without trigger price" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'SL',
-          transaction_type: 'SELL',
-          quantity: 100
+          order_type: "SL",
+          transaction_type: "SELL",
+          quantity: 100,
         )
 
         expect(result[:success]).to be false
-        expect(result[:error]).to include('Trigger price required')
+        expect(result[:error]).to include("Trigger price required")
       end
 
-      it 'rejects invalid instrument' do
+      it "rejects invalid instrument" do
         result = described_class.place_order(
           instrument: nil,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
         )
 
         expect(result[:success]).to be false
-        expect(result[:error]).to include('Invalid instrument')
+        expect(result[:error]).to include("Invalid instrument")
       end
     end
 
-    context 'with DhanHQ API errors' do
-      let(:dhan_client) { double('DhanHQ::Client') }
+    context "with DhanHQ API errors" do
+      let(:dhan_client) { double("DhanHQ::Client") }
       let(:error_response) do
         {
-          'status' => 'error',
-          'message' => 'Insufficient funds'
+          "status" => "error",
+          "message" => "Insufficient funds",
         }
       end
 
@@ -206,200 +206,200 @@ RSpec.describe Dhan::Orders, type: :service do
         allow(dhan_client).to receive(:place_order).and_return(error_response)
       end
 
-      it 'handles API rejection' do
+      it "handles API rejection" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
-        )
-
-        expect(result[:success]).to be false
-        expect(result[:error]).to include('Insufficient funds')
-        expect(result[:order].status).to eq('rejected')
-      end
-    end
-
-    context 'with DhanHQ client unavailable' do
-      before do
-        allow(DhanHQ::Client).to receive(:new).and_raise(StandardError, 'Client unavailable')
-      end
-
-      it 'handles client creation failure' do
-        result = described_class.place_order(
-          instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
-        )
-
-        expect(result[:success]).to be false
-        expect(result[:error]).to include('not available')
-      end
-    end
-
-    context 'when order requires approval' do
-      let(:dhan_client) { double('DhanHQ::Client') }
-
-      before do
-        allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
-      end
-
-      it 'returns error if order not approved' do
-        order = create(:order,
-          instrument: instrument,
-          requires_approval: true,
-          status: 'pending')
-
-        service = described_class.new(
-          instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
-        )
-
-        allow(service).to receive(:create_order_record).and_return(order)
-
-        result = service.send(:execute_order_placement, order)
-
-        expect(result[:success]).to be false
-        expect(result[:error]).to include('requires manual approval')
-      end
-    end
-
-    context 'when order placement raises exception' do
-      let(:dhan_client) { double('DhanHQ::Client') }
-
-      before do
-        allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
-        allow(dhan_client).to receive(:place_order).and_raise(StandardError, 'Network error')
-      end
-
-      it 'handles exception gracefully' do
-        result = described_class.place_order(
-          instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
-        )
-
-        expect(result[:success]).to be false
-        expect(result[:error]).to include('Network error')
-      end
-    end
-
-    context 'with SL-M order type' do
-      let(:dhan_client) { double('DhanHQ::Client') }
-      let(:success_response) do
-        {
-          'status' => 'success',
-          'orderId' => 'DHAN_123456',
-          'message' => 'Order placed successfully'
-        }
-      end
-
-      before do
-        allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
-        allow(dhan_client).to receive(:place_order).and_return(success_response)
-      end
-
-      it 'places SL-M order with trigger price' do
-        result = described_class.place_order(
-          instrument: instrument,
-          order_type: 'SL-M',
-          transaction_type: 'SELL',
+          order_type: "MARKET",
+          transaction_type: "BUY",
           quantity: 100,
-          trigger_price: 95.0
-        )
-
-        expect(result[:success]).to be true
-        expect(result[:order].order_type).to eq('SL-M')
-      end
-    end
-
-    context 'with SELL transaction type' do
-      let(:dhan_client) { double('DhanHQ::Client') }
-      let(:success_response) do
-        {
-          'status' => 'success',
-          'orderId' => 'DHAN_123456',
-          'message' => 'Order placed successfully'
-        }
-      end
-
-      before do
-        allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
-        allow(dhan_client).to receive(:place_order).and_return(success_response)
-      end
-
-      it 'places SELL order successfully' do
-        result = described_class.place_order(
-          instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'SELL',
-          quantity: 100
-        )
-
-        expect(result[:success]).to be true
-        expect(result[:order].transaction_type).to eq('SELL')
-      end
-    end
-
-    context 'with invalid transaction type' do
-      it 'rejects invalid transaction type' do
-        result = described_class.place_order(
-          instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'INVALID',
-          quantity: 100
         )
 
         expect(result[:success]).to be false
-        expect(result[:error]).to include('Invalid transaction type')
+        expect(result[:error]).to include("Insufficient funds")
+        expect(result[:order].status).to eq("rejected")
       end
     end
 
-    context 'with invalid order type' do
-      it 'rejects invalid order type' do
+    context "with DhanHQ client unavailable" do
+      before do
+        allow(DhanHQ::Client).to receive(:new).and_raise(StandardError, "Client unavailable")
+      end
+
+      it "handles client creation failure" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'INVALID',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
         )
 
         expect(result[:success]).to be false
-        expect(result[:error]).to include('Invalid order type')
+        expect(result[:error]).to include("not available")
       end
     end
 
-    context 'when order is approved' do
-      let(:dhan_client) { double('DhanHQ::Client') }
-      let(:success_response) do
-        {
-          'status' => 'success',
-          'orderId' => 'DHAN_123456',
-          'message' => 'Order placed successfully'
-        }
-      end
+    context "when order requires approval" do
+      let(:dhan_client) { double("DhanHQ::Client") }
 
       before do
         allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
-        allow(dhan_client).to receive(:place_order).and_return(success_response)
       end
 
-      it 'places order when approved' do
+      it "returns error if order not approved" do
         order = create(:order,
-          instrument: instrument,
-          requires_approval: true,
-          status: 'approved',
-          approved_at: Time.current)
+                       instrument: instrument,
+                       requires_approval: true,
+                       status: "pending")
 
         service = described_class.new(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
+        )
+
+        allow(service).to receive(:create_order_record).and_return(order)
+
+        result = service.send(:execute_order_placement, order)
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include("requires manual approval")
+      end
+    end
+
+    context "when order placement raises exception" do
+      let(:dhan_client) { double("DhanHQ::Client") }
+
+      before do
+        allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
+        allow(dhan_client).to receive(:place_order).and_raise(StandardError, "Network error")
+      end
+
+      it "handles exception gracefully" do
+        result = described_class.place_order(
+          instrument: instrument,
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include("Network error")
+      end
+    end
+
+    context "with SL-M order type" do
+      let(:dhan_client) { double("DhanHQ::Client") }
+      let(:success_response) do
+        {
+          "status" => "success",
+          "orderId" => "DHAN_123456",
+          "message" => "Order placed successfully",
+        }
+      end
+
+      before do
+        allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
+        allow(dhan_client).to receive(:place_order).and_return(success_response)
+      end
+
+      it "places SL-M order with trigger price" do
+        result = described_class.place_order(
+          instrument: instrument,
+          order_type: "SL-M",
+          transaction_type: "SELL",
+          quantity: 100,
+          trigger_price: 95.0,
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:order].order_type).to eq("SL-M")
+      end
+    end
+
+    context "with SELL transaction type" do
+      let(:dhan_client) { double("DhanHQ::Client") }
+      let(:success_response) do
+        {
+          "status" => "success",
+          "orderId" => "DHAN_123456",
+          "message" => "Order placed successfully",
+        }
+      end
+
+      before do
+        allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
+        allow(dhan_client).to receive(:place_order).and_return(success_response)
+      end
+
+      it "places SELL order successfully" do
+        result = described_class.place_order(
+          instrument: instrument,
+          order_type: "MARKET",
+          transaction_type: "SELL",
+          quantity: 100,
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:order].transaction_type).to eq("SELL")
+      end
+    end
+
+    context "with invalid transaction type" do
+      it "rejects invalid transaction type" do
+        result = described_class.place_order(
+          instrument: instrument,
+          order_type: "MARKET",
+          transaction_type: "INVALID",
+          quantity: 100,
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include("Invalid transaction type")
+      end
+    end
+
+    context "with invalid order type" do
+      it "rejects invalid order type" do
+        result = described_class.place_order(
+          instrument: instrument,
+          order_type: "INVALID",
+          transaction_type: "BUY",
+          quantity: 100,
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include("Invalid order type")
+      end
+    end
+
+    context "when order is approved" do
+      let(:dhan_client) { double("DhanHQ::Client") }
+      let(:success_response) do
+        {
+          "status" => "success",
+          "orderId" => "DHAN_123456",
+          "message" => "Order placed successfully",
+        }
+      end
+
+      before do
+        allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
+        allow(dhan_client).to receive(:place_order).and_return(success_response)
+      end
+
+      it "places order when approved" do
+        order = create(:order,
+                       instrument: instrument,
+                       requires_approval: true,
+                       status: "approved",
+                       approved_at: Time.current)
+
+        service = described_class.new(
+          instrument: instrument,
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
         )
 
         allow(service).to receive(:create_order_record).and_return(order)
@@ -410,71 +410,71 @@ RSpec.describe Dhan::Orders, type: :service do
       end
     end
 
-    context 'when DhanHQ gem is not installed' do
+    context "when DhanHQ gem is not installed" do
       before do
         allow(DhanHQ).to receive(:const_defined?).with(:Client).and_return(false)
-        allow(described_class).to receive(:require).with('dhan_hq').and_raise(LoadError, 'cannot load such file')
+        allow(described_class).to receive(:require).with("dhan_hq").and_raise(LoadError, "cannot load such file")
       end
 
-      it 'handles LoadError gracefully' do
+      it "handles LoadError gracefully" do
         service = described_class.new(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
         )
 
         order = service.send(:create_order_record)
         result = service.send(:execute_order_placement, order)
 
         expect(result[:success]).to be false
-        expect(result[:error]).to include('not available')
+        expect(result[:error]).to include("not available")
       end
     end
 
-    context 'when order creation fails' do
-      it 'handles order creation exception' do
+    context "when order creation fails" do
+      it "handles order creation exception" do
         allow(Order).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(Order.new))
 
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
         )
 
         expect(result[:success]).to be false
       end
     end
 
-    context 'when response has no status' do
-      let(:dhan_client) { double('DhanHQ::Client') }
-      let(:unexpected_response) { { 'orderId' => 'DHAN_123456' } }
+    context "when response has no status" do
+      let(:dhan_client) { double("DhanHQ::Client") }
+      let(:unexpected_response) { { "orderId" => "DHAN_123456" } }
 
       before do
         allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
         allow(dhan_client).to receive(:place_order).and_return(unexpected_response)
       end
 
-      it 'handles unexpected response format' do
+      it "handles unexpected response format" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
         )
 
         expect(result[:success]).to be false
-        expect(result[:order].status).to eq('rejected')
+        expect(result[:order].status).to eq("rejected")
       end
     end
 
-    context 'when notification sending fails' do
-      let(:dhan_client) { double('DhanHQ::Client') }
+    context "when notification sending fails" do
+      let(:dhan_client) { double("DhanHQ::Client") }
       let(:error_response) do
         {
-          'status' => 'error',
-          'message' => 'Order rejected'
+          "status" => "error",
+          "message" => "Order rejected",
         }
       end
 
@@ -482,16 +482,16 @@ RSpec.describe Dhan::Orders, type: :service do
         allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
         allow(dhan_client).to receive(:place_order).and_return(error_response)
         allow(AlgoConfig).to receive(:fetch).and_return(true)
-        allow(Telegram::Notifier).to receive(:send_error_alert).and_raise(StandardError, 'Notification failed')
+        allow(Telegram::Notifier).to receive(:send_error_alert).and_raise(StandardError, "Notification failed")
         allow(Rails.logger).to receive(:error)
       end
 
-      it 'handles notification failure gracefully' do
+      it "handles notification failure gracefully" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
         )
 
         expect(result[:success]).to be false
@@ -499,18 +499,18 @@ RSpec.describe Dhan::Orders, type: :service do
       end
     end
 
-    context 'with private methods' do
+    context "with private methods" do
       let(:service) do
         described_class.new(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: 100
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: 100,
         )
       end
 
-      describe '#generate_client_order_id' do
-        it 'generates unique client order ID' do
+      describe "#generate_client_order_id" do
+        it "generates unique client order ID" do
           id1 = service.send(:generate_client_order_id)
           id2 = service.send(:generate_client_order_id)
 
@@ -519,13 +519,13 @@ RSpec.describe Dhan::Orders, type: :service do
         end
       end
 
-      describe '#build_order_payload' do
-        it 'builds payload for market order' do
+      describe "#build_order_payload" do
+        it "builds payload for market order" do
           service = described_class.new(
             instrument: instrument,
-            order_type: 'MARKET',
-            transaction_type: 'BUY',
-            quantity: 100
+            order_type: "MARKET",
+            transaction_type: "BUY",
+            quantity: 100,
           )
 
           payload = service.send(:build_order_payload)
@@ -533,73 +533,73 @@ RSpec.describe Dhan::Orders, type: :service do
           expect(payload).to have_key(:security_id)
           expect(payload).to have_key(:transaction_type)
           expect(payload).to have_key(:quantity)
-          expect(payload[:order_type]).to eq('MARKET')
+          expect(payload[:order_type]).to eq("MARKET")
         end
 
-        it 'builds payload for limit order' do
+        it "builds payload for limit order" do
           service = described_class.new(
             instrument: instrument,
-            order_type: 'LIMIT',
-            transaction_type: 'BUY',
+            order_type: "LIMIT",
+            transaction_type: "BUY",
             quantity: 100,
-            price: 100.0
+            price: 100.0,
           )
 
           payload = service.send(:build_order_payload)
 
-          expect(payload[:order_type]).to eq('LIMIT')
+          expect(payload[:order_type]).to eq("LIMIT")
           expect(payload[:price]).to eq(100.0)
         end
 
-        it 'builds payload for SL order' do
+        it "builds payload for SL order" do
           service = described_class.new(
             instrument: instrument,
-            order_type: 'SL',
-            transaction_type: 'SELL',
+            order_type: "SL",
+            transaction_type: "SELL",
             quantity: 100,
-            trigger_price: 95.0
+            trigger_price: 95.0,
           )
 
           payload = service.send(:build_order_payload)
 
-          expect(payload[:order_type]).to eq('SL')
+          expect(payload[:order_type]).to eq("SL")
           expect(payload[:trigger_price]).to eq(95.0)
         end
       end
 
-      describe '#update_order_from_response' do
+      describe "#update_order_from_response" do
         let(:order) { create(:order, instrument: instrument) }
 
-        it 'updates order with successful response' do
+        it "updates order with successful response" do
           response = {
-            'status' => 'success',
-            'orderId' => 'DHAN_123456',
-            'exchangeOrderId' => 'EXCH_789'
+            "status" => "success",
+            "orderId" => "DHAN_123456",
+            "exchangeOrderId" => "EXCH_789",
           }
 
           service.send(:update_order_from_response, order, response)
 
           order.reload
-          expect(order.dhan_order_id).to eq('DHAN_123456')
-          expect(order.exchange_order_id).to eq('EXCH_789')
-          expect(order.status).to eq('placed')
+          expect(order.dhan_order_id).to eq("DHAN_123456")
+          expect(order.exchange_order_id).to eq("EXCH_789")
+          expect(order.status).to eq("placed")
         end
 
-        it 'handles response without exchangeOrderId' do
+        it "handles response without exchangeOrderId" do
           response = {
-            'status' => 'success',
-            'orderId' => 'DHAN_123456'
+            "status" => "success",
+            "orderId" => "DHAN_123456",
           }
 
           service.send(:update_order_from_response, order, response)
 
           order.reload
-          expect(order.dhan_order_id).to eq('DHAN_123456')
+          expect(order.dhan_order_id).to eq("DHAN_123456")
         end
       end
 
-      describe '#log_order_request' do
-        it 'logs order request' do
+      describe "#log_order_request" do
+        it "logs order request" do
           order = create(:order, instrument: instrument)
           payload = { security_id: instrument.security_id, quantity: 100 }
           allow(Rails.logger).to receive(:info)
@@ -610,10 +610,10 @@ RSpec.describe Dhan::Orders, type: :service do
         end
       end
 
-      describe '#log_order_response' do
-        it 'logs order response' do
+      describe "#log_order_response" do
+        it "logs order response" do
           order = create(:order, instrument: instrument)
-          response = { 'status' => 'success', 'orderId' => 'DHAN_123456' }
+          response = { "status" => "success", "orderId" => "DHAN_123456" }
           allow(Rails.logger).to receive(:info)
 
           service.send(:log_order_response, order, response)
@@ -622,33 +622,33 @@ RSpec.describe Dhan::Orders, type: :service do
         end
       end
 
-      describe '#send_order_failure_alert' do
-        it 'sends alert for order failure' do
-          order = create(:order, instrument: instrument, status: 'rejected')
+      describe "#send_order_failure_alert" do
+        it "sends alert for order failure" do
+          order = create(:order, instrument: instrument, status: "rejected")
           allow(Telegram::Notifier).to receive(:send_error_alert)
           allow(AlgoConfig).to receive(:fetch).and_return(true)
 
-          service.send(:send_order_failure_alert, order, 'Order rejected')
+          service.send(:send_order_failure_alert, order, "Order rejected")
 
           expect(Telegram::Notifier).to have_received(:send_error_alert)
         end
 
-        it 'handles notification failure gracefully' do
-          order = create(:order, instrument: instrument, status: 'rejected')
-          allow(Telegram::Notifier).to receive(:send_error_alert).and_raise(StandardError, 'Notification failed')
+        it "handles notification failure gracefully" do
+          order = create(:order, instrument: instrument, status: "rejected")
+          allow(Telegram::Notifier).to receive(:send_error_alert).and_raise(StandardError, "Notification failed")
           allow(Rails.logger).to receive(:error)
           allow(AlgoConfig).to receive(:fetch).and_return(true)
 
-          service.send(:send_order_failure_alert, order, 'Order rejected')
+          service.send(:send_order_failure_alert, order, "Order rejected")
 
           expect(Rails.logger).to have_received(:error)
         end
       end
 
-      describe '#handle_order_error' do
-        it 'handles order errors' do
+      describe "#handle_order_error" do
+        it "handles order errors" do
           order = create(:order, instrument: instrument)
-          error = StandardError.new('Test error')
+          error = StandardError.new("Test error")
           allow(Rails.logger).to receive(:error)
           allow(Telegram::Notifier).to receive(:send_error_alert)
           allow(AlgoConfig).to receive(:fetch).and_return(true)
@@ -656,12 +656,12 @@ RSpec.describe Dhan::Orders, type: :service do
           result = service.send(:handle_order_error, order, error)
 
           expect(result[:success]).to be false
-          expect(result[:error]).to include('Test error')
+          expect(result[:error]).to include("Test error")
           expect(Rails.logger).to have_received(:error)
         end
 
-        it 'handles errors without order' do
-          error = StandardError.new('Test error')
+        it "handles errors without order" do
+          error = StandardError.new("Test error")
           allow(Rails.logger).to receive(:error)
 
           result = service.send(:handle_order_error, nil, error)
@@ -671,9 +671,9 @@ RSpec.describe Dhan::Orders, type: :service do
         end
       end
 
-      describe '#get_dhan_client' do
-        it 'returns DhanHQ client when available' do
-          dhan_client = double('DhanHQ::Client')
+      describe "#get_dhan_client" do
+        it "returns DhanHQ client when available" do
+          dhan_client = double("DhanHQ::Client")
           allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
 
           client = service.send(:get_dhan_client)
@@ -681,8 +681,8 @@ RSpec.describe Dhan::Orders, type: :service do
           expect(client).to eq(dhan_client)
         end
 
-        it 'returns nil when client unavailable' do
-          allow(DhanHQ::Client).to receive(:new).and_raise(StandardError, 'Client unavailable')
+        it "returns nil when client unavailable" do
+          allow(DhanHQ::Client).to receive(:new).and_raise(StandardError, "Client unavailable")
 
           client = service.send(:get_dhan_client)
 
@@ -691,50 +691,50 @@ RSpec.describe Dhan::Orders, type: :service do
       end
     end
 
-    context 'with edge cases' do
-      it 'handles string order types' do
+    context "with edge cases" do
+      it "handles string order types" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'market', # lowercase
-          transaction_type: 'buy', # lowercase
-          quantity: 100
+          order_type: "market", # lowercase
+          transaction_type: "buy", # lowercase
+          quantity: 100,
         )
 
         # Should normalize to uppercase
-        expect(result[:order].order_type).to eq('MARKET')
-        expect(result[:order].transaction_type).to eq('BUY')
+        expect(result[:order].order_type).to eq("MARKET")
+        expect(result[:order].transaction_type).to eq("BUY")
       end
 
-      it 'handles symbol order types' do
+      it "handles symbol order types" do
         result = described_class.place_order(
           instrument: instrument,
           order_type: :market, # symbol
           transaction_type: :buy, # symbol
-          quantity: 100
+          quantity: 100,
         )
 
-        expect(result[:order].order_type).to eq('MARKET')
-        expect(result[:order].transaction_type).to eq('BUY')
+        expect(result[:order].order_type).to eq("MARKET")
+        expect(result[:order].transaction_type).to eq("BUY")
       end
 
-      it 'handles string quantity' do
+      it "handles string quantity" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'MARKET',
-          transaction_type: 'BUY',
-          quantity: '100' # string
+          order_type: "MARKET",
+          transaction_type: "BUY",
+          quantity: "100", # string
         )
 
         expect(result[:order].quantity).to eq(100)
       end
 
-      it 'handles string price' do
+      it "handles string price" do
         result = described_class.place_order(
           instrument: instrument,
-          order_type: 'LIMIT',
-          transaction_type: 'BUY',
+          order_type: "LIMIT",
+          transaction_type: "BUY",
           quantity: 100,
-          price: '100.5' # string
+          price: "100.5", # string
         )
 
         expect(result[:order].price).to eq(100.5)
@@ -742,4 +742,3 @@ RSpec.describe Dhan::Orders, type: :service do
     end
   end
 end
-

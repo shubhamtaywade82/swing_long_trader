@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe CandleSeries, type: :service do
   # Test data: Simple uptrend with known values
   def create_uptrend_candles
-    series = CandleSeries.new(symbol: 'TEST', interval: '1D')
+    series = CandleSeries.new(symbol: "TEST", interval: "1D")
     # Create 60 candles with upward trend (enough for MACD: 26 + 9 = 35, Supertrend: 50+)
     60.times do |i|
       base_price = 100.0 + (i * 2.0)
@@ -16,8 +16,8 @@ RSpec.describe CandleSeries, type: :service do
           high: base_price + 3.0,
           low: base_price - 1.0,
           close: base_price + 2.0,
-          volume: 1_000_000
-        )
+          volume: 1_000_000,
+        ),
       )
     end
     series
@@ -25,7 +25,7 @@ RSpec.describe CandleSeries, type: :service do
 
   # Test data: Simple downtrend
   def create_downtrend_candles
-    series = CandleSeries.new(symbol: 'TEST', interval: '1D')
+    series = CandleSeries.new(symbol: "TEST", interval: "1D")
     # Create 60 candles with downward trend (enough for MACD: 26 + 9 = 35, Supertrend: 50+)
     60.times do |i|
       base_price = 120.0 - (i * 2.0)
@@ -36,8 +36,8 @@ RSpec.describe CandleSeries, type: :service do
           high: base_price + 1.0,
           low: base_price - 3.0,
           close: base_price - 2.0,
-          volume: 1_000_000
-        )
+          volume: 1_000_000,
+        ),
       )
     end
     series
@@ -45,7 +45,7 @@ RSpec.describe CandleSeries, type: :service do
 
   # Test data: Sideways/volatile market
   def create_sideways_candles
-    series = CandleSeries.new(symbol: 'TEST', interval: '1D')
+    series = CandleSeries.new(symbol: "TEST", interval: "1D")
     # Create 60 candles oscillating around 100 (enough for MACD: 26 + 9 = 35, Supertrend: 50+)
     60.times do |i|
       oscillation = Math.sin(i * 0.5) * 5.0
@@ -57,15 +57,15 @@ RSpec.describe CandleSeries, type: :service do
           high: base_price + 2.0,
           low: base_price - 2.0,
           close: base_price + (oscillation * 0.1),
-          volume: 1_000_000
-        )
+          volume: 1_000_000,
+        ),
       )
     end
     series
   end
 
-  describe 'EMA' do
-    it 'calculates correctly for uptrend' do
+  describe "EMA" do
+    it "calculates correctly for uptrend" do
       series = create_uptrend_candles
       ema20 = series.ema(20)
       ema50 = series.ema(50)
@@ -78,8 +78,8 @@ RSpec.describe CandleSeries, type: :service do
     end
   end
 
-  describe 'RSI' do
-    it 'is above 50 in uptrend' do
+  describe "RSI" do
+    it "is above 50 in uptrend" do
       series = create_uptrend_candles
       rsi = series.rsi(14)
 
@@ -89,7 +89,7 @@ RSpec.describe CandleSeries, type: :service do
       expect(rsi).to be <= 100
     end
 
-    it 'is below 50 in downtrend' do
+    it "is below 50 in downtrend" do
       series = create_downtrend_candles
       rsi = series.rsi(14)
 
@@ -100,8 +100,8 @@ RSpec.describe CandleSeries, type: :service do
     end
   end
 
-  describe 'ATR' do
-    it 'calculates volatility' do
+  describe "ATR" do
+    it "calculates volatility" do
       series = create_sideways_candles
       atr = series.atr(14)
 
@@ -111,8 +111,8 @@ RSpec.describe CandleSeries, type: :service do
     end
   end
 
-  describe 'MACD' do
-    it 'shows trend direction' do
+  describe "MACD" do
+    it "shows trend direction" do
       series = create_uptrend_candles
       macd_result = series.macd(12, 26, 9)
 
@@ -127,8 +127,8 @@ RSpec.describe CandleSeries, type: :service do
     end
   end
 
-  describe 'Supertrend' do
-    it 'identifies trend direction' do
+  describe "Supertrend" do
+    it "identifies trend direction" do
       series = create_uptrend_candles
       # Use training_period: 30 to reduce data requirement while still testing functionality
       supertrend = Indicators::Supertrend.new(series: series, period: 10, base_multiplier: 3.0, training_period: 30)
@@ -139,12 +139,12 @@ RSpec.describe CandleSeries, type: :service do
       expect(result).to be_a(Hash)
       # Should have trend direction
       expect(result).to have_key(:trend)
-      expect(result[:trend]).to be_in([:bullish, :bearish])
+      expect(result[:trend]).to be_in(%i[bullish bearish])
     end
   end
 
-  describe 'ADX' do
-    it 'measures trend strength' do
+  describe "ADX" do
+    it "measures trend strength" do
       series = create_uptrend_candles
       adx = series.adx(14)
 
@@ -155,4 +155,3 @@ RSpec.describe CandleSeries, type: :service do
     end
   end
 end
-

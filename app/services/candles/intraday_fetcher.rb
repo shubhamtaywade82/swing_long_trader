@@ -5,7 +5,7 @@ module Candles
   # Used for real-time analysis and screening
   class IntradayFetcher < ApplicationService
     SUPPORTED_INTERVALS = %w[15 60 120].freeze # 15min, 1hr, 2hr
-    DEFAULT_INTERVAL = '15'
+    DEFAULT_INTERVAL = "15"
     DEFAULT_DAYS = 2
 
     def self.call(instrument:, interval: DEFAULT_INTERVAL, days: DEFAULT_DAYS, cache: true)
@@ -20,8 +20,8 @@ module Candles
     end
 
     def call
-      return { success: false, error: 'Invalid instrument' } unless @instrument.present?
-      return { success: false, error: 'Invalid interval' } unless SUPPORTED_INTERVALS.include?(@interval)
+      return { success: false, error: "Invalid instrument" } if @instrument.blank?
+      return { success: false, error: "Invalid interval" } unless SUPPORTED_INTERVALS.include?(@interval)
 
       # Check cache first
       if @cache
@@ -32,7 +32,7 @@ module Candles
       # Fetch from API
       candles_data = fetch_intraday_candles
 
-      return { success: false, error: 'No candles data received' } if candles_data.blank?
+      return { success: false, error: "No candles data received" } if candles_data.blank?
 
       # Normalize candles
       normalized = normalize_candles(candles_data)
@@ -44,7 +44,7 @@ module Candles
         success: true,
         candles: normalized,
         cached: false,
-        count: normalized.size
+        count: normalized.size,
       }
     rescue StandardError => e
       error_msg = "Failed to fetch intraday candles for #{@instrument&.symbol_name}: #{e.message}"
@@ -65,11 +65,11 @@ module Candles
         oi: false,
         from_date: from_date.to_s,
         to_date: to_date.to_s,
-        days: @days
+        days: @days,
       )
     rescue StandardError => e
       Rails.logger.error(
-        "[Candles::IntradayFetcher] DhanHQ API error for #{@instrument.symbol_name}: #{e.message}"
+        "[Candles::IntradayFetcher] DhanHQ API error for #{@instrument.symbol_name}: #{e.message}",
       )
       nil
     end
@@ -79,9 +79,9 @@ module Candles
 
       # Handle array of hashes
       if data.is_a?(Array)
-        data.map { |c| normalize_single_candle(c) }.compact
+        data.filter_map { |c| normalize_single_candle(c) }
       # Handle hash with arrays (DhanHQ format)
-      elsif data.is_a?(Hash) && data['high'].is_a?(Array)
+      elsif data.is_a?(Hash) && data["high"].is_a?(Array)
         normalize_hash_format(data)
       # Handle single hash
       elsif data.is_a?(Hash)
@@ -92,17 +92,17 @@ module Candles
     end
 
     def normalize_hash_format(data)
-      size = data['high']&.size || 0
+      size = data["high"]&.size || 0
       return [] if size.zero?
 
       (0...size).map do |i|
         {
-          timestamp: parse_timestamp(data['timestamp']&.[](i)),
-          open: data['open']&.[](i)&.to_f || 0,
-          high: data['high']&.[](i)&.to_f || 0,
-          low: data['low']&.[](i)&.to_f || 0,
-          close: data['close']&.[](i)&.to_f || 0,
-          volume: data['volume']&.[](i)&.to_i || 0
+          timestamp: parse_timestamp(data["timestamp"]&.[](i)),
+          open: data["open"]&.[](i)&.to_f || 0,
+          high: data["high"]&.[](i)&.to_f || 0,
+          low: data["low"]&.[](i)&.to_f || 0,
+          close: data["close"]&.[](i)&.to_f || 0,
+          volume: data["volume"]&.[](i).to_i,
         }
       end
     end
@@ -111,12 +111,12 @@ module Candles
       return nil unless candle
 
       {
-        timestamp: parse_timestamp(candle[:timestamp] || candle['timestamp']),
-        open: (candle[:open] || candle['open']).to_f,
-        high: (candle[:high] || candle['high']).to_f,
-        low: (candle[:low] || candle['low']).to_f,
-        close: (candle[:close] || candle['close']).to_f,
-        volume: (candle[:volume] || candle['volume'] || 0).to_i
+        timestamp: parse_timestamp(candle[:timestamp] || candle["timestamp"]),
+        open: (candle[:open] || candle["open"]).to_f,
+        high: (candle[:high] || candle["high"]).to_f,
+        low: (candle[:low] || candle["low"]).to_f,
+        close: (candle[:close] || candle["close"]).to_f,
+        volume: (candle[:volume] || candle["volume"] || 0).to_i,
       }
     rescue StandardError => e
       Rails.logger.warn("[Candles::IntradayFetcher] Failed to normalize candle: #{e.message}")
@@ -158,4 +158,3 @@ module Candles
     end
   end
 end
-

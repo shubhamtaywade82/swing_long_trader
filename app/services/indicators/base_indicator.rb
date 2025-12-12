@@ -36,7 +36,7 @@ module Indicators
 
     # Get indicator name for logging/debugging
     def name
-      class_name = self.class.name.split('::').last
+      class_name = self.class.name.split("::").last
       # Convert CamelCase to snake_case
       # Handle both ActiveSupport's underscore and manual conversion
       if class_name.respond_to?(:underscore)
@@ -52,7 +52,7 @@ module Indicators
     def trading_hours?(candle)
       return true unless config[:trading_hours_filter]
 
-      ist_time = candle.timestamp.in_time_zone('Asia/Kolkata')
+      ist_time = candle.timestamp.in_time_zone("Asia/Kolkata")
       hour = ist_time.hour
       minute = ist_time.min
 

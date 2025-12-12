@@ -38,14 +38,12 @@ module Smc
           index: rejections.last[:index],
           price_level: level,
           strength: strength,
-          rejection_count: rejections.size
+          rejection_count: rejections.size,
         }
       end
 
       blocks.sort_by { |b| -b[:strength] } # Sort by strength (strongest first)
     end
-
-    private
 
     def self.find_rejection_candles(candles)
       rejections = []
@@ -65,19 +63,19 @@ module Smc
             index: idx,
             type: :support,
             price_level: candle.low,
-            wick_size: lower_wick
+            wick_size: lower_wick,
           }
         end
 
         # Bearish rejection (long upper wick)
-        if upper_wick / total_range >= wick_ratio_threshold && body_size / total_range < 0.5
-          rejections << {
-            index: idx,
-            type: :resistance,
-            price_level: candle.high,
-            wick_size: upper_wick
-          }
-        end
+        next unless upper_wick / total_range >= wick_ratio_threshold && body_size / total_range < 0.5
+
+        rejections << {
+          index: idx,
+          type: :resistance,
+          price_level: candle.high,
+          wick_size: upper_wick,
+        }
       end
 
       rejections
@@ -122,4 +120,3 @@ module Smc
     end
   end
 end
-

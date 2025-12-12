@@ -35,20 +35,20 @@ module Screeners
 
     def load_universe
       # Load from master_universe.yml if available
-      universe_file = Rails.root.join('config/universe/master_universe.yml')
+      universe_file = Rails.root.join("config/universe/master_universe.yml")
       if universe_file.exist?
         universe_symbols = YAML.load_file(universe_file).to_set
         Instrument.where(symbol_name: universe_symbols.to_a)
       else
         # Fallback: use all equity/index instruments
-        Instrument.where(instrument_type: ['EQUITY', 'INDEX'])
+        Instrument.where(instrument_type: %w[EQUITY INDEX])
       end
     end
 
     def passes_basic_filters?(instrument)
       # Check if instrument has both daily and weekly candles
-      return false unless instrument.has_candles?(timeframe: '1D')
-      return false unless instrument.has_candles?(timeframe: '1W')
+      return false unless instrument.has_candles?(timeframe: "1D")
+      return false unless instrument.has_candles?(timeframe: "1W")
 
       true
     end
@@ -81,7 +81,7 @@ module Screeners
         score: score,
         daily_indicators: daily_indicators,
         weekly_indicators: weekly_indicators,
-        metadata: build_metadata(instrument, daily_series, weekly_series, daily_indicators, weekly_indicators)
+        metadata: build_metadata(instrument, daily_series, weekly_series, daily_indicators, weekly_indicators),
       }
     end
 
@@ -95,7 +95,7 @@ module Screeners
         atr: series.atr(14),
         macd: series.macd(12, 26, 9),
         supertrend: calculate_supertrend(series),
-        latest_close: series.candles.last&.close
+        latest_close: series.candles.last&.close,
       }
     rescue StandardError => e
       Rails.logger.error("[Screeners::LongtermScreener] Indicator calculation failed: #{e.message}")
@@ -110,7 +110,7 @@ module Screeners
       supertrend = Indicators::Supertrend.new(
         series: series,
         period: period,
-        base_multiplier: multiplier
+        base_multiplier: multiplier,
       )
       result = supertrend.call
 
@@ -119,7 +119,7 @@ module Screeners
       {
         trend: result[:trend],
         value: result[:line]&.last,
-        direction: result[:trend] == :bullish ? :bullish : :bearish
+        direction: result[:trend] == :bullish ? :bullish : :bearish,
       }
     rescue StandardError => e
       Rails.logger.warn("[Screeners::LongtermScreener] Supertrend calculation failed: #{e.message}")
@@ -132,11 +132,9 @@ module Screeners
 
       # Weekly trend requirement - 40 points
       if @strategy_config.dig(:entry_conditions, :require_weekly_trend)
-        if weekly_indicators[:ema20] && weekly_indicators[:ema50]
-          if weekly_indicators[:ema20] > weekly_indicators[:ema50]
-            score += 20
-            max_score += 20
-          end
+        if weekly_indicators[:ema20] && weekly_indicators[:ema50] && (weekly_indicators[:ema20] > weekly_indicators[:ema50])
+          score += 20
+          max_score += 20
         end
 
         if weekly_indicators[:supertrend] && weekly_indicators[:supertrend][:direction] == :bullish
@@ -146,18 +144,14 @@ module Screeners
       end
 
       # Daily trend alignment - 30 points
-      if daily_indicators[:ema20] && daily_indicators[:ema50]
-        if daily_indicators[:ema20] > daily_indicators[:ema50]
-          score += 15
-          max_score += 15
-        end
+      if daily_indicators[:ema20] && daily_indicators[:ema50] && (daily_indicators[:ema20] > daily_indicators[:ema50])
+        score += 15
+        max_score += 15
       end
 
-      if daily_indicators[:ema20] && daily_indicators[:ema200]
-        if daily_indicators[:ema20] > daily_indicators[:ema200]
-          score += 15
-          max_score += 15
-        end
+      if daily_indicators[:ema20] && daily_indicators[:ema200] && (daily_indicators[:ema20] > daily_indicators[:ema200])
+        score += 15
+        max_score += 15
       end
 
       # ADX strength (weekly) - 15 points
@@ -176,27 +170,22 @@ module Screeners
       max_score += 15
 
       # Normalize to 0-100 scale
-      max_score > 0 ? (score / max_score * 100).round(2) : 0.0
+      max_score.positive? ? (score / max_score * 100).round(2) : 0.0
     end
 
-    def calculate_momentum_score(daily_series, weekly_series, daily_indicators, weekly_indicators)
+    def calculate_momentum_score(_daily_series, _weekly_series, daily_indicators, weekly_indicators)
       score = 0.0
 
       # RSI momentum
-      if daily_indicators[:rsi] && daily_indicators[:rsi] > 50 && daily_indicators[:rsi] < 70
-        score += 5
-      end
+      score += 5 if daily_indicators[:rsi] && daily_indicators[:rsi] > 50 && daily_indicators[:rsi] < 70
 
-      if weekly_indicators[:rsi] && weekly_indicators[:rsi] > 50 && weekly_indicators[:rsi] < 70
-        score += 5
-      end
+      score += 5 if weekly_indicators[:rsi] && weekly_indicators[:rsi] > 50 && weekly_indicators[:rsi] < 70
 
       # MACD momentum
-      if daily_indicators[:macd] && daily_indicators[:macd].is_a?(Array) && daily_indicators[:macd].size >= 2
-        macd_line, signal_line = daily_indicators[:macd][0], daily_indicators[:macd][1]
-        if macd_line && signal_line && macd_line > signal_line
-          score += 5
-        end
+      if daily_indicators[:macd].is_a?(Array) && daily_indicators[:macd].size >= 2
+        macd_line = daily_indicators[:macd][0]
+        signal_line = daily_indicators[:macd][1]
+        score += 5 if macd_line && signal_line && macd_line > signal_line
       end
 
       score
@@ -210,7 +199,7 @@ module Screeners
         latest_daily_timestamp: daily_series.candles.last&.timestamp,
         latest_weekly_timestamp: weekly_series.candles.last&.timestamp,
         trend_alignment: check_trend_alignment(daily_indicators, weekly_indicators),
-        momentum: calculate_momentum(daily_series, weekly_series, daily_indicators, weekly_indicators)
+        momentum: calculate_momentum(daily_series, weekly_series, daily_indicators, weekly_indicators),
       }
     end
 
@@ -245,9 +234,8 @@ module Screeners
         daily_change_5d: daily_change,
         weekly_change_4w: weekly_change,
         daily_rsi: daily_indicators[:rsi],
-        weekly_rsi: weekly_indicators[:rsi]
+        weekly_rsi: weekly_indicators[:rsi],
       }
     end
   end
 end
-

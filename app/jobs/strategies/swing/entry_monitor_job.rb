@@ -23,57 +23,55 @@ module Strategies
         orders_placed = []
 
         candidates.each do |candidate|
-          begin
-            # Evaluate candidate for entry signal
-            result = Evaluator.call(candidate)
-            next unless result[:success]
+          # Evaluate candidate for entry signal
+          result = Evaluator.call(candidate)
+          next unless result[:success]
 
-            signal = result[:signal]
-            signals << signal
+          signal = result[:signal]
+          signals << signal
 
-            # Check if we should execute (not already in position, risk checks pass, etc.)
-            if should_execute?(signal)
-              # Execute order via Executor
-              execution_result = Executor.call(signal, dry_run: dry_run)
+          # Check if we should execute (not already in position, risk checks pass, etc.)
+          if should_execute?(signal)
+            # Execute order via Executor
+            execution_result = Executor.call(signal, dry_run: dry_run)
 
-              if execution_result[:success]
-                orders_placed << execution_result[:order]
-                Rails.logger.info(
-                  "[Strategies::Swing::EntryMonitorJob] Order placed: " \
-                  "#{signal[:symbol]} #{signal[:direction]} #{signal[:qty]} @ #{signal[:entry_price]}"
-                )
-              else
-                Rails.logger.warn(
-                  "[Strategies::Swing::EntryMonitorJob] Order rejected: " \
-                  "#{signal[:symbol]} - #{execution_result[:error]}"
-                )
-              end
+            if execution_result[:success]
+              orders_placed << execution_result[:order]
+              Rails.logger.info(
+                "[Strategies::Swing::EntryMonitorJob] Order placed: " \
+                "#{signal[:symbol]} #{signal[:direction]} #{signal[:qty]} @ #{signal[:entry_price]}",
+              )
             else
-              Rails.logger.debug(
-                "[Strategies::Swing::EntryMonitorJob] Signal not executed: #{signal[:symbol]} " \
-                "(already in position or risk check failed)"
+              Rails.logger.warn(
+                "[Strategies::Swing::EntryMonitorJob] Order rejected: " \
+                "#{signal[:symbol]} - #{execution_result[:error]}",
               )
             end
-          rescue StandardError => e
-            Rails.logger.error(
-              "[Strategies::Swing::EntryMonitorJob] Failed for candidate #{candidate[:instrument_id]}: #{e.message}"
-            )
+          else
+            Rails.logger.debug do
+              "[Strategies::Swing::EntryMonitorJob] Signal not executed: #{signal[:symbol]} " \
+                "(already in position or risk check failed)"
+            end
           end
+        rescue StandardError => e
+          Rails.logger.error(
+            "[Strategies::Swing::EntryMonitorJob] Failed for candidate #{candidate[:instrument_id]}: #{e.message}",
+          )
         end
 
         Rails.logger.info(
           "[Strategies::Swing::EntryMonitorJob] Completed: " \
           "signals=#{signals.size}, " \
-          "orders_placed=#{orders_placed.size}"
+          "orders_placed=#{orders_placed.size}",
         )
 
         {
           signals: signals,
-          orders_placed: orders_placed
+          orders_placed: orders_placed,
         }
       rescue StandardError => e
         Rails.logger.error("[Strategies::Swing::EntryMonitorJob] Failed: #{e.message}")
-        Telegram::Notifier.send_error_alert("Entry monitor failed: #{e.message}", context: 'EntryMonitorJob')
+        Telegram::Notifier.send_error_alert("Entry monitor failed: #{e.message}", context: "EntryMonitorJob")
         raise
       end
 
@@ -94,13 +92,13 @@ module Strategies
 
       def already_in_position?(instrument_id)
         # Check if there's an active order or position for this instrument
-        Order.where(instrument_id: instrument_id, status: %w[pending placed]).exists?
+        Order.exists?(instrument_id: instrument_id, status: %w[pending placed])
       end
 
       def get_top_candidates(limit: 10)
         # Get top candidates from recent screener run
         # In production, you might want to query stored screener results
-        universe_file = Rails.root.join('config/universe/master_universe.yml')
+        universe_file = Rails.root.join("config/universe/master_universe.yml")
         if universe_file.exist?
           universe_symbols = YAML.load_file(universe_file).to_set
           instruments = Instrument.where(symbol_name: universe_symbols.to_a).limit(limit)

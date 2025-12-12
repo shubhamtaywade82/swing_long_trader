@@ -32,8 +32,6 @@ module Smc
       blocks.uniq { |b| b[:index] } # Remove duplicates
     end
 
-    private
-
     def self.find_strong_moves(candles)
       moves = []
       min_body_ratio = 0.6 # At least 60% of candle is body
@@ -49,15 +47,15 @@ module Smc
         body_ratio = body_size / total_range
         move_pct = (body_size / candle.open) * 100
 
-        if body_ratio >= min_body_ratio && move_pct >= min_move_pct
-          type = candle.close > candle.open ? :bullish : :bearish
-          moves << {
-            index: idx,
-            type: type,
-            body_size: body_size,
-            move_pct: move_pct
-          }
-        end
+        next unless body_ratio >= min_body_ratio && move_pct >= min_move_pct
+
+        type = candle.close > candle.open ? :bullish : :bearish
+        moves << {
+          index: idx,
+          type: type,
+          body_size: body_size,
+          move_pct: move_pct,
+        }
       end
 
       moves
@@ -95,10 +93,10 @@ module Smc
               index: i,
               price_range: {
                 high: candle.high,
-                low: candle.low
+                low: candle.low,
               },
               strength: strength,
-              move_index: move_idx
+              move_index: move_idx,
             }
           end
         end
@@ -121,8 +119,7 @@ module Smc
 
       move_strength = [move[:move_pct] / 5.0, 1.0].min # Normalize move strength
 
-      (body_ratio * 0.5 + move_strength * 0.5).round(2)
+      ((body_ratio * 0.5) + (move_strength * 0.5)).round(2)
     end
   end
 end
-

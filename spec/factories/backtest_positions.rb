@@ -2,11 +2,11 @@
 
 FactoryBot.define do
   factory :backtest_position do
-    association :backtest_run
-    association :instrument
+    backtest_run
+    instrument
     entry_date { 1.month.ago }
     exit_date { 2.weeks.ago }
-    direction { 'long' }
+    direction { "long" }
     entry_price { 100.0 }
     exit_price { 110.0 }
     quantity { 100 }
@@ -15,10 +15,10 @@ FactoryBot.define do
     pnl { 1000.0 }
     pnl_pct { 10.0 }
     holding_days { 14 }
-    exit_reason { 'take_profit' }
+    exit_reason { "take_profit" }
 
     trait :short do
-      direction { 'short' }
+      direction { "short" }
       entry_price { 100.0 }
       exit_price { 90.0 }
       pnl { 1000.0 }
@@ -34,11 +34,10 @@ FactoryBot.define do
     end
 
     trait :stop_loss_exit do
-      exit_reason { 'stop_loss' }
+      exit_reason { "stop_loss" }
       exit_price { 95.0 }
       pnl { -500.0 }
       pnl_pct { -5.0 }
     end
   end
 end
-

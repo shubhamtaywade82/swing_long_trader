@@ -8,10 +8,10 @@ class PaperPosition < ApplicationRecord
   validates :entry_price, :current_price, :quantity, presence: true, numericality: { greater_than: 0 }
   validates :status, inclusion: { in: %w[open closed] }
 
-  scope :open, -> { where(status: 'open') }
-  scope :closed, -> { where(status: 'closed') }
-  scope :long, -> { where(direction: 'long') }
-  scope :short, -> { where(direction: 'short') }
+  scope :open, -> { where(status: "open") }
+  scope :closed, -> { where(status: "closed") }
+  scope :long, -> { where(direction: "long") }
+  scope :short, -> { where(direction: "short") }
   scope :recent, -> { order(opened_at: :desc) }
 
   def metadata_hash
@@ -23,19 +23,19 @@ class PaperPosition < ApplicationRecord
   end
 
   def open?
-    status == 'open'
+    status == "open"
   end
 
   def closed?
-    status == 'closed'
+    status == "closed"
   end
 
   def long?
-    direction == 'long'
+    direction == "long"
   end
 
   def short?
-    direction == 'short'
+    direction == "short"
   end
 
   def entry_value

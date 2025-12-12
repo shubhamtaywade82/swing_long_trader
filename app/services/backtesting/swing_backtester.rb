@@ -3,7 +3,8 @@
 module Backtesting
   # Swing trading backtester
   class SwingBacktester < ApplicationService
-    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0, trailing_stop_pct: nil, trailing_stop_amount: nil, commission_rate: 0.0, slippage_pct: 0.0)
+    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0,
+                  trailing_stop_pct: nil, trailing_stop_amount: nil, commission_rate: 0.0, slippage_pct: 0.0)
       new(
         instruments: instruments,
         from_date: from_date,
@@ -13,11 +14,12 @@ module Backtesting
         trailing_stop_pct: trailing_stop_pct,
         trailing_stop_amount: trailing_stop_amount,
         commission_rate: commission_rate,
-        slippage_pct: slippage_pct
+        slippage_pct: slippage_pct,
       ).call
     end
 
-    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0, trailing_stop_pct: nil, trailing_stop_amount: nil, commission_rate: 0.0, slippage_pct: 0.0)
+    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0,
+                   trailing_stop_pct: nil, trailing_stop_amount: nil, commission_rate: 0.0, slippage_pct: 0.0)
       @instruments = instruments
       @from_date = from_date
       @to_date = to_date
@@ -29,7 +31,7 @@ module Backtesting
         initial_capital: @initial_capital,
         risk_per_trade: @risk_per_trade,
         commission_rate: commission_rate,
-        slippage_pct: slippage_pct
+        slippage_pct: slippage_pct,
       )
       @portfolio = Portfolio.new(initial_capital: @initial_capital, config: @config)
       @positions = []
@@ -39,13 +41,13 @@ module Backtesting
       # Load historical data
       daily_data = DataLoader.load_for_instruments(
         instruments: @instruments,
-        timeframe: '1D',
+        timeframe: "1D",
         from_date: @from_date,
-        to_date: @to_date
+        to_date: @to_date,
       )
 
       validated_data = DataLoader.new.validate_data(daily_data, min_candles: 50)
-      return { success: false, error: 'Insufficient data' } if validated_data.empty?
+      return { success: false, error: "Insufficient data" } if validated_data.empty?
 
       # Walk forward through dates (avoid look-ahead bias)
       current_date = @from_date
@@ -61,7 +63,7 @@ module Backtesting
       analyzer = ResultAnalyzer.new(
         positions: @positions,
         initial_capital: @initial_capital,
-        final_capital: @portfolio.current_equity
+        final_capital: @portfolio.current_equity,
       )
 
       results = analyzer.analyze
@@ -75,7 +77,7 @@ module Backtesting
         success: true,
         results: results,
         positions: @positions,
-        portfolio: @portfolio
+        portfolio: @portfolio,
       }
     end
 
@@ -113,7 +115,7 @@ module Backtesting
       # Use strategy engine to generate signal
       result = Strategies::Swing::Engine.call(
         instrument: instrument,
-        daily_series: series
+        daily_series: series,
       )
 
       return nil unless result[:success]
@@ -144,7 +146,7 @@ module Backtesting
         stop_loss: stop_loss,
         take_profit: take_profit,
         trailing_stop_pct: @trailing_stop_pct,
-        trailing_stop_amount: @trailing_stop_amount
+        trailing_stop_amount: @trailing_stop_amount,
       )
 
       return unless success
@@ -175,7 +177,7 @@ module Backtesting
           instrument_id: instrument_id,
           exit_date: date,
           exit_price: exit_check[:exit_price],
-          exit_reason: exit_check[:exit_reason]
+          exit_reason: exit_check[:exit_reason],
         )
       end
     end
@@ -191,11 +193,9 @@ module Backtesting
           instrument_id: instrument_id,
           exit_date: end_date,
           exit_price: current_price,
-          exit_reason: 'end_of_backtest'
+          exit_reason: "end_of_backtest",
         )
       end
     end
   end
 end
-
-

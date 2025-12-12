@@ -2,10 +2,10 @@
 
 module InstrumentTypeMapping
   PARENT_TO_CHILDREN = {
-    'INDEX' => %w[FUTIDX OPTIDX],
-    'EQUITY' => %w[FUTSTK OPTSTK],
-    'FUTCOM' => %w[OPTFUT],
-    'FUTCUR' => %w[OPTCUR]
+    "INDEX" => %w[FUTIDX OPTIDX],
+    "EQUITY" => %w[FUTSTK OPTSTK],
+    "FUTCOM" => %w[OPTFUT],
+    "FUTCUR" => %w[OPTCUR],
   }.freeze
 
   CHILD_TO_PARENT =

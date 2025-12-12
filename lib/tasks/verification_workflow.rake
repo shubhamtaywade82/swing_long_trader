@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 namespace :verification do
-  desc 'Run complete verification workflow (guides through all manual steps)'
+  desc "Run complete verification workflow (guides through all manual steps)"
   task workflow: :environment do
     puts "\n=== 🔍 COMPLETE VERIFICATION WORKFLOW ===\n\n"
     puts "This workflow will guide you through all verification steps.\n\n"
@@ -43,9 +43,21 @@ namespace :verification do
     # Phase 4: Database Status
     puts "📋 PHASE 4: Database Status"
     puts "-" * 50
-    instrument_count = Instrument.count rescue 0
-    candle_count = CandleSeriesRecord.count rescue 0
-    order_count = Order.count rescue 0
+    instrument_count = begin
+      Instrument.count
+    rescue StandardError
+      0
+    end
+    candle_count = begin
+      CandleSeriesRecord.count
+    rescue StandardError
+      0
+    end
+    order_count = begin
+      Order.count
+    rescue StandardError
+      0
+    end
 
     puts "   Instruments: #{instrument_count}"
     puts "   Candle Series: #{candle_count}"
@@ -63,11 +75,11 @@ namespace :verification do
     puts "📋 PHASE 5: Configuration Check"
     puts "-" * 50
     config_checks = {
-      'DhanHQ Client ID' => ENV['DHANHQ_CLIENT_ID'].present?,
-      'DhanHQ Access Token' => ENV['DHANHQ_ACCESS_TOKEN'].present?,
-      'Telegram Bot Token' => ENV['TELEGRAM_BOT_TOKEN'].present?,
-      'Telegram Chat ID' => ENV['TELEGRAM_CHAT_ID'].present?,
-      'OpenAI API Key' => ENV['OPENAI_API_KEY'].present?
+      "DhanHQ Client ID" => ENV["DHANHQ_CLIENT_ID"].present?,
+      "DhanHQ Access Token" => ENV["DHANHQ_ACCESS_TOKEN"].present?,
+      "Telegram Bot Token" => ENV["TELEGRAM_BOT_TOKEN"].present?,
+      "Telegram Chat ID" => ENV["TELEGRAM_CHAT_ID"].present?,
+      "OpenAI API Key" => ENV["OPENAI_API_KEY"].present?,
     }
 
     config_checks.each do |name, present|
@@ -86,45 +98,45 @@ namespace :verification do
 
     manual_steps = [
       {
-        name: 'Run Instrument Import',
-        command: 'rails instruments:import',
-        description: 'Import instruments from DhanHQ (requires credentials)',
-        check: -> { Instrument.count > 0 }
+        name: "Run Instrument Import",
+        command: "rails instruments:import",
+        description: "Import instruments from DhanHQ (requires credentials)",
+        check: -> { Instrument.any? },
       },
       {
-        name: 'Build Universe',
-        command: 'rails universe:build',
-        description: 'Build master universe from CSV files',
-        check: -> { File.exist?(Rails.root.join('config/universe/master_universe.yml')) }
+        name: "Build Universe",
+        command: "rails universe:build",
+        description: "Build master universe from CSV files",
+        check: -> { Rails.root.join("config/universe/master_universe.yml").exist? },
       },
       {
-        name: 'Run RSpec Tests',
-        command: 'bundle exec rspec',
-        description: 'Verify all tests pass',
-        check: -> { File.exist?(Rails.root.join('coverage/.last_run.json')) }
+        name: "Run RSpec Tests",
+        command: "bundle exec rspec",
+        description: "Verify all tests pass",
+        check: -> { Rails.root.join("coverage/.last_run.json").exist? },
       },
       {
-        name: 'Run RuboCop',
-        command: 'bundle exec rubocop',
-        description: 'Check code style',
-        check: -> { false } # Always requires manual run
+        name: "Run RuboCop",
+        command: "bundle exec rubocop",
+        description: "Check code style",
+        check: -> { false }, # Always requires manual run
       },
       {
-        name: 'Run Brakeman',
-        command: 'bundle exec brakeman',
-        description: 'Check security vulnerabilities',
-        check: -> { false } # Always requires manual run
+        name: "Run Brakeman",
+        command: "bundle exec brakeman",
+        description: "Check security vulnerabilities",
+        check: -> { false }, # Always requires manual run
       },
       {
-        name: 'Run Risk Control Tests',
-        command: 'rails test:risk:all',
-        description: 'Test idempotency, exposure limits, circuit breakers',
-        check: -> { false } # Always requires manual run
-      }
+        name: "Run Risk Control Tests",
+        command: "rails test:risk:all",
+        description: "Test idempotency, exposure limits, circuit breakers",
+        check: -> { false }, # Always requires manual run
+      },
     ]
 
     manual_steps.each_with_index do |step, index|
-      status = step[:check].call ? '✅' : '⏳'
+      status = step[:check].call ? "✅" : "⏳"
       puts "   #{index + 1}. #{status} #{step[:name]}"
       puts "      Command: #{step[:command]}"
       puts "      #{step[:description]}\n"
@@ -132,7 +144,7 @@ namespace :verification do
 
     # Summary
     puts "\n=== 📊 VERIFICATION SUMMARY ===\n"
-    if all_passed && instrument_count > 0
+    if all_passed && instrument_count.positive?
       puts "✅ Core system checks passed"
       puts "\nNext steps:"
       puts "  1. Complete manual verification steps above"
@@ -157,13 +169,13 @@ namespace :verification do
     puts "\nFor detailed manual verification steps, see: docs/MANUAL_VERIFICATION_STEPS.md\n"
   end
 
-  desc 'Validate backtest signals match live signals (helper for manual verification)'
+  desc "Validate backtest signals match live signals (helper for manual verification)"
   task validate_signals: :environment do
     puts "\n=== 🔍 BACKTEST SIGNAL VALIDATION ===\n\n"
     puts "This helper validates that backtest signals match live signals.\n\n"
 
     # Check if we have instruments
-    if Instrument.count.zero?
+    if Instrument.none?
       puts "❌ No instruments found. Run 'rails instruments:import' first.\n"
       exit 1
     end
@@ -174,15 +186,23 @@ namespace :verification do
 
     # Load candles
     puts "Loading candles..."
-    daily_series = instrument.load_daily_candles(limit: 100) rescue nil
-    weekly_series = instrument.load_weekly_candles(limit: 52) rescue nil
+    daily_series = begin
+      instrument.load_daily_candles(limit: 100)
+    rescue StandardError
+      nil
+    end
+    weekly_series = begin
+      instrument.load_weekly_candles(limit: 52)
+    rescue StandardError
+      nil
+    end
 
-    if daily_series.nil? || daily_series.empty?
+    if daily_series.blank?
       puts "❌ No daily candles found. Run candle ingestion first.\n"
       exit 1
     end
 
-    if weekly_series.nil? || weekly_series.empty?
+    if weekly_series.blank?
       puts "❌ No weekly candles found. Run candle ingestion first.\n"
       exit 1
     end
@@ -194,7 +214,7 @@ namespace :verification do
     live_result = Strategies::Swing::Engine.call(
       instrument: instrument,
       daily_series: daily_series,
-      weekly_series: weekly_series
+      weekly_series: weekly_series,
     )
 
     if live_result[:success] && live_result[:signal]
@@ -216,7 +236,7 @@ namespace :verification do
       instrument: instrument,
       start_date: daily_series.first[:timestamp].to_date,
       end_date: daily_series.last[:timestamp].to_date,
-      initial_capital: 100_000
+      initial_capital: 100_000,
     )
 
     if backtest_result[:success]
@@ -243,30 +263,28 @@ namespace :verification do
     puts "For detailed validation, see: docs/MANUAL_VERIFICATION_STEPS.md\n"
   end
 
-  desc 'Quick health check (all automated checks)'
+  desc "Quick health check (all automated checks)"
   task health: :environment do
     puts "\n=== 🏥 QUICK HEALTH CHECK ===\n\n"
 
     checks = {
-      'Database Connection' => -> { ActiveRecord::Base.connection.active? },
-      'Instruments Present' => -> { Instrument.count > 0 },
-      'Candles Present' => -> { CandleSeriesRecord.count > 0 },
-      'DhanHQ Config' => -> { ENV['DHANHQ_CLIENT_ID'].present? && ENV['DHANHQ_ACCESS_TOKEN'].present? },
-      'Telegram Config' => -> { ENV['TELEGRAM_BOT_TOKEN'].present? && ENV['TELEGRAM_CHAT_ID'].present? },
-      'OpenAI Config' => -> { ENV['OPENAI_API_KEY'].present? }
+      "Database Connection" => -> { ActiveRecord::Base.connection.active? },
+      "Instruments Present" => -> { Instrument.any? },
+      "Candles Present" => -> { CandleSeriesRecord.any? },
+      "DhanHQ Config" => -> { ENV["DHANHQ_CLIENT_ID"].present? && ENV["DHANHQ_ACCESS_TOKEN"].present? },
+      "Telegram Config" => -> { ENV["TELEGRAM_BOT_TOKEN"].present? && ENV["TELEGRAM_CHAT_ID"].present? },
+      "OpenAI Config" => -> { ENV["OPENAI_API_KEY"].present? },
     }
 
     all_ok = true
     checks.each do |name, check|
-      begin
-        result = check.call
-        status = result ? '✅' : '⚠️'
-        puts "#{status} #{name}"
-        all_ok = false unless result
-      rescue StandardError => e
-        puts "❌ #{name}: #{e.message}"
-        all_ok = false
-      end
+      result = check.call
+      status = result ? "✅" : "⚠️"
+      puts "#{status} #{name}"
+      all_ok = false unless result
+    rescue StandardError => e
+      puts "❌ #{name}: #{e.message}"
+      all_ok = false
     end
 
     puts "\n"
@@ -278,4 +296,3 @@ namespace :verification do
     puts "\n"
   end
 end
-

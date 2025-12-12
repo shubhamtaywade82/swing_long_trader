@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 namespace :orders do
-  desc 'List orders pending approval'
+  desc "List orders pending approval"
   task pending_approval: :environment do
     orders = Order.pending_approval.order(created_at: :desc)
 
@@ -24,10 +24,10 @@ namespace :orders do
     end
   end
 
-  desc 'Approve an order'
-  task :approve, [:order_id, :approved_by] => :environment do |_t, args|
+  desc "Approve an order"
+  task :approve, %i[order_id approved_by] => :environment do |_t, args|
     order_id = args[:order_id]
-    approved_by = args[:approved_by] || 'manual'
+    approved_by = args[:approved_by] || "manual"
 
     unless order_id
       puts "❌ Order ID required"
@@ -49,11 +49,11 @@ namespace :orders do
     end
   end
 
-  desc 'Reject an order'
-  task :reject, [:order_id, :reason, :rejected_by] => :environment do |_t, args|
+  desc "Reject an order"
+  task :reject, %i[order_id reason rejected_by] => :environment do |_t, args|
     order_id = args[:order_id]
-    reason = args[:reason] || 'Manual rejection'
-    rejected_by = args[:rejected_by] || 'manual'
+    reason = args[:reason] || "Manual rejection"
+    rejected_by = args[:rejected_by] || "manual"
 
     unless order_id
       puts "❌ Order ID required"
@@ -75,14 +75,14 @@ namespace :orders do
     end
   end
 
-  desc 'Show approval statistics'
+  desc "Show approval statistics"
   task stats: :environment do
     total = Order.real.count
-    executed = Order.real.where(status: 'executed').count
+    executed = Order.real.where(status: "executed").count
     pending_approval = Order.pending_approval.count
     approved = Order.approved.count
     rejected = Order.rejected.count
-    approved_not_placed = Order.approved.where(status: 'pending').count
+    approved_not_placed = Order.approved.where(status: "pending").count
 
     puts "\n📊 Order Approval Statistics:\n\n"
     puts "  Total orders: #{total}"
@@ -93,7 +93,7 @@ namespace :orders do
     puts "  Rejected: #{rejected}"
     puts "\n  Progress: #{executed}/30 trades executed (#{30 - executed} remaining for manual approval)"
 
-    if approved_not_placed > 0
+    if approved_not_placed.positive?
       puts "\n  ⚠️  #{approved_not_placed} approved order(s) waiting to be placed"
       puts "     Run: rails orders:process_approved"
     end
@@ -101,9 +101,9 @@ namespace :orders do
     puts "\n"
   end
 
-  desc 'Process approved orders that are waiting to be placed'
+  desc "Process approved orders that are waiting to be placed"
   task process_approved: :environment do
-    approved_orders = Order.approved.where(status: 'pending').order(approved_at: :asc)
+    approved_orders = Order.approved.where(status: "pending").order(approved_at: :asc)
 
     if approved_orders.empty?
       puts "✅ No approved orders waiting to be placed"
@@ -127,4 +127,3 @@ namespace :orders do
     puts "✅ Processing complete\n\n"
   end
 end
-

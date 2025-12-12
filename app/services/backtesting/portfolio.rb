@@ -3,7 +3,8 @@
 module Backtesting
   # Virtual portfolio manager for backtesting
   class Portfolio
-    attr_reader :initial_capital, :current_capital, :positions, :closed_positions, :equity_curve, :total_commission, :total_slippage
+    attr_reader :initial_capital, :current_capital, :positions, :closed_positions, :equity_curve, :total_commission,
+                :total_slippage
 
     def initialize(initial_capital:, config: nil)
       @initial_capital = initial_capital.to_f
@@ -16,7 +17,8 @@ module Backtesting
       @total_slippage = 0.0
     end
 
-    def open_position(instrument_id:, entry_date:, entry_price:, quantity:, direction:, stop_loss:, take_profit:, trailing_stop_pct: nil, trailing_stop_amount: nil)
+    def open_position(instrument_id:, entry_date:, entry_price:, quantity:, direction:, stop_loss:, take_profit:,
+                      trailing_stop_pct: nil, trailing_stop_amount: nil)
       # Apply slippage to entry price
       actual_entry_price = apply_slippage(entry_price, direction)
       slippage_cost = (actual_entry_price - entry_price).abs * quantity
@@ -41,7 +43,7 @@ module Backtesting
         stop_loss: stop_loss,
         take_profit: take_profit,
         trailing_stop_pct: trailing_stop_pct,
-        trailing_stop_amount: trailing_stop_amount
+        trailing_stop_amount: trailing_stop_amount,
       )
 
       @positions[instrument_id] = position
@@ -123,4 +125,3 @@ module Backtesting
     end
   end
 end
-

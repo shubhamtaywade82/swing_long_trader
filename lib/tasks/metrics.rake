@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 namespace :metrics do
-  desc 'Show daily metrics'
+  desc "Show daily metrics"
   task daily: :environment do
-    date = ENV['DATE'] ? Date.parse(ENV['DATE']) : Date.today
+    date = ENV["DATE"] ? Date.parse(ENV["DATE"]) : Time.zone.today
     stats = Metrics::Tracker.get_daily_stats(date)
 
     openai_cost = Metrics::Tracker.get_openai_daily_cost(date)
@@ -31,9 +31,9 @@ namespace :metrics do
     puts "=" * 60
   end
 
-  desc 'Show weekly metrics summary'
+  desc "Show weekly metrics summary"
   task weekly: :environment do
-    end_date = Date.today
+    end_date = Time.zone.today
     start_date = end_date - 7.days
 
     puts "📊 Weekly Metrics (#{start_date} to #{end_date})"
@@ -77,5 +77,3 @@ namespace :metrics do
     puts "=" * 60
   end
 end
-
-

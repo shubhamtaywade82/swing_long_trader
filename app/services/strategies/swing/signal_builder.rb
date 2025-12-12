@@ -14,7 +14,7 @@ module Strategies
         @instrument = instrument
         @daily_series = daily_series
         @weekly_series = weekly_series
-        @config = config || AlgoConfig.fetch([:swing_trading, :strategy]) || {}
+        @config = config || AlgoConfig.fetch(%i[swing_trading strategy]) || {}
         @exit_config = @config[:exit_conditions] || {}
         @risk_config = AlgoConfig.fetch(:risk) || {}
       end
@@ -64,14 +64,14 @@ module Strategies
           qty: quantity,
           confidence: confidence.round(2),
           holding_days_estimate: holding_days,
-          metadata: build_metadata(entry_price, stop_loss, take_profit, direction)
+          metadata: build_metadata(entry_price, stop_loss, take_profit, direction),
         }
       end
 
       private
 
       def validate_inputs
-        return false unless @instrument.present?
+        return false if @instrument.blank?
         return false unless @daily_series&.candles&.any?
         return false if @daily_series.candles.size < 50
 
@@ -83,13 +83,13 @@ module Strategies
         indicators = calculate_indicators
 
         # Check Supertrend
-        if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish
-          return :long if indicators[:ema20] && indicators[:ema50] && indicators[:ema20] > indicators[:ema50]
+        if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish && indicators[:ema20] && indicators[:ema50] && indicators[:ema20] > indicators[:ema50]
+          return :long
         end
 
         # Check for bearish setup (optional for short trading)
-        if indicators[:supertrend] && indicators[:supertrend][:direction] == :bearish
-          return :short if indicators[:ema20] && indicators[:ema50] && indicators[:ema20] < indicators[:ema50]
+        if indicators[:supertrend] && indicators[:supertrend][:direction] == :bearish && indicators[:ema20] && indicators[:ema50] && indicators[:ema20] < indicators[:ema50]
+          return :short
         end
 
         nil
@@ -102,19 +102,19 @@ module Strategies
           ema200: @daily_series.ema(200),
           atr: @daily_series.atr(14),
           supertrend: calculate_supertrend,
-          latest_close: @daily_series.candles.last&.close
+          latest_close: @daily_series.candles.last&.close,
         }
       end
 
       def calculate_supertrend
-        st_config = AlgoConfig.fetch([:indicators, :supertrend]) || {}
+        st_config = AlgoConfig.fetch(%i[indicators supertrend]) || {}
         period = st_config[:period] || 10
         multiplier = st_config[:multiplier] || 3.0
 
         supertrend = Indicators::Supertrend.new(
           series: @daily_series,
           period: period,
-          base_multiplier: multiplier
+          base_multiplier: multiplier,
         )
         result = supertrend.call
 
@@ -123,7 +123,7 @@ module Strategies
         {
           trend: result[:trend],
           value: result[:line]&.last,
-          direction: result[:trend] == :bullish ? :bullish : :bearish
+          direction: result[:trend] == :bullish ? :bullish : :bearish,
         }
       rescue StandardError => e
         Rails.logger.warn("[Strategies::Swing::SignalBuilder] Supertrend failed: #{e.message}")
@@ -164,16 +164,14 @@ module Strategies
           # Stop loss below recent swing low or ATR-based
           recent_low = @daily_series.candles.last(20).map(&:low).min
           atr_based_sl = entry_price - (atr * 2.0)
-          pct_based_sl = entry_price * (1 - stop_loss_pct / 100.0)
+          pct_based_sl = entry_price * (1 - (stop_loss_pct / 100.0))
           [recent_low, atr_based_sl, pct_based_sl].min
         when :short
           # Stop loss above recent swing high or ATR-based
           recent_high = @daily_series.candles.last(20).map(&:high).max
           atr_based_sl = entry_price + (atr * 2.0)
-          pct_based_sl = entry_price * (1 + stop_loss_pct / 100.0)
+          pct_based_sl = entry_price * (1 + (stop_loss_pct / 100.0))
           [recent_high, atr_based_sl, pct_based_sl].max
-        else
-          nil
         end
       end
 
@@ -186,18 +184,16 @@ module Strategies
           # Take profit: risk-reward based or ATR-based
           risk = entry_price - stop_loss
           rr_target = risk * (DEFAULT_MIN_RR * 1.5) # Target 2.25x RR
-          pct_target = entry_price * (1 + profit_target_pct / 100.0)
+          pct_target = entry_price * (1 + (profit_target_pct / 100.0))
           atr_target = entry_price + (atr * 3.0)
           [rr_target + entry_price, pct_target, atr_target].min
         when :short
           # Take profit: risk-reward based or ATR-based
           risk = stop_loss - entry_price
           rr_target = risk * (DEFAULT_MIN_RR * 1.5)
-          pct_target = entry_price * (1 - profit_target_pct / 100.0)
+          pct_target = entry_price * (1 - (profit_target_pct / 100.0))
           atr_target = entry_price - (atr * 3.0)
           [entry_price - rr_target, pct_target, atr_target].max
-        else
-          nil
         end
       end
 
@@ -246,22 +242,16 @@ module Strategies
         [quantity, 1].max # Minimum 1 share
       end
 
-      def calculate_confidence(direction)
+      def calculate_confidence(_direction)
         indicators = calculate_indicators
         confidence = 0.0
 
         # Trend alignment (30 points)
-        if indicators[:ema20] && indicators[:ema50] && indicators[:ema20] > indicators[:ema50]
-          confidence += 15
-        end
-        if indicators[:ema20] && indicators[:ema200] && indicators[:ema20] > indicators[:ema200]
-          confidence += 15
-        end
+        confidence += 15 if indicators[:ema20] && indicators[:ema50] && indicators[:ema20] > indicators[:ema50]
+        confidence += 15 if indicators[:ema20] && indicators[:ema200] && indicators[:ema20] > indicators[:ema200]
 
         # Supertrend alignment (20 points)
-        if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish
-          confidence += 20
-        end
+        confidence += 20 if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish
 
         # ADX strength (20 points)
         adx = @daily_series.adx(14)
@@ -285,11 +275,10 @@ module Strategies
 
         # MACD bullish (15 points)
         macd_result = @daily_series.macd(12, 26, 9)
-        if macd_result && macd_result.is_a?(Array) && macd_result.size >= 2
-          macd_line, signal_line = macd_result[0], macd_result[1]
-          if macd_line && signal_line && macd_line > signal_line
-            confidence += 15
-          end
+        if macd_result.is_a?(Array) && macd_result.size >= 2
+          macd_line = macd_result[0]
+          signal_line = macd_result[1]
+          confidence += 15 if macd_line && signal_line && macd_line > signal_line
         end
 
         # Normalize to 0-100
@@ -312,7 +301,7 @@ module Strategies
         [[days, 5].max, 20].min
       end
 
-      def build_metadata(entry_price, stop_loss, take_profit, direction)
+      def build_metadata(entry_price, stop_loss, _take_profit, _direction)
         indicators = calculate_indicators
         {
           atr: indicators[:atr],
@@ -322,7 +311,7 @@ module Strategies
           ema200: indicators[:ema200],
           supertrend_direction: indicators[:supertrend]&.dig(:direction),
           risk_amount: calculate_risk_amount(entry_price, stop_loss),
-          created_at: Time.current
+          created_at: Time.current,
         }
       end
 
@@ -334,4 +323,3 @@ module Strategies
     end
   end
 end
-

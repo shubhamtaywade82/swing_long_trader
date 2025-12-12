@@ -32,14 +32,12 @@ module Smc
       nil
     end
 
-    private
-
     def self.find_swing_highs(candles, lookback)
       highs = []
-      (lookback...candles.size - lookback).each do |i|
+      (lookback...(candles.size - lookback)).each do |i|
         is_swing_high = true
         # Check if current high is higher than surrounding candles
-        (i - lookback..i + lookback).each do |j|
+        ((i - lookback)..(i + lookback)).each do |j|
           next if j == i
 
           if candles[j].high >= candles[i].high
@@ -54,10 +52,10 @@ module Smc
 
     def self.find_swing_lows(candles, lookback)
       lows = []
-      (lookback...candles.size - lookback).each do |i|
+      (lookback...(candles.size - lookback)).each do |i|
         is_swing_low = true
         # Check if current low is lower than surrounding candles
-        (i - lookback..i + lookback).each do |j|
+        ((i - lookback)..(i + lookback)).each do |j|
           next if j == i
 
           if candles[j].low <= candles[i].low
@@ -70,7 +68,7 @@ module Smc
       lows
     end
 
-    def self.detect_bullish_bos(candles, swing_highs, lookback)
+    def self.detect_bullish_bos(candles, swing_highs, _lookback)
       return nil if swing_highs.empty? || candles.size < 2
 
       latest_candle = candles.last
@@ -83,20 +81,20 @@ module Smc
       return nil unless relevant_swing_high
 
       # Check if latest candle broke above the swing high
-      if latest_candle.high > relevant_swing_high[:price]
-        # Check for confirmation (close above break level)
-        confirmation = latest_candle.close > relevant_swing_high[:price]
+      return unless latest_candle.high > relevant_swing_high[:price]
 
-        {
-          type: :bullish,
-          index: candles.size - 1,
-          break_level: relevant_swing_high[:price],
-          confirmation: confirmation
-        }
-      end
+      # Check for confirmation (close above break level)
+      confirmation = latest_candle.close > relevant_swing_high[:price]
+
+      {
+        type: :bullish,
+        index: candles.size - 1,
+        break_level: relevant_swing_high[:price],
+        confirmation: confirmation,
+      }
     end
 
-    def self.detect_bearish_bos(candles, swing_lows, lookback)
+    def self.detect_bearish_bos(candles, swing_lows, _lookback)
       return nil if swing_lows.empty? || candles.size < 2
 
       latest_candle = candles.last
@@ -109,18 +107,17 @@ module Smc
       return nil unless relevant_swing_low
 
       # Check if latest candle broke below the swing low
-      if latest_candle.low < relevant_swing_low[:price]
-        # Check for confirmation (close below break level)
-        confirmation = latest_candle.close < relevant_swing_low[:price]
+      return unless latest_candle.low < relevant_swing_low[:price]
 
-        {
-          type: :bearish,
-          index: candles.size - 1,
-          break_level: relevant_swing_low[:price],
-          confirmation: confirmation
-        }
-      end
+      # Check for confirmation (close below break level)
+      confirmation = latest_candle.close < relevant_swing_low[:price]
+
+      {
+        type: :bearish,
+        index: candles.size - 1,
+        break_level: relevant_swing_low[:price],
+        confirmation: confirmation,
+      }
     end
   end
 end
-

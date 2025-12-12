@@ -36,19 +36,19 @@ module Screeners
 
     def load_universe
       # Load from master_universe.yml if available
-      universe_file = Rails.root.join('config/universe/master_universe.yml')
+      universe_file = Rails.root.join("config/universe/master_universe.yml")
       if universe_file.exist?
         universe_symbols = YAML.load_file(universe_file).to_set
         Instrument.where(symbol_name: universe_symbols.to_a)
       else
         # Fallback: use all equity/index instruments
-        Instrument.where(instrument_type: ['EQUITY', 'INDEX'])
+        Instrument.where(instrument_type: %w[EQUITY INDEX])
       end
     end
 
     def passes_basic_filters?(instrument)
       # Check if instrument has candles
-      return false unless instrument.has_candles?(timeframe: '1D')
+      return false unless instrument.has_candles?(timeframe: "1D")
 
       # Check price range (if LTP available)
       ltp = instrument.ltp
@@ -59,9 +59,7 @@ module Screeners
       end
 
       # Check if it's a penny stock (if enabled)
-      if @screening_config[:exclude_penny_stocks] && ltp
-        return false if ltp < 10
-      end
+      return false if @screening_config[:exclude_penny_stocks] && ltp && (ltp < 10)
 
       true
     end
@@ -90,7 +88,7 @@ module Screeners
         symbol: instrument.symbol_name,
         score: score,
         indicators: indicators,
-        metadata: build_metadata(instrument, daily_series, indicators, smc_validation)
+        metadata: build_metadata(instrument, daily_series, indicators, smc_validation),
       }
     end
 
@@ -107,7 +105,7 @@ module Screeners
         macd: series.macd(12, 26, 9),
         supertrend: calculate_supertrend(series),
         latest_close: series.candles.last&.close,
-        volume: calculate_volume_metrics(series)
+        volume: calculate_volume_metrics(series),
       }
     rescue StandardError => e
       Rails.logger.error("[Screeners::SwingScreener] Indicator calculation failed: #{e.message}")
@@ -115,14 +113,14 @@ module Screeners
     end
 
     def calculate_supertrend(series)
-      st_config = @config.dig(:indicators)&.find { |i| i[:type] == 'supertrend' } || {}
+      st_config = @config[:indicators]&.find { |i| i[:type] == "supertrend" } || {}
       period = st_config[:period] || 10
       multiplier = st_config[:multiplier] || 3.0
 
       supertrend = Indicators::Supertrend.new(
         series: series,
         period: period,
-        base_multiplier: multiplier
+        base_multiplier: multiplier,
       )
       result = supertrend.call
 
@@ -131,7 +129,7 @@ module Screeners
       {
         trend: result[:trend],
         value: result[:line]&.last,
-        direction: result[:trend] == :bullish ? :bullish : :bearish
+        direction: result[:trend] == :bullish ? :bullish : :bearish,
       }
     rescue StandardError => e
       Rails.logger.warn("[Screeners::SwingScreener] Supertrend calculation failed: #{e.message}")
@@ -148,31 +146,26 @@ module Screeners
       {
         latest: latest_volume,
         average: avg_volume,
-        spike_ratio: avg_volume > 0 ? (latest_volume.to_f / avg_volume) : 0
+        spike_ratio: avg_volume.positive? ? (latest_volume.to_f / avg_volume) : 0,
       }
     end
 
-    def calculate_score(series, indicators)
+    def calculate_score(_series, indicators)
       score = 0.0
       max_score = 0.0
 
       # Trend alignment (EMA filters) - 30 points
-      if @strategy_config.dig(:trend_filters, :use_ema20) && @strategy_config.dig(:trend_filters, :use_ema50)
-        if indicators[:ema20] && indicators[:ema50]
-          if indicators[:ema20] > indicators[:ema50]
-            score += 15
-            max_score += 15
-          end
-        end
+      if @strategy_config.dig(:trend_filters,
+                              :use_ema20) && @strategy_config.dig(:trend_filters,
+                                                                  :use_ema50) && indicators[:ema20] && indicators[:ema50] && (indicators[:ema20] > indicators[:ema50])
+        score += 15
+        max_score += 15
       end
 
-      if @strategy_config.dig(:trend_filters, :use_ema200)
-        if indicators[:ema20] && indicators[:ema200]
-          if indicators[:ema20] > indicators[:ema200]
-            score += 15
-            max_score += 15
-          end
-        end
+      if @strategy_config.dig(:trend_filters,
+                              :use_ema200) && indicators[:ema20] && indicators[:ema200] && (indicators[:ema20] > indicators[:ema200])
+        score += 15
+        max_score += 15
       end
 
       # Supertrend alignment - 20 points
@@ -202,8 +195,9 @@ module Screeners
       end
 
       # MACD bullish - 10 points
-      if indicators[:macd] && indicators[:macd].is_a?(Array) && indicators[:macd].size >= 2
-        macd_line, signal_line = indicators[:macd][0], indicators[:macd][1]
+      if indicators[:macd].is_a?(Array) && indicators[:macd].size >= 2
+        macd_line = indicators[:macd][0]
+        signal_line = indicators[:macd][1]
         if macd_line && signal_line && macd_line > signal_line
           score += 10
           max_score += 10
@@ -220,7 +214,7 @@ module Screeners
       end
 
       # Normalize to 0-100 scale
-      max_score > 0 ? (score / max_score * 100).round(2) : 0.0
+      max_score.positive? ? (score / max_score * 100).round(2) : 0.0
     end
 
     def build_metadata(instrument, series, indicators, smc_validation = nil)
@@ -230,7 +224,7 @@ module Screeners
         latest_timestamp: series.candles.last&.timestamp,
         trend_alignment: check_trend_alignment(indicators),
         volatility: calculate_volatility(series, indicators),
-        momentum: calculate_momentum(series, indicators)
+        momentum: calculate_momentum(series, indicators),
       }
 
       # Add SMC validation if available
@@ -238,7 +232,7 @@ module Screeners
         metadata[:smc_validation] = {
           valid: smc_validation[:valid],
           score: smc_validation[:score],
-          reasons: smc_validation[:reasons]
+          reasons: smc_validation[:reasons],
         }
       end
 
@@ -262,7 +256,7 @@ module Screeners
       Smc::StructureValidator.validate(
         series.candles,
         direction: direction,
-        config: smc_config
+        config: smc_config,
       )
     rescue StandardError => e
       Rails.logger.warn("[Screeners::SwingScreener] SMC validation failed: #{e.message}")
@@ -272,32 +266,31 @@ module Screeners
     def check_trend_alignment(indicators)
       alignment = []
 
-      if indicators[:ema20] && indicators[:ema50] && indicators[:ema20] > indicators[:ema50]
-        alignment << :ema_bullish
-      end
+      alignment << :ema_bullish if indicators[:ema20] && indicators[:ema50] && indicators[:ema20] > indicators[:ema50]
 
-      if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish
-        alignment << :supertrend_bullish
-      end
+      alignment << :supertrend_bullish if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish
 
-      if indicators[:macd] && indicators[:macd].is_a?(Array) && indicators[:macd].size >= 2
-        macd_line, signal_line = indicators[:macd][0], indicators[:macd][1]
-        if macd_line && signal_line && macd_line > signal_line
-          alignment << :macd_bullish
-        end
+      if indicators[:macd].is_a?(Array) && indicators[:macd].size >= 2
+        macd_line = indicators[:macd][0]
+        signal_line = indicators[:macd][1]
+        alignment << :macd_bullish if macd_line && signal_line && macd_line > signal_line
       end
 
       alignment
     end
 
-    def calculate_volatility(series, indicators)
+    def calculate_volatility(_series, indicators)
       return nil unless indicators[:atr] && indicators[:latest_close]
 
       atr_pct = (indicators[:atr] / indicators[:latest_close] * 100).round(2)
       {
         atr: indicators[:atr],
         atr_percent: atr_pct,
-        level: atr_pct < 2 ? :low : (atr_pct < 5 ? :medium : :high)
+        level: if atr_pct < 2
+                 :low
+               else
+                 (atr_pct < 5 ? :medium : :high)
+               end,
       }
     end
 
@@ -317,9 +310,8 @@ module Screeners
                  :overbought
                else
                  :neutral
-               end
+               end,
       }
     end
   end
 end
-

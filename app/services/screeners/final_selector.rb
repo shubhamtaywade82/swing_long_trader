@@ -10,7 +10,7 @@ module Screeners
         swing_candidates: swing_candidates,
         longterm_candidates: longterm_candidates,
         swing_limit: swing_limit,
-        longterm_limit: longterm_limit
+        longterm_limit: longterm_limit,
       ).call
     end
 
@@ -25,7 +25,7 @@ module Screeners
       {
         swing: select_swing_candidates,
         longterm: select_longterm_candidates,
-        summary: build_summary
+        summary: build_summary,
       }
     end
 
@@ -42,7 +42,7 @@ module Screeners
 
         candidate.merge(
           combined_score: combined_score.round(2),
-          rank: nil # Will be set after sorting
+          rank: nil, # Will be set after sorting
         )
       end
 
@@ -62,11 +62,11 @@ module Screeners
         screener_score = candidate[:score] || 0
         ai_score = candidate[:ai_score] || 0
         # Long-term: 70% screener, 30% AI (if available)
-        combined_score = ai_score > 0 ? (screener_score * 0.7) + (ai_score * 0.3) : screener_score
+        combined_score = ai_score.positive? ? (screener_score * 0.7) + (ai_score * 0.3) : screener_score
 
         candidate.merge(
           combined_score: combined_score.round(2),
-          rank: nil
+          rank: nil,
         )
       end
 
@@ -82,9 +82,8 @@ module Screeners
         swing_selected: select_swing_candidates.size,
         longterm_count: @longterm_candidates.size,
         longterm_selected: select_longterm_candidates.size,
-        timestamp: Time.current
+        timestamp: Time.current,
       }
     end
   end
 end
-

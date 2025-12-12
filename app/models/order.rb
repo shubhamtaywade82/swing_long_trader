@@ -4,19 +4,20 @@ class Order < ApplicationRecord
   belongs_to :instrument
 
   validates :client_order_id, presence: true, uniqueness: true
-  validates :symbol, :exchange_segment, :security_id, :product_type, :order_type, :transaction_type, :quantity, presence: true
+  validates :symbol, :exchange_segment, :security_id, :product_type, :order_type, :transaction_type, :quantity,
+            presence: true
   validates :transaction_type, inclusion: { in: %w[BUY SELL] }
   validates :order_type, inclusion: { in: %w[MARKET LIMIT SL SL-M] }
   validates :product_type, inclusion: { in: %w[EQUITY MARGIN] }
   validates :status, inclusion: { in: %w[pending placed executed rejected cancelled failed] }
   validates :quantity, numericality: { greater_than: 0 }
 
-  scope :pending, -> { where(status: 'pending') }
-  scope :placed, -> { where(status: 'placed') }
-  scope :executed, -> { where(status: 'executed') }
-  scope :rejected, -> { where(status: 'rejected') }
-  scope :cancelled, -> { where(status: 'cancelled') }
-  scope :failed, -> { where(status: 'failed') }
+  scope :pending, -> { where(status: "pending") }
+  scope :placed, -> { where(status: "placed") }
+  scope :executed, -> { where(status: "executed") }
+  scope :rejected, -> { where(status: "rejected") }
+  scope :cancelled, -> { where(status: "cancelled") }
+  scope :failed, -> { where(status: "failed") }
   scope :active, -> { where(status: %w[pending placed]) }
   scope :dry_run, -> { where(dry_run: true) }
   scope :real, -> { where(dry_run: false) }
@@ -43,23 +44,23 @@ class Order < ApplicationRecord
   end
 
   def pending?
-    status == 'pending'
+    status == "pending"
   end
 
   def placed?
-    status == 'placed'
+    status == "placed"
   end
 
   def executed?
-    status == 'executed'
+    status == "executed"
   end
 
   def cancelled?
-    status == 'cancelled'
+    status == "cancelled"
   end
 
   def failed?
-    status == 'failed'
+    status == "failed"
   end
 
   def active?
@@ -67,11 +68,11 @@ class Order < ApplicationRecord
   end
 
   def buy?
-    transaction_type == 'BUY'
+    transaction_type == "BUY"
   end
 
   def sell?
-    transaction_type == 'SELL'
+    transaction_type == "SELL"
   end
 
   def total_value
@@ -98,4 +99,3 @@ class Order < ApplicationRecord
     requires_approval? && !approved? && !rejected?
   end
 end
-

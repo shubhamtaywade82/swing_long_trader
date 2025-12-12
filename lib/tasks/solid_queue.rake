@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 namespace :solid_queue do
-  desc 'Verify SolidQueue tables exist'
+  desc "Verify SolidQueue tables exist"
   task verify: :environment do
     required_tables = %w[
       solid_queue_jobs
@@ -21,9 +21,7 @@ namespace :solid_queue do
       status = exists ? "✅" : "❌"
       puts "#{status} #{table_name}"
 
-      unless exists
-        all_exist = false
-      end
+      all_exist = false unless exists
     end
 
     puts ""
@@ -43,9 +41,9 @@ namespace :solid_queue do
     end
   end
 
-  desc 'Show SolidQueue status'
+  desc "Show SolidQueue status"
   task status: :environment do
-    unless ActiveRecord::Base.connection.table_exists?('solid_queue_jobs')
+    unless ActiveRecord::Base.connection.table_exists?("solid_queue_jobs")
       puts "❌ SolidQueue is not installed"
       puts "   Run: rails solid_queue:install && rails db:migrate"
       exit 1
@@ -64,15 +62,15 @@ namespace :solid_queue do
     puts "Scheduled jobs: #{scheduled}"
     puts ""
 
-    if failed > 0
+    if failed.positive?
       puts "⚠️  There are #{failed} failed jobs"
       puts "   Run: rails solid_queue:failed to view details"
     end
   end
 
-  desc 'List failed jobs'
+  desc "List failed jobs"
   task failed: :environment do
-    unless ActiveRecord::Base.connection.table_exists?('solid_queue_failed_executions')
+    unless ActiveRecord::Base.connection.table_exists?("solid_queue_failed_executions")
       puts "❌ SolidQueue is not installed"
       exit 1
     end
@@ -96,4 +94,3 @@ namespace :solid_queue do
     end
   end
 end
-

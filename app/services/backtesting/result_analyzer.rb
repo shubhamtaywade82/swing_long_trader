@@ -30,7 +30,7 @@ module Backtesting
         consecutive_wins: consecutive_wins,
         consecutive_losses: consecutive_losses,
         equity_curve: equity_curve_data,
-        monthly_returns: monthly_returns
+        monthly_returns: monthly_returns,
       }
     end
 
@@ -51,7 +51,7 @@ module Backtesting
       years = days / 252.0 # Trading days per year
       return 0 if years <= 0
 
-      ((@final_capital / @initial_capital)**(1.0 / years) - 1) * 100
+      (((@final_capital / @initial_capital)**(1.0 / years)) - 1) * 100
     end
 
     def max_drawdown
@@ -75,7 +75,7 @@ module Backtesting
       return 0 if returns.empty?
 
       avg_return = returns.sum / returns.size
-      std_dev = Math.sqrt(returns.map { |r| (r - avg_return)**2 }.sum / returns.size)
+      std_dev = Math.sqrt(returns.sum { |r| (r - avg_return)**2 } / returns.size)
       return 0 if std_dev.zero?
 
       ((avg_return - risk_free_rate) / std_dev * Math.sqrt(252)).round(4)
@@ -86,10 +86,10 @@ module Backtesting
       return 0 if returns.empty?
 
       avg_return = returns.sum / returns.size
-      downside_returns = returns.select { |r| r < 0 }
+      downside_returns = returns.select(&:negative?)
       return 0 if downside_returns.empty?
 
-      downside_std = Math.sqrt(downside_returns.map { |r| r**2 }.sum / downside_returns.size)
+      downside_std = Math.sqrt(downside_returns.sum { |r| r**2 } / downside_returns.size)
       return 0 if downside_std.zero?
 
       ((avg_return - risk_free_rate) / downside_std * Math.sqrt(252)).round(4)
@@ -128,39 +128,39 @@ module Backtesting
     end
 
     def winning_trades
-      @positions.count { |p| p.calculate_pnl > 0 }
+      @positions.count { |p| p.calculate_pnl.positive? }
     end
 
     def losing_trades
-      @positions.count { |p| p.calculate_pnl < 0 }
+      @positions.count { |p| p.calculate_pnl.negative? }
     end
 
     def avg_holding_period
       return 0 if @positions.empty?
 
-      total_days = @positions.sum { |p| p.holding_days }
+      total_days = @positions.sum(&:holding_days)
       (total_days.to_f / @positions.size).round(1)
     end
 
     def best_trade
       return nil if @positions.empty?
 
-      best = @positions.max_by { |p| p.calculate_pnl }
+      best = @positions.max_by(&:calculate_pnl)
       {
         pnl: best.calculate_pnl.round(2),
         pnl_pct: best.calculate_pnl_pct.round(2),
-        holding_days: best.holding_days
+        holding_days: best.holding_days,
       }
     end
 
     def worst_trade
       return nil if @positions.empty?
 
-      worst = @positions.min_by { |p| p.calculate_pnl }
+      worst = @positions.min_by(&:calculate_pnl)
       {
         pnl: worst.calculate_pnl.round(2),
         pnl_pct: worst.calculate_pnl_pct.round(2),
-        holding_days: worst.holding_days
+        holding_days: worst.holding_days,
       }
     end
 
@@ -169,7 +169,7 @@ module Backtesting
       current = 0
 
       @positions.each do |pos|
-        if pos.calculate_pnl > 0
+        if pos.calculate_pnl.positive?
           current += 1
           max_consecutive = [max_consecutive, current].max
         else
@@ -185,7 +185,7 @@ module Backtesting
       current = 0
 
       @positions.each do |pos|
-        if pos.calculate_pnl < 0
+        if pos.calculate_pnl.negative?
           current += 1
           max_consecutive = [max_consecutive, current].max
         else
@@ -211,7 +211,7 @@ module Backtesting
     def trading_days
       return 0 if @positions.empty?
 
-      first_date = @positions.map { |p| p.entry_date }.min
+      first_date = @positions.map(&:entry_date).min
       last_date = @positions.map { |p| p.exit_date || p.entry_date }.max
 
       return 0 unless first_date && last_date
@@ -226,13 +226,11 @@ module Backtesting
     end
 
     def winning_trade_pnls
-      @positions.select { |p| p.calculate_pnl > 0 }.map { |p| p.calculate_pnl }
+      @positions.select { |p| p.calculate_pnl.positive? }.map(&:calculate_pnl)
     end
 
     def losing_trade_pnls
-      @positions.select { |p| p.calculate_pnl < 0 }.map { |p| p.calculate_pnl }
+      @positions.select { |p| p.calculate_pnl.negative? }.map(&:calculate_pnl)
     end
   end
 end
-
-

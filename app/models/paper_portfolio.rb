@@ -22,7 +22,7 @@ class PaperPortfolio < ApplicationRecord
     # Capital already includes realized P&L from exits, so we only add unrealized
     update!(
       total_equity: capital + pnl_unrealized,
-      available_capital: capital - reserved_capital
+      available_capital: capital - reserved_capital,
     )
   end
 
@@ -34,16 +34,16 @@ class PaperPortfolio < ApplicationRecord
 
     update!(
       max_drawdown: [max_drawdown, drawdown].max,
-      peak_equity: [peak_equity, current_equity].max
+      peak_equity: [peak_equity, current_equity].max,
     )
   end
 
   def open_positions
-    paper_positions.where(status: 'open')
+    paper_positions.where(status: "open")
   end
 
   def closed_positions
-    paper_positions.where(status: 'closed')
+    paper_positions.where(status: "closed")
   end
 
   def total_exposure

@@ -12,9 +12,9 @@ module Indicators
         indicator_configs = config[:indicators] || []
         return [] if indicator_configs.empty?
 
-        indicator_configs.map do |indicator_config|
+        indicator_configs.filter_map do |indicator_config|
           build_indicator(series: series, config: indicator_config, global_config: config)
-        end.compact
+        end
       end
 
       # Build a single indicator from configuration
@@ -27,15 +27,15 @@ module Indicators
         merged_config = global_config.merge(config[:config] || {})
 
         case indicator_type.to_s.downcase
-        when 'supertrend', 'st'
+        when "supertrend", "st"
           Indicators::SupertrendIndicator.new(series: series, config: merged_config)
-        when 'adx'
+        when "adx"
           Indicators::AdxIndicator.new(series: series, config: merged_config)
-        when 'rsi'
+        when "rsi"
           Indicators::RsiIndicator.new(series: series, config: merged_config)
-        when 'macd'
+        when "macd"
           Indicators::MacdIndicator.new(series: series, config: merged_config)
-        when 'trend_duration', 'trend_duration_forecast', 'tdf'
+        when "trend_duration", "trend_duration_forecast", "tdf"
           Indicators::TrendDurationIndicator.new(series: series, config: merged_config)
         else
           Rails.logger.warn("[IndicatorFactory] Unknown indicator type: #{indicator_type}")

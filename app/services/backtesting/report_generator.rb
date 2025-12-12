@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'csv'
+require "csv"
 
 module Backtesting
   # Generates reports from backtest results
@@ -20,7 +20,7 @@ module Backtesting
         trades_csv: generate_trades_csv,
         equity_curve_csv: generate_equity_curve_csv,
         metrics_report: generate_metrics_report,
-        visualization_data: generate_visualization_data
+        visualization_data: generate_visualization_data,
       }
     end
 
@@ -57,7 +57,7 @@ module Backtesting
         csv << %w[Symbol Direction EntryDate EntryPrice ExitDate ExitPrice Quantity PnL PnL_Pct HoldingDays ExitReason]
 
         @positions.each do |position|
-          symbol = position.instrument&.symbol_name || 'N/A'
+          symbol = position.instrument&.symbol_name || "N/A"
           csv << [
             symbol,
             position.direction,
@@ -69,7 +69,7 @@ module Backtesting
             position.pnl.to_f,
             position.pnl_pct.to_f,
             position.holding_days,
-            position.exit_reason
+            position.exit_reason,
           ]
         end
       end
@@ -86,7 +86,7 @@ module Backtesting
           csv << [
             point[:date],
             point[:equity].round(2),
-            point[:drawdown].round(2)
+            point[:drawdown].round(2),
           ]
         end
       end
@@ -146,8 +146,8 @@ module Backtesting
           sharpe_ratio: @backtest_run.sharpe_ratio,
           sortino_ratio: @backtest_run.sortino_ratio,
           win_rate: @backtest_run.win_rate,
-          profit_factor: @backtest_run.profit_factor
-        }
+          profit_factor: @backtest_run.profit_factor,
+        },
       }
     end
 
@@ -183,7 +183,7 @@ module Backtesting
         curve << {
           date: date.to_s,
           equity: equity.round(2),
-          drawdown: drawdown
+          drawdown: drawdown,
         }
       end
 
@@ -199,7 +199,7 @@ module Backtesting
       @positions.each do |position|
         next unless position.exit_date
 
-        month_key = position.exit_date.strftime('%Y-%m')
+        month_key = position.exit_date.strftime("%Y-%m")
         monthly_pnl[month_key] += position.pnl.to_f
       end
 
@@ -208,7 +208,7 @@ module Backtesting
         prev_month_capital = monthly_capital[month]
         monthly_returns[month] = {
           pnl: pnl.round(2),
-          return_pct: prev_month_capital > 0 ? (pnl / prev_month_capital * 100).round(2) : 0
+          return_pct: prev_month_capital.positive? ? (pnl / prev_month_capital * 100).round(2) : 0,
         }
         monthly_capital[month] = prev_month_capital + pnl
       end
@@ -223,23 +223,23 @@ module Backtesting
         by_direction: @positions.group(:direction).count,
         by_exit_reason: @positions.group(:exit_reason).count,
         by_holding_period: {
-          '1-5 days' => @positions.where(holding_days: 1..5).count,
-          '6-10 days' => @positions.where(holding_days: 6..10).count,
-          '11-15 days' => @positions.where(holding_days: 11..15).count,
-          '16+ days' => @positions.where('holding_days > 15').count
+          "1-5 days" => @positions.where(holding_days: 1..5).count,
+          "6-10 days" => @positions.where(holding_days: 6..10).count,
+          "11-15 days" => @positions.where(holding_days: 11..15).count,
+          "16+ days" => @positions.where("holding_days > 15").count,
         },
         pnl_distribution: {
-          '> 5%' => @positions.where('pnl_pct > 5').count,
-          '2-5%' => @positions.where(pnl_pct: 2..5).count,
-          '0-2%' => @positions.where(pnl_pct: 0..2).count,
-          '-2-0%' => @positions.where(pnl_pct: -2..0).count,
-          '< -2%' => @positions.where('pnl_pct < -2').count
-        }
+          "> 5%" => @positions.where("pnl_pct > 5").count,
+          "2-5%" => @positions.where(pnl_pct: 2..5).count,
+          "0-2%" => @positions.where(pnl_pct: 0..2).count,
+          "-2-0%" => @positions.where(pnl_pct: -2..0).count,
+          "< -2%" => @positions.where("pnl_pct < -2").count,
+        },
       }
     end
 
     def format_monthly_returns(monthly_returns)
-      return 'No monthly data available' if monthly_returns.empty?
+      return "No monthly data available" if monthly_returns.empty?
 
       monthly_returns.map do |month, data|
         "  #{month}: #{data[:return_pct]}% (₹#{data[:pnl]})"
@@ -247,7 +247,7 @@ module Backtesting
     end
 
     def format_trade_distribution(distribution)
-      return 'No trade distribution data' if distribution.empty?
+      return "No trade distribution data" if distribution.empty?
 
       lines = []
 
@@ -283,4 +283,3 @@ module Backtesting
     end
   end
 end
-

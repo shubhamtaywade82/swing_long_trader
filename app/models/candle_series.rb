@@ -6,7 +6,7 @@ class CandleSeries
 
   attr_reader :symbol, :interval, :candles
 
-  def initialize(symbol:, interval: '5')
+  def initialize(symbol:, interval: "5")
     @symbol = symbol
     @interval = interval
     @candles = []
@@ -35,17 +35,17 @@ class CandleSeries
   end
 
   def normalize_hash_format(resp)
-    raise "Unexpected candle format: #{resp.class}" unless resp.is_a?(Hash) && resp['high'].is_a?(Array)
+    raise "Unexpected candle format: #{resp.class}" unless resp.is_a?(Hash) && resp["high"].is_a?(Array)
 
-    size = resp['high'].size
+    size = resp["high"].size
     (0...size).map do |i|
       {
-        open: resp['open'][i].to_f,
-        close: resp['close'][i].to_f,
-        high: resp['high'][i].to_f,
-        low: resp['low'][i].to_f,
-        timestamp: Time.zone.at(resp['timestamp'][i]),
-        volume: resp['volume'][i].to_i
+        open: resp["open"][i].to_f,
+        close: resp["close"][i].to_f,
+        high: resp["high"][i].to_f,
+        low: resp["low"][i].to_f,
+        timestamp: Time.zone.at(resp["timestamp"][i]),
+        volume: resp["volume"][i].to_i,
       }
     end
   end
@@ -53,12 +53,12 @@ class CandleSeries
   def slice_candle(candle)
     if candle.is_a?(Hash)
       {
-        open: candle[:open] || candle['open'],
-        close: candle[:close] || candle['close'],
-        high: candle[:high] || candle['high'],
-        low: candle[:low] || candle['low'],
-        timestamp: candle[:timestamp] || candle['timestamp'],
-        volume: candle[:volume] || candle['volume'] || 0
+        open: candle[:open] || candle["open"],
+        close: candle[:close] || candle["close"],
+        high: candle[:high] || candle["high"],
+        low: candle[:low] || candle["low"],
+        timestamp: candle[:timestamp] || candle["timestamp"],
+        volume: candle[:volume] || candle["volume"] || 0,
       }
     elsif candle.respond_to?(:[]) && candle.size >= 6
       {
@@ -67,7 +67,7 @@ class CandleSeries
         high: candle[2],
         low: candle[3],
         close: candle[4],
-        volume: candle[5]
+        volume: candle[5],
       }
     else
       raise "Unexpected candle format: #{candle.inspect}"
@@ -81,12 +81,12 @@ class CandleSeries
 
   def to_hash
     {
-      'timestamp' => candles.map { |c| c.timestamp.to_i },
-      'open' => opens,
-      'high' => highs,
-      'low' => lows,
-      'close' => closes,
-      'volume' => candles.map(&:volume)
+      "timestamp" => candles.map { |c| c.timestamp.to_i },
+      "open" => opens,
+      "high" => highs,
+      "low" => lows,
+      "close" => closes,
+      "volume" => candles.map(&:volume),
     }
   end
 
@@ -96,7 +96,7 @@ class CandleSeries
         date_time: Time.zone.at(c.timestamp || 0),
         high: c.high,
         low: c.low,
-        close: c.close
+        close: c.close,
       }
     end
   end
@@ -126,7 +126,7 @@ class CandleSeries
     result.last.adx
   rescue ArgumentError, TypeError => e
     # Suppress "Not enough data" warnings - they're expected when called too early
-    unless e.message.to_s.include?('Not enough data') || e.message.to_s.include?('insufficient')
+    unless e.message.to_s.include?("Not enough data") || e.message.to_s.include?("insufficient")
       Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
     end
     nil
@@ -135,7 +135,7 @@ class CandleSeries
     raise if e.is_a?(NoMethodError)
 
     # Suppress "Not enough data" warnings - they're expected when called too early
-    unless e.message.to_s.include?('Not enough data') || e.message.to_s.include?('insufficient')
+    unless e.message.to_s.include?("Not enough data") || e.message.to_s.include?("insufficient")
       Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
     end
     nil
@@ -249,7 +249,10 @@ class CandleSeries
     result # Returns [macd, signal, histogram] array
   rescue NoMethodError => e
     raise e
-  rescue ArgumentError, TypeError, StandardError => e
+  rescue ArgumentError, TypeError => e
+    # Re-raise NoMethodError if it was wrapped
+    raise e if e.is_a?(NoMethodError)
+  rescue StandardError => e
     # Re-raise NoMethodError if it was wrapped
     raise e if e.is_a?(NoMethodError)
 
@@ -294,11 +297,11 @@ class CandleSeries
     :short_entry if latest_close < latest_trend
   end
 
-  def inside_bar?(i)
-    return false if i < 1
+  def inside_bar?(index)
+    return false if index < 1
 
-    curr = @candles[i]
-    prev = @candles[i - 1]
+    curr = @candles[index]
+    prev = @candles[index - 1]
     curr.high < prev.high && curr.low > prev.low
   end
 
@@ -308,7 +311,7 @@ class CandleSeries
 
     bb = RubyTechnicalAnalysis::BollingerBands.new(
       series: closes,
-      period: period
+      period: period,
     ).call
 
     { upper: bb[0], lower: bb[1], middle: bb[2] }
@@ -320,7 +323,7 @@ class CandleSeries
     dc = candles.each_with_index.map do |c, _i|
       {
         date_time: Time.zone.at(c.timestamp || 0),
-        value: c.close
+        value: c.close,
       }
     end
     TechnicalAnalysis::Dc.calculate(dc, period: period)
@@ -333,7 +336,7 @@ class CandleSeries
       {
         date_time: Time.zone.at(c.timestamp || 0),
         close: c.close,
-        volume: c.volume || 0
+        volume: c.volume || 0,
       }
     end
 
@@ -342,7 +345,11 @@ class CandleSeries
     TechnicalAnalysis::Obv.calculate(dcv)
   rescue NoMethodError => e
     raise e
-  rescue ArgumentError, TypeError, StandardError => e
+  rescue ArgumentError, TypeError => e
+    # OBV.calculate might have different signature - try alternative approach
+    Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
+    nil
+  rescue StandardError => e
     # OBV.calculate might have different signature - try alternative approach
     Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
     nil

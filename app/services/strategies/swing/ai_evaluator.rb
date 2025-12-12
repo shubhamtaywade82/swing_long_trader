@@ -9,12 +9,12 @@ module Strategies
 
       def initialize(signal:)
         @signal = signal
-        @config = AlgoConfig.fetch([:swing_trading, :ai_ranking]) || {}
+        @config = AlgoConfig.fetch(%i[swing_trading ai_ranking]) || {}
       end
 
       def call
-        return { success: false, error: 'Invalid signal' } unless @signal.present?
-        return { success: false, error: 'AI ranking disabled' } unless @config[:enabled]
+        return { success: false, error: "Invalid signal" } if @signal.blank?
+        return { success: false, error: "AI ranking disabled" } unless @config[:enabled]
 
         # Build compact prompt
         prompt = build_prompt
@@ -22,15 +22,15 @@ module Strategies
         # Call OpenAI
         result = Openai::Service.call(
           prompt: prompt,
-          model: @config[:model] || 'gpt-4o-mini',
-          temperature: @config[:temperature] || 0.3
+          model: @config[:model] || "gpt-4o-mini",
+          temperature: @config[:temperature] || 0.3,
         )
 
         return { success: false, error: result[:error] } unless result[:success]
 
         # Parse JSON response
         parsed = parse_response(result[:content])
-        return { success: false, error: 'Failed to parse response' } unless parsed
+        return { success: false, error: "Failed to parse response" } unless parsed
 
         {
           success: true,
@@ -38,7 +38,7 @@ module Strategies
           ai_confidence: parsed[:confidence],
           ai_summary: parsed[:summary],
           ai_risk: parsed[:risk],
-          cached: result[:cached]
+          cached: result[:cached],
         }
       end
 
@@ -72,18 +72,18 @@ module Strategies
 
         # Extract JSON (handle markdown code blocks)
         json_text = content.strip
-        json_text = json_text.gsub(/```json\s*/, '').gsub(/```\s*$/, '') if json_text.include?('```')
+        json_text = json_text.gsub(/```json\s*/, "").gsub(/```\s*$/, "") if json_text.include?("```")
 
         parsed = JSON.parse(json_text)
         {
-          score: parsed['score']&.to_f || 0,
-          confidence: parsed['confidence']&.to_f || 0,
-          summary: parsed['summary'] || '',
-          risk: parsed['risk']&.downcase || 'medium'
+          score: parsed["score"]&.to_f || 0,
+          confidence: parsed["confidence"]&.to_f || 0,
+          summary: parsed["summary"] || "",
+          risk: parsed["risk"]&.downcase || "medium",
         }
       rescue JSON::ParserError => e
         Rails.logger.error("[Strategies::Swing::AIEvaluator] JSON parse error: #{e.message}")
-        Rails.logger.debug("[Strategies::Swing::AIEvaluator] Content: #{content}")
+        Rails.logger.debug { "[Strategies::Swing::AIEvaluator] Content: #{content}" }
         nil
       rescue StandardError => e
         Rails.logger.error("[Strategies::Swing::AIEvaluator] Parse error: #{e.message}")
@@ -92,4 +92,3 @@ module Strategies
     end
   end
 end
-

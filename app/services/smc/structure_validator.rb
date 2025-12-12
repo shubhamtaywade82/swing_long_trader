@@ -16,7 +16,7 @@ module Smc
     #     structure: Hash (BOS, CHOCH, order_blocks, fvgs, mitigation_blocks)
     #   }
     def self.validate(candles, direction: :long, config: {})
-      return invalid_result('Insufficient candles') if candles.nil? || candles.size < 50
+      return invalid_result("Insufficient candles") if candles.nil? || candles.size < 50
 
       structure = analyze_structure(candles, config)
       validation = check_structure_requirements(structure, direction, config)
@@ -25,11 +25,9 @@ module Smc
         valid: validation[:valid],
         score: validation[:score],
         reasons: validation[:reasons],
-        structure: structure
+        structure: structure,
       }
     end
-
-    private
 
     def self.analyze_structure(candles, config)
       lookback = config[:lookback] || 20
@@ -39,7 +37,7 @@ module Smc
         choch: CHOCH.detect(candles, lookback: lookback),
         order_blocks: OrderBlock.detect(candles, lookback: lookback * 2),
         fvgs: FairValueGap.detect(candles, lookback: lookback * 2),
-        mitigation_blocks: MitigationBlock.detect(candles, lookback: lookback * 2)
+        mitigation_blocks: MitigationBlock.detect(candles, lookback: lookback * 2),
       }
     end
 
@@ -62,7 +60,7 @@ module Smc
             reasons << "BOS mismatch: expected #{direction}, got #{structure[:bos][:type]}"
           end
         else
-          reasons << 'No BOS detected'
+          reasons << "No BOS detected"
         end
       end
 
@@ -85,7 +83,7 @@ module Smc
         max_score += 25
         relevant_blocks = structure[:order_blocks].select do |block|
           (direction == :long && block[:type] == :bullish) ||
-          (direction == :short && block[:type] == :bearish)
+            (direction == :short && block[:type] == :bearish)
         end
 
         if relevant_blocks.any?
@@ -103,7 +101,7 @@ module Smc
         max_score += 15
         relevant_fvgs = structure[:fvgs].select do |fvg|
           (direction == :long && fvg[:type] == :bullish && !fvg[:filled]) ||
-          (direction == :short && fvg[:type] == :bearish && !fvg[:filled])
+            (direction == :short && fvg[:type] == :bearish && !fvg[:filled])
         end
 
         if relevant_fvgs.any?
@@ -127,7 +125,7 @@ module Smc
       end
 
       # Calculate final score (0-100)
-      final_score = max_score > 0 ? (score / max_score * 100).round(2) : 0.0
+      final_score = max_score.positive? ? (score / max_score * 100).round(2) : 0.0
 
       # Determine validity
       min_score = config[:min_score] || 50.0
@@ -136,7 +134,7 @@ module Smc
       {
         valid: is_valid,
         score: final_score,
-        reasons: reasons
+        reasons: reasons,
       }
     end
 
@@ -145,9 +143,8 @@ module Smc
         valid: false,
         score: 0.0,
         reasons: [reason],
-        structure: {}
+        structure: {},
       }
     end
   end
 end
-

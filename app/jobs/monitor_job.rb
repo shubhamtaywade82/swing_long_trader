@@ -13,17 +13,17 @@ class MonitorJob < ApplicationJob
       candle_freshness: check_candle_freshness,
       job_queue: check_job_queue,
       job_duration: check_job_duration,
-      openai_cost: check_openai_cost
+      openai_cost: check_openai_cost,
     }
 
-    failed_checks = checks.select { |_k, v| !v[:healthy] }
+    failed_checks = checks.reject { |_k, v| v[:healthy] }
 
     if failed_checks.any?
       message = "⚠️ Health Check Failed:\n\n"
       failed_checks.each do |check, result|
         message += "❌ #{check}: #{result[:message]}\n"
       end
-      Telegram::Notifier.send_error_alert(message, context: 'MonitorJob')
+      Telegram::Notifier.send_error_alert(message, context: "MonitorJob")
     end
 
     checks
@@ -36,7 +36,7 @@ class MonitorJob < ApplicationJob
 
   def check_database
     Instrument.count
-    { healthy: true, message: 'OK' }
+    { healthy: true, message: "OK" }
   rescue StandardError => e
     { healthy: false, message: e.message }
   end
@@ -44,36 +44,37 @@ class MonitorJob < ApplicationJob
   def check_dhan_api
     # Simple check - try to get a quote
     instrument = Instrument.first
-    return { healthy: false, message: 'No instruments' } unless instrument
+    return { healthy: false, message: "No instruments" } unless instrument
 
     ltp = instrument.ltp
-    { healthy: ltp.present?, message: ltp.present? ? 'OK' : 'No LTP response' }
+    { healthy: ltp.present?, message: ltp.present? ? "OK" : "No LTP response" }
   rescue StandardError => e
     { healthy: false, message: e.message }
   end
 
   def check_telegram
-    { healthy: TelegramNotifier.enabled?, message: TelegramNotifier.enabled? ? 'OK' : 'Not configured' }
+    { healthy: TelegramNotifier.enabled?, message: TelegramNotifier.enabled? ? "OK" : "Not configured" }
   rescue StandardError => e
     { healthy: false, message: e.message }
   end
 
   def check_candle_freshness
     latest = CandleSeriesRecord.order(timestamp: :desc).first
-    return { healthy: false, message: 'No candles' } unless latest
+    return { healthy: false, message: "No candles" } unless latest
 
-    days_old = (Date.today - latest.timestamp.to_date).to_i
+    days_old = (Time.zone.today - latest.timestamp.to_date).to_i
     healthy = days_old <= 2
 
-    { healthy: healthy, message: healthy ? 'OK' : "Candles #{days_old} days old" }
+    { healthy: healthy, message: healthy ? "OK" : "Candles #{days_old} days old" }
   rescue StandardError => e
     { healthy: false, message: e.message }
   end
 
   def check_job_queue
-    return { healthy: true, message: 'SolidQueue not installed' } unless solid_queue_installed?
+    return { healthy: true, message: "SolidQueue not installed" } unless solid_queue_installed?
 
-    pending = SolidQueue::Job.where(finished_at: nil).where('scheduled_at IS NULL OR scheduled_at <= ?', Time.current).count
+    pending = SolidQueue::Job.where(finished_at: nil).where("scheduled_at IS NULL OR scheduled_at <= ?",
+                                                            Time.current).count
     failed = SolidQueue::FailedExecution.count
     running = SolidQueue::ClaimedExecution.count
 
@@ -86,23 +87,24 @@ class MonitorJob < ApplicationJob
   end
 
   def check_job_duration
-    return { healthy: true, message: 'N/A' } unless solid_queue_installed?
+    return { healthy: true, message: "N/A" } unless solid_queue_installed?
 
     # Get average duration for recent completed jobs
     recent_jobs = SolidQueue::Job
-                   .where.not(finished_at: nil)
-                   .where('finished_at > ?', 1.hour.ago)
-                   .where('created_at IS NOT NULL')
-                   .limit(100)
+                  .where.not(finished_at: nil)
+                  .where("finished_at > ?", 1.hour.ago)
+                  .where.not(created_at: nil)
+                  .limit(100)
 
-    return { healthy: true, message: 'No recent jobs' } if recent_jobs.empty?
+    return { healthy: true, message: "No recent jobs" } if recent_jobs.empty?
 
-    durations = recent_jobs.map do |job|
+    durations = recent_jobs.filter_map do |job|
       next unless job.created_at && job.finished_at
-      (job.finished_at - job.created_at).to_f
-    end.compact
 
-    return { healthy: true, message: 'No duration data' } if durations.empty?
+      (job.finished_at - job.created_at).to_f
+    end
+
+    return { healthy: true, message: "No duration data" } if durations.empty?
 
     avg_duration = durations.sum / durations.size
     max_duration = durations.max
@@ -117,12 +119,12 @@ class MonitorJob < ApplicationJob
   end
 
   def check_openai_cost
-    return { healthy: true, message: 'OpenAI not configured' } unless ENV['OPENAI_API_KEY'].present?
+    return { healthy: true, message: "OpenAI not configured" } if ENV["OPENAI_API_KEY"].blank?
 
-    cost_config = AlgoConfig.fetch([:openai, :cost_monitoring]) || {}
-    return { healthy: true, message: 'Cost monitoring disabled' } unless cost_config[:enabled]
+    cost_config = AlgoConfig.fetch(%i[openai cost_monitoring]) || {}
+    return { healthy: true, message: "Cost monitoring disabled" } unless cost_config[:enabled]
 
-    today = Date.today
+    today = Time.zone.today
     daily_cost = Metrics::Tracker.get_openai_daily_cost(today)
 
     # Get thresholds
@@ -138,19 +140,13 @@ class MonitorJob < ApplicationJob
 
     # Check thresholds
     warnings = []
-    if daily_cost >= daily_threshold
-      warnings << "Daily: $#{daily_cost.round(4)} >= $#{daily_threshold}"
-    end
-    if weekly_cost >= weekly_threshold
-      warnings << "Weekly: $#{weekly_cost.round(4)} >= $#{weekly_threshold}"
-    end
-    if monthly_cost >= monthly_threshold
-      warnings << "Monthly: $#{monthly_cost.round(4)} >= $#{monthly_threshold}"
-    end
+    warnings << "Daily: $#{daily_cost.round(4)} >= $#{daily_threshold}" if daily_cost >= daily_threshold
+    warnings << "Weekly: $#{weekly_cost.round(4)} >= $#{weekly_threshold}" if weekly_cost >= weekly_threshold
+    warnings << "Monthly: $#{monthly_cost.round(4)} >= $#{monthly_threshold}" if monthly_cost >= monthly_threshold
 
     healthy = warnings.empty?
     message = if warnings.any?
-                warnings.join(', ')
+                warnings.join(", ")
               else
                 "Daily: $#{daily_cost.round(4)}, Weekly: $#{weekly_cost.round(4)}, Monthly: $#{monthly_cost.round(4)}"
               end
@@ -177,7 +173,6 @@ class MonitorJob < ApplicationJob
   end
 
   def solid_queue_installed?
-    ActiveRecord::Base.connection.table_exists?('solid_queue_jobs')
+    ActiveRecord::Base.connection.table_exists?("solid_queue_jobs")
   end
 end
-

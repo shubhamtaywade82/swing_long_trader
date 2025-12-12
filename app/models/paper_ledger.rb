@@ -8,16 +8,16 @@ class PaperLedger < ApplicationRecord
   validates :transaction_type, presence: true, inclusion: { in: %w[credit debit] }
   validates :reason, presence: true
 
-  scope :credits, -> { where(transaction_type: 'credit') }
-  scope :debits, -> { where(transaction_type: 'debit') }
+  scope :credits, -> { where(transaction_type: "credit") }
+  scope :debits, -> { where(transaction_type: "debit") }
   scope :recent, -> { order(created_at: :desc) }
 
   def credit?
-    transaction_type == 'credit'
+    transaction_type == "credit"
   end
 
   def debit?
-    transaction_type == 'debit'
+    transaction_type == "debit"
   end
 
   def meta_hash

@@ -12,7 +12,7 @@ module Backtesting
         positions: positions,
         initial_capital: initial_capital,
         simulations: simulations,
-        confidence_levels: confidence_levels
+        confidence_levels: confidence_levels,
       ).call
     end
 
@@ -25,11 +25,11 @@ module Backtesting
     end
 
     def call
-      return { success: false, error: 'No positions provided' } if @positions.empty?
+      return { success: false, error: "No positions provided" } if @positions.empty?
 
       # Run Monte Carlo simulations
       @simulations.times do |i|
-        Rails.logger.debug("[MonteCarlo] Running simulation #{i + 1}/#{@simulations}") if (i % 100).zero?
+        Rails.logger.debug { "[MonteCarlo] Running simulation #{i + 1}/#{@simulations}" } if (i % 100).zero?
 
         result = run_simulation
         @simulation_results << result
@@ -45,7 +45,7 @@ module Backtesting
         results: analysis,
         probability_distributions: calculate_probability_distributions,
         confidence_intervals: calculate_confidence_intervals,
-        worst_case_scenarios: analyze_worst_cases
+        worst_case_scenarios: analyze_worst_cases,
       }
     end
 
@@ -71,9 +71,9 @@ module Backtesting
         total_pnl += pnl
         total_trades += 1
 
-        if pnl > 0
+        if pnl.positive?
           winning_trades += 1
-        elsif pnl < 0
+        elsif pnl.negative?
           losing_trades += 1
         end
 
@@ -83,8 +83,8 @@ module Backtesting
         max_drawdown = [max_drawdown, drawdown].max
       end
 
-      total_return = capital > 0 ? ((capital - @initial_capital) / @initial_capital * 100) : 0
-      win_rate = total_trades > 0 ? (winning_trades.to_f / total_trades * 100) : 0
+      total_return = capital.positive? ? ((capital - @initial_capital) / @initial_capital * 100) : 0
+      win_rate = total_trades.positive? ? (winning_trades.to_f / total_trades * 100) : 0
 
       {
         final_capital: capital.round(2),
@@ -95,7 +95,7 @@ module Backtesting
         winning_trades: winning_trades,
         losing_trades: losing_trades,
         win_rate: win_rate.round(2),
-        equity_curve: equity_curve
+        equity_curve: equity_curve,
       }
     end
 
@@ -115,15 +115,15 @@ module Backtesting
         min_total_return: min(:total_return),
         max_total_return: max(:total_return),
         min_max_drawdown: min(:max_drawdown),
-        max_max_drawdown: max(:max_drawdown)
+        max_max_drawdown: max(:max_drawdown),
       }
     end
 
     def calculate_probability_distributions
       return {} if @simulation_results.empty?
 
-      returns = @simulation_results.map { |r| r[:total_return] }.sort
-      drawdowns = @simulation_results.map { |r| r[:max_drawdown] }.sort
+      returns = @simulation_results.pluck(:total_return).sort
+      drawdowns = @simulation_results.pluck(:max_drawdown).sort
 
       {
         returns: {
@@ -133,7 +133,7 @@ module Backtesting
           q75: percentile(returns, 0.75),
           max: returns.last,
           mean: mean(:total_return),
-          std_dev: standard_deviation(:total_return)
+          std_dev: standard_deviation(:total_return),
         },
         drawdowns: {
           min: drawdowns.first,
@@ -142,8 +142,8 @@ module Backtesting
           q75: percentile(drawdowns, 0.75),
           max: drawdowns.last,
           mean: mean(:max_drawdown),
-          std_dev: standard_deviation(:max_drawdown)
-        }
+          std_dev: standard_deviation(:max_drawdown),
+        },
       }
     end
 
@@ -155,7 +155,7 @@ module Backtesting
       @confidence_levels.each do |level|
         alpha = 1 - level
         lower_percentile = (alpha / 2.0) * 100
-        upper_percentile = (1 - alpha / 2.0) * 100
+        upper_percentile = (1 - (alpha / 2.0)) * 100
 
         returns = @simulation_results.map { |r| r[:total_return] }.sort
         drawdowns = @simulation_results.map { |r| r[:max_drawdown] }.sort
@@ -164,13 +164,13 @@ module Backtesting
           total_return: {
             lower: percentile(returns, lower_percentile / 100.0),
             upper: percentile(returns, upper_percentile / 100.0),
-            range: percentile(returns, upper_percentile / 100.0) - percentile(returns, lower_percentile / 100.0)
+            range: percentile(returns, upper_percentile / 100.0) - percentile(returns, lower_percentile / 100.0),
           },
           max_drawdown: {
             lower: percentile(drawdowns, lower_percentile / 100.0),
             upper: percentile(drawdowns, upper_percentile / 100.0),
-            range: percentile(drawdowns, upper_percentile / 100.0) - percentile(drawdowns, lower_percentile / 100.0)
-          }
+            range: percentile(drawdowns, upper_percentile / 100.0) - percentile(drawdowns, lower_percentile / 100.0),
+          },
         }
       end
 
@@ -190,15 +190,15 @@ module Backtesting
           mean_return: worst_simulations.sum { |r| r[:total_return] } / worst_count.to_f,
           mean_drawdown: worst_simulations.sum { |r| r[:max_drawdown] } / worst_count.to_f,
           worst_return: worst_simulations.first[:total_return],
-          worst_drawdown: worst_simulations.max_by { |r| r[:max_drawdown] }[:max_drawdown]
+          worst_drawdown: worst_simulations.max_by { |r| r[:max_drawdown] }[:max_drawdown],
         },
         probability_of_loss: calculate_probability_of_loss,
-        probability_of_large_drawdown: calculate_probability_of_large_drawdown
+        probability_of_large_drawdown: calculate_probability_of_large_drawdown,
       }
     end
 
     def calculate_probability_of_loss
-      losing_simulations = @simulation_results.count { |r| r[:total_return] < 0 }
+      losing_simulations = @simulation_results.count { |r| r[:total_return].negative? }
       (losing_simulations.to_f / @simulation_results.size * 100).round(2)
     end
 
@@ -209,14 +209,14 @@ module Backtesting
     end
 
     def mean(metric)
-      values = @simulation_results.map { |r| r[metric] }
+      values = @simulation_results.pluck(metric)
       return 0.0 if values.empty?
 
       (values.sum.to_f / values.size).round(2)
     end
 
     def standard_deviation(metric)
-      values = @simulation_results.map { |r| r[metric] }
+      values = @simulation_results.pluck(metric)
       return 0.0 if values.empty? || values.size == 1
 
       mean_value = mean(metric)
@@ -225,11 +225,11 @@ module Backtesting
     end
 
     def min(metric)
-      @simulation_results.map { |r| r[metric] }.min
+      @simulation_results.pluck(metric).min
     end
 
     def max(metric)
-      @simulation_results.map { |r| r[metric] }.max
+      @simulation_results.pluck(metric).max
     end
 
     def percentile(sorted_array, percentile)
@@ -241,4 +241,3 @@ module Backtesting
     end
   end
 end
-

@@ -1,54 +1,54 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe Indicators::SupertrendIndicator, type: :service do
-  let(:series) { CandleSeries.new(symbol: 'TEST', interval: '1D') }
+  let(:series) { CandleSeries.new(symbol: "TEST", interval: "1D") }
 
   before do
     50.times { series.add_candle(create(:candle)) }
   end
 
-  describe '#initialize' do
-    it 'initializes with default period' do
+  describe "#initialize" do
+    it "initializes with default period" do
       indicator = described_class.new(series: series)
 
       expect(indicator.min_required_candles).to eq(7)
     end
 
-    it 'uses custom period from config' do
+    it "uses custom period from config" do
       indicator = described_class.new(series: series, config: { period: 10 })
 
       expect(indicator.min_required_candles).to eq(10)
     end
   end
 
-  describe '#ready?' do
-    it 'returns false when index is too small' do
+  describe "#ready?" do
+    it "returns false when index is too small" do
       indicator = described_class.new(series: series)
 
       expect(indicator.ready?(5)).to be false
     end
 
-    it 'returns true when index is sufficient' do
+    it "returns true when index is sufficient" do
       indicator = described_class.new(series: series)
 
       expect(indicator.ready?(7)).to be true
     end
   end
 
-  describe '#calculate_at' do
-    context 'when supertrend is calculated' do
+  describe "#calculate_at" do
+    context "when supertrend is calculated" do
       before do
         allow(Indicators::Supertrend).to receive(:new).and_return(
           double(call: {
             trend: :bullish,
-            line: Array.new(50, 100.0)
-          })
+            line: Array.new(50, 100.0),
+          }),
         )
       end
 
-      it 'returns supertrend value with direction' do
+      it "returns supertrend value with direction" do
         indicator = described_class.new(series: series)
         result = indicator.calculate_at(20)
 
@@ -59,14 +59,14 @@ RSpec.describe Indicators::SupertrendIndicator, type: :service do
       end
     end
 
-    context 'when supertrend calculation fails' do
+    context "when supertrend calculation fails" do
       before do
         allow(Indicators::Supertrend).to receive(:new).and_return(
-          double(call: nil)
+          double(call: nil),
         )
       end
 
-      it 'returns nil' do
+      it "returns nil" do
         indicator = described_class.new(series: series)
         result = indicator.calculate_at(20)
 
@@ -75,4 +75,3 @@ RSpec.describe Indicators::SupertrendIndicator, type: :service do
     end
   end
 end
-

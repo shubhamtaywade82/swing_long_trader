@@ -33,7 +33,7 @@ module Indicators
         value: @supertrend_result[:line][index],
         direction: trend_at_index,
         confidence: calculate_confidence(trend_at_index),
-        raw_result: @supertrend_result
+        raw_result: @supertrend_result,
       }
     end
 
@@ -42,7 +42,7 @@ module Indicators
     def calculate_supertrend_once
       supertrend_cfg = config[:supertrend_cfg] || {
         period: config[:period] || 7,
-        base_multiplier: config[:multiplier] || config[:base_multiplier] || 3.0
+        base_multiplier: config[:multiplier] || config[:base_multiplier] || 3.0,
       }
 
       @supertrend_service = Indicators::Supertrend.new(series: series, **supertrend_cfg)

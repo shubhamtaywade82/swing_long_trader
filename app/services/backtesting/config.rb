@@ -31,7 +31,7 @@ module Backtesting
         position_sizing_method: hash[:position_sizing_method],
         date_range: hash[:date_range],
         instrument_universe: hash[:instrument_universe],
-        strategy_overrides: hash[:strategy_overrides]
+        strategy_overrides: hash[:strategy_overrides],
       )
     end
 
@@ -44,16 +44,16 @@ module Backtesting
         position_sizing_method: @position_sizing_method,
         date_range: @date_range,
         instrument_universe: @instrument_universe,
-        strategy_overrides: @strategy_overrides
+        strategy_overrides: @strategy_overrides,
       }
     end
 
     def from_date
-      @date_range[:from_date] || Date.today - 1.year
+      @date_range[:from_date] || (Time.zone.today - 1.year)
     end
 
     def to_date
-      @date_range[:to_date] || Date.today
+      @date_range[:to_date] || Time.zone.today
     end
 
     def risk_amount_per_trade
@@ -77,23 +77,23 @@ module Backtesting
     def apply_commission(amount)
       return amount if @commission_rate.zero?
 
-      amount * (1 + @commission_rate / 100.0)
+      amount * (1 + (@commission_rate / 100.0))
     end
 
-    def validate!
+    def validate! # rubocop:disable Naming/PredicateMethod
       errors = []
 
-      errors << 'Initial capital must be positive' if @initial_capital <= 0
-      errors << 'Risk per trade must be between 0.1 and 10%' if @risk_per_trade < 0.1 || @risk_per_trade > 10
-      errors << 'Commission rate must be non-negative' if @commission_rate < 0
-      errors << 'Slippage must be non-negative' if @slippage_pct < 0
-      errors << 'Invalid position sizing method' unless %i[risk_based fixed equal_weight].include?(@position_sizing_method)
-      errors << 'Invalid date range' if from_date >= to_date
+      errors << "Initial capital must be positive" if @initial_capital <= 0
+      errors << "Risk per trade must be between 0.1 and 10%" if @risk_per_trade < 0.1 || @risk_per_trade > 10
+      errors << "Commission rate must be non-negative" if @commission_rate.negative?
+      errors << "Slippage must be non-negative" if @slippage_pct.negative?
+      errors << "Invalid position sizing method" unless %i[risk_based fixed
+                                                           equal_weight].include?(@position_sizing_method)
+      errors << "Invalid date range" if from_date >= to_date
 
-      raise ArgumentError, errors.join(', ') if errors.any?
+      raise ArgumentError, errors.join(", ") if errors.any?
 
       true
     end
   end
 end
-

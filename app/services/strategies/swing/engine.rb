@@ -11,13 +11,13 @@ module Strategies
         @instrument = instrument
         @daily_series = daily_series
         @weekly_series = weekly_series
-        @config = config || AlgoConfig.fetch([:swing_trading, :strategy]) || {}
+        @config = config || AlgoConfig.fetch(%i[swing_trading strategy]) || {}
       end
 
       def call
         # Validate inputs
-        return { success: false, error: 'Invalid instrument' } unless @instrument.present?
-        return { success: false, error: 'Insufficient daily candles' } unless @daily_series&.candles&.size.to_i >= 50
+        return { success: false, error: "Invalid instrument" } if @instrument.blank?
+        return { success: false, error: "Insufficient daily candles" } unless @daily_series&.candles&.size.to_i >= 50
 
         # Check entry conditions
         entry_check = check_entry_conditions
@@ -34,10 +34,10 @@ module Strategies
           instrument: @instrument,
           daily_series: @daily_series,
           weekly_series: @weekly_series,
-          config: @config
+          config: @config,
         )
 
-        return { success: false, error: 'Signal generation failed' } unless signal
+        return { success: false, error: "Signal generation failed" } unless signal
 
         # Validate signal meets minimum requirements
         min_confidence = @config[:min_confidence] || 0.7
@@ -48,7 +48,7 @@ module Strategies
         metadata = {
           evaluated_at: Time.current,
           candles_analyzed: @daily_series.candles.size,
-          weekly_available: @weekly_series.present?
+          weekly_available: @weekly_series.present?,
         }
 
         # Add SMC validation to metadata if available
@@ -57,7 +57,7 @@ module Strategies
         {
           success: true,
           signal: signal,
-          metadata: metadata
+          metadata: metadata,
         }
       end
 
@@ -69,13 +69,13 @@ module Strategies
         # Check trend alignment requirement
         if entry_config[:require_trend_alignment]
           trend_check = check_trend_alignment
-          return { allowed: false, error: 'Trend alignment failed' } unless trend_check
+          return { allowed: false, error: "Trend alignment failed" } unless trend_check
         end
 
         # Check volume confirmation
         if entry_config[:require_volume_confirmation]
           volume_check = check_volume_confirmation(entry_config[:min_volume_spike] || 1.5)
-          return { allowed: false, error: 'Volume confirmation failed' } unless volume_check
+          return { allowed: false, error: "Volume confirmation failed" } unless volume_check
         end
 
         { allowed: true }
@@ -120,19 +120,19 @@ module Strategies
           ema20: @daily_series.ema(20),
           ema50: @daily_series.ema(50),
           ema200: @daily_series.ema(200),
-          supertrend: calculate_supertrend
+          supertrend: calculate_supertrend,
         }
       end
 
       def calculate_supertrend
-        st_config = AlgoConfig.fetch([:indicators, :supertrend]) || {}
+        st_config = AlgoConfig.fetch(%i[indicators supertrend]) || {}
         period = st_config[:period] || 10
         multiplier = st_config[:multiplier] || 3.0
 
         supertrend = Indicators::Supertrend.new(
           series: @daily_series,
           period: period,
-          base_multiplier: multiplier
+          base_multiplier: multiplier,
         )
         result = supertrend.call
 
@@ -141,7 +141,7 @@ module Strategies
         {
           trend: result[:trend],
           value: result[:line]&.last,
-          direction: result[:trend] == :bullish ? :bullish : :bearish
+          direction: result[:trend] == :bullish ? :bullish : :bearish,
         }
       rescue StandardError => e
         Rails.logger.warn("[Strategies::Swing::Engine] Supertrend failed: #{e.message}")
@@ -166,7 +166,7 @@ module Strategies
         Smc::StructureValidator.validate(
           @daily_series.candles,
           direction: direction,
-          config: smc_config
+          config: smc_config,
         )
       rescue StandardError => e
         Rails.logger.warn("[Strategies::Swing::Engine] SMC validation failed: #{e.message}")
@@ -175,4 +175,3 @@ module Strategies
     end
   end
 end
-

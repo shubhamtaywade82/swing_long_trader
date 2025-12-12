@@ -24,10 +24,10 @@ module PaperTrading
       return risk_check unless risk_check[:success]
 
       # Create position
-      position = PaperTrading::Position.create(
+      position = PaperTrading::Position.create!(
         portfolio: @portfolio,
         instrument: @instrument,
-        signal: @signal
+        signal: @signal,
       )
 
       # Send notification
@@ -36,29 +36,29 @@ module PaperTrading
       {
         success: true,
         position: position,
-        message: "Paper trade executed: #{@instrument.symbol_name} #{@signal[:direction].to_s.upcase}"
+        message: "Paper trade executed: #{@instrument.symbol_name} #{@signal[:direction].to_s.upcase}",
       }
     rescue StandardError => e
       log_error("Paper trade execution failed: #{e.message}")
       {
         success: false,
-        error: e.message
+        error: e.message,
       }
     end
 
     private
 
     def validate_signal
-      return { success: false, error: 'Invalid signal' } unless @signal.present?
-      return { success: false, error: 'Instrument not found' } unless @instrument.present?
-      return { success: false, error: 'Missing entry price' } unless @signal[:entry_price]
-      return { success: false, error: 'Missing quantity' } unless @signal[:qty]
-      return { success: false, error: 'Missing direction' } unless @signal[:direction]
+      return { success: false, error: "Invalid signal" } if @signal.blank?
+      return { success: false, error: "Instrument not found" } if @instrument.blank?
+      return { success: false, error: "Missing entry price" } unless @signal[:entry_price]
+      return { success: false, error: "Missing quantity" } unless @signal[:qty]
+      return { success: false, error: "Missing direction" } unless @signal[:direction]
 
       { success: true }
     end
 
-    def send_entry_notification(position)
+    def send_entry_notification(_position)
       return unless Telegram::Notifier.enabled?
 
       message = "📘 <b>PAPER TRADE EXECUTED</b>\n\n"
@@ -71,7 +71,7 @@ module PaperTrading
       message += "Portfolio Remaining: ₹#{@portfolio.available_capital.round(2)}\n"
       message += "Total Equity: ₹#{@portfolio.total_equity.round(2)}"
 
-      Telegram::Notifier.send_error_alert(message, context: 'Paper Trade Entry')
+      Telegram::Notifier.send_error_alert(message, context: "Paper Trade Entry")
     rescue StandardError => e
       log_error("Failed to send entry notification: #{e.message}")
     end

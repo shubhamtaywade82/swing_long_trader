@@ -14,31 +14,32 @@ class ExecutorJob < ApplicationJob
     # Execute via Swing::Executor
     result = Strategies::Swing::Executor.call(signal, dry_run: dry_run)
 
+    mode = if result[:paper_trade]
+             "PAPER"
+           else
+             (@dry_run ? "DRY RUN" : "LIVE")
+           end
     if result[:success]
-      mode = result[:paper_trade] ? 'PAPER' : (@dry_run ? 'DRY RUN' : 'LIVE')
       Rails.logger.info(
         "[ExecutorJob] Order executed (#{mode}): " \
-        "#{signal[:symbol]} #{signal[:direction]} #{signal[:qty]} @ #{signal[:entry_price]}"
+        "#{signal[:symbol]} #{signal[:direction]} #{signal[:qty]} @ #{signal[:entry_price]}",
       )
 
       # Send notification (only for live trades, paper trades send their own notifications)
-      unless result[:paper_trade]
-        if AlgoConfig.fetch([:notifications, :telegram, :notify_entry])
-          order_id = result[:order]&.id || result[:position]&.id
-          Telegram::Notifier.send_signal_alert(signal.merge(order_id: order_id))
-        end
+      if !result[:paper_trade] && AlgoConfig.fetch(%i[notifications telegram notify_entry])
+        order_id = result[:order]&.id || result[:position]&.id
+        Telegram::Notifier.send_signal_alert(signal.merge(order_id: order_id))
       end
     else
-      mode = result[:paper_trade] ? 'PAPER' : (@dry_run ? 'DRY RUN' : 'LIVE')
       Rails.logger.warn(
-        "[ExecutorJob] Order execution failed (#{mode}): #{signal[:symbol]} - #{result[:error]}"
+        "[ExecutorJob] Order execution failed (#{mode}): #{signal[:symbol]} - #{result[:error]}",
       )
     end
 
     result
   rescue StandardError => e
     Rails.logger.error("[ExecutorJob] Failed: #{e.message}")
-    Telegram::Notifier.send_error_alert("Order execution failed: #{e.message}", context: 'ExecutorJob')
+    Telegram::Notifier.send_error_alert("Order execution failed: #{e.message}", context: "ExecutorJob")
     raise
   end
 
@@ -48,12 +49,11 @@ class ExecutorJob < ApplicationJob
     # Ensure signal has all required fields
     signal_hash.symbolize_keys.tap do |signal|
       # Convert string keys to symbols if needed
-      signal[:instrument_id] ||= signal[:instrument_id] || signal['instrument_id']
-      signal[:symbol] ||= signal[:symbol] || signal['symbol']
-      signal[:direction] = signal[:direction]&.to_sym || signal['direction']&.to_sym
-      signal[:entry_price] ||= signal[:entry_price] || signal['entry_price']
-      signal[:qty] ||= signal[:qty] || signal['qty']
+      signal[:instrument_id] ||= signal[:instrument_id] || signal["instrument_id"]
+      signal[:symbol] ||= signal[:symbol] || signal["symbol"]
+      signal[:direction] = signal[:direction]&.to_sym || signal["direction"]&.to_sym
+      signal[:entry_price] ||= signal[:entry_price] || signal["entry_price"]
+      signal[:qty] ||= signal[:qty] || signal["qty"]
     end
   end
 end
-

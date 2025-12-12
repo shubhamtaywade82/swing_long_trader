@@ -1,18 +1,18 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
-RSpec.describe 'Paper Trading Complete Workflow', type: :integration do
+RSpec.describe "Paper Trading Complete Workflow", type: :integration do
   let(:portfolio) { create(:paper_portfolio, capital: 100_000, available_capital: 100_000) }
   let(:instrument) { create(:instrument) }
   let(:signal) do
     {
       instrument_id: instrument.id,
-      direction: 'long',
+      direction: "long",
       entry_price: 100.0,
       qty: 10,
       sl: 95.0,
-      tp: 110.0
+      tp: 110.0,
     }
   end
 
@@ -21,18 +21,18 @@ RSpec.describe 'Paper Trading Complete Workflow', type: :integration do
     allow(AlgoConfig).to receive(:fetch).and_return({})
   end
 
-  describe 'Complete workflow: Executor -> Simulator -> Reconciler' do
-    context 'when all steps succeed' do
+  describe "Complete workflow: Executor -> Simulator -> Reconciler" do
+    context "when all steps succeed" do
       before do
         # Create daily candle for price updates
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          timestamp: Time.current,
-          close: 102.0)
+               instrument: instrument,
+               timeframe: "1D",
+               timestamp: Time.current,
+               close: 102.0)
       end
 
-      it 'executes complete paper trading workflow' do
+      it "executes complete paper trading workflow" do
         # Step 1: Execute entry
         execution = PaperTrading::Executor.execute(signal, portfolio: portfolio)
         expect(execution[:success]).to be true
@@ -51,12 +51,11 @@ RSpec.describe 'Paper Trading Complete Workflow', type: :integration do
         expect(summary[:pnl_unrealized]).to be_present
 
         # Step 4: Simulator triggers exit (TP hit)
-        position.update(current_price: 110.0)
-        allow(position).to receive(:check_tp_hit?).and_return(true)
-        allow(position).to receive(:check_sl_hit?).and_return(false)
+        position.update!(current_price: 110.0)
+        allow(position).to receive_messages(check_tp_hit?: true, check_sl_hit?: false)
         # days_held is a method on PaperPosition model, not a stub
         # Update opened_at to make days_held return desired value
-        position.update(opened_at: 5.days.ago)
+        position.update!(opened_at: 5.days.ago)
 
         simulator_result = PaperTrading::Simulator.check_exits(portfolio: portfolio)
         expect(simulator_result[:exited]).to eq(1)
@@ -69,51 +68,49 @@ RSpec.describe 'Paper Trading Complete Workflow', type: :integration do
       end
     end
 
-    context 'when risk limits prevent entry' do
+    context "when risk limits prevent entry" do
       before do
         allow(PaperTrading::RiskManager).to receive(:check_limits).and_return(
-          { success: false, error: 'Max position size exceeded' }
+          { success: false, error: "Max position size exceeded" },
         )
       end
 
-      it 'stops workflow at risk check' do
+      it "stops workflow at risk check" do
         execution = PaperTrading::Executor.execute(signal, portfolio: portfolio)
 
         expect(execution[:success]).to be false
-        expect(execution[:error]).to include('Max position size exceeded')
+        expect(execution[:error]).to include("Max position size exceeded")
         expect(PaperPortfolio.find(portfolio.id).paper_positions.count).to eq(0)
       end
     end
 
-    context 'when stop loss is triggered' do
+    context "when stop loss is triggered" do
       before do
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          timestamp: Time.current,
-          close: 94.0)
+               instrument: instrument,
+               timeframe: "1D",
+               timestamp: Time.current,
+               close: 94.0)
       end
 
-      it 'exits position at stop loss' do
+      it "exits position at stop loss" do
         # Create position
         execution = PaperTrading::Executor.execute(signal, portfolio: portfolio)
         position = execution[:position]
 
         # Update price to trigger SL
-        position.update(current_price: 94.0, opened_at: 2.days.ago)
-        allow(position).to receive(:check_sl_hit?).and_return(true)
-        allow(position).to receive(:check_tp_hit?).and_return(false)
+        position.update!(current_price: 94.0, opened_at: 2.days.ago)
+        allow(position).to receive_messages(check_sl_hit?: true, check_tp_hit?: false)
 
         # Check exits
         simulator_result = PaperTrading::Simulator.check_exits(portfolio: portfolio)
 
         expect(simulator_result[:exited]).to eq(1)
         position.reload
-        expect(position.status).to eq('closed')
-        expect(position.exit_reason).to eq('sl_hit')
+        expect(position.status).to eq("closed")
+        expect(position.exit_reason).to eq("sl_hit")
         expect(position.pnl).to be < 0
       end
     end
   end
 end
-

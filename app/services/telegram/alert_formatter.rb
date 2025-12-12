@@ -31,9 +31,9 @@ module Telegram
         symbol = candidate[:symbol] || candidate[:instrument_id]
         score = candidate[:score] || 0
         ai_score = candidate[:ai_score]
-        direction = candidate[:direction] || 'long'
+        direction = candidate[:direction] || "long"
 
-        emoji = direction == 'long' ? '🟢' : '🔴'
+        emoji = direction == "long" ? "🟢" : "🔴"
         rank = index + 1
 
         message += "#{rank}. #{emoji} <b>#{symbol}</b>\n"
@@ -55,7 +55,7 @@ module Telegram
     end
 
     def format_signal_alert(signal)
-      symbol = escape_html(signal[:symbol] || 'N/A')
+      symbol = escape_html(signal[:symbol] || "N/A")
       direction = signal[:direction] || :long
       entry_price = signal[:entry_price] || 0
       sl = signal[:sl] || 0
@@ -65,7 +65,7 @@ module Telegram
       confidence = signal[:confidence] || 0
       holding_days = signal[:holding_days_estimate] || 0
 
-      emoji = direction == :long ? '🟢' : '🔴'
+      emoji = direction == :long ? "🟢" : "🔴"
       direction_text = direction.to_s.upcase
 
       message = "#{emoji} <b>Swing Signal</b>\n\n"
@@ -90,18 +90,18 @@ module Telegram
     end
 
     def format_exit_alert(signal, exit_reason:, exit_price:, pnl:)
-      symbol = signal[:symbol] || 'N/A'
+      symbol = signal[:symbol] || "N/A"
       entry_price = signal[:entry_price] || 0
       pnl_value = pnl.to_f
       qty = signal[:qty] || 1
-      pnl_pct = entry_price > 0 ? ((pnl_value / (entry_price * qty)) * 100).round(2) : 0
+      pnl_pct = entry_price.positive? ? ((pnl_value / (entry_price * qty)) * 100).round(2) : 0
 
       emoji = if pnl_value.positive?
-                '✅'
+                "✅"
               elsif pnl_value.negative?
-                '❌'
+                "❌"
               else
-                '⚪'
+                "⚪"
               end
 
       message = "#{emoji} <b>Exit Alert</b>\n\n"
@@ -110,11 +110,11 @@ module Telegram
       message += "💵 <b>Exit:</b> ₹#{exit_price.round(2)}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
 
-      if pnl_pct != 0
-        pnl_emoji = pnl_pct.positive? ? '📈' : '📉'
-        message += " (#{pnl_emoji} #{pnl_pct.positive? ? '+' : ''}#{pnl_pct}%)\n"
-      else
+      if pnl_pct.zero?
         message += "\n"
+      else
+        pnl_emoji = pnl_pct.positive? ? "📈" : "📉"
+        message += " (#{pnl_emoji} #{'+' if pnl_pct.positive?}#{pnl_pct}%)\n"
       end
 
       message += "📝 <b>Reason:</b> #{exit_reason}\n"
@@ -130,20 +130,24 @@ module Telegram
       closed_positions = portfolio_data[:closed_positions] || 0
       win_rate = portfolio_data[:win_rate] || 0
 
-      emoji = total_pnl.positive? ? '📈' : total_pnl.negative? ? '📉' : '➡️'
+      emoji = if total_pnl.positive?
+                "📈"
+              else
+                total_pnl.negative? ? "📉" : "➡️"
+              end
 
       message = "#{emoji} <b>Portfolio Snapshot</b>\n\n"
       message += "💸 <b>Total P&L:</b> ₹#{total_pnl.round(2)}"
-      message += " (#{total_pnl_pct.positive? ? '+' : ''}#{total_pnl_pct.round(2)}%)\n"
+      message += " (#{'+' if total_pnl_pct.positive?}#{total_pnl_pct.round(2)}%)\n"
       message += "📊 <b>Open Positions:</b> #{open_positions}\n"
       message += "✅ <b>Closed Positions:</b> #{closed_positions}\n"
       message += "🎯 <b>Win Rate:</b> #{win_rate.round(1)}%\n"
 
-      if portfolio_data[:positions] && portfolio_data[:positions].any?
+      if portfolio_data[:positions]&.any?
         message += "\n<b>Open Positions:</b>\n"
         portfolio_data[:positions].first(5).each do |pos|
           pos_pnl = pos[:pnl] || 0
-          pos_emoji = pos_pnl.positive? ? '🟢' : '🔴'
+          pos_emoji = pos_pnl.positive? ? "🟢" : "🔴"
           message += "#{pos_emoji} #{pos[:symbol]}: ₹#{pos_pnl.round(2)}\n"
         end
       end
@@ -157,9 +161,7 @@ module Telegram
       message = "🚨 <b>Error Alert</b>\n\n"
       message += "#{error_message}\n"
 
-      if context
-        message += "\n<b>Context:</b> #{context}\n"
-      end
+      message += "\n<b>Context:</b> #{context}\n" if context
 
       message += "\n⏰ #{Time.current.strftime('%H:%M:%S IST')}"
 
@@ -170,14 +172,13 @@ module Telegram
 
     def escape_html(text)
       return text if text.nil?
+
       text.to_s
-          .gsub('&', '&amp;')
-          .gsub('<', '&lt;')
-          .gsub('>', '&gt;')
-          .gsub('"', '&quot;')
-          .gsub("'", '&#39;')
+          .gsub("&", "&amp;")
+          .gsub("<", "&lt;")
+          .gsub(">", "&gt;")
+          .gsub('"', "&quot;")
+          .gsub("'", "&#39;")
     end
   end
 end
-
-

@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-require 'csv'
-require 'yaml'
+require "csv"
+require "yaml"
 
 namespace :universe do
-  desc 'Build master universe whitelist from CSV files in config/universe/csv/'
+  desc "Build master universe whitelist from CSV files in config/universe/csv/"
   task build: :environment do
-    csv_dir = Rails.root.join('config/universe/csv')
-    output_file = Rails.root.join('config/universe/master_universe.yml')
+    csv_dir = Rails.root.join("config/universe/csv")
+    output_file = Rails.root.join("config/universe/master_universe.yml")
 
     unless csv_dir.exist?
       puts "❌ Universe CSV directory not found: #{csv_dir}"
@@ -15,7 +15,7 @@ namespace :universe do
       exit 1
     end
 
-    csv_files = Dir[csv_dir.join('*.csv')]
+    csv_files = Dir[csv_dir.join("*.csv")]
     if csv_files.empty?
       puts "⚠️  No CSV files found in #{csv_dir}"
       puts "   Add CSV files with 'Symbol' column containing instrument symbols"
@@ -31,13 +31,13 @@ namespace :universe do
       begin
         CSV.foreach(csv_file, headers: true) do |row|
           # Try common column names for symbols
-          symbol = row['Symbol'] || row['SYMBOL'] || row['symbol'] ||
-                   row['TradingSymbol'] || row['TRADING_SYMBOL'] ||
-                   row['SymbolName'] || row['SYMBOL_NAME']
+          symbol = row["Symbol"] || row["SYMBOL"] || row["symbol"] ||
+                   row["TradingSymbol"] || row["TRADING_SYMBOL"] ||
+                   row["SymbolName"] || row["SYMBOL_NAME"]
 
           if symbol.present?
             # Clean symbol (remove suffixes like -EQ, -BE, etc. if needed)
-            clean_symbol = symbol.to_s.strip.upcase.split('-').first
+            clean_symbol = symbol.to_s.strip.upcase.split("-").first
             symbols << clean_symbol if clean_symbol.present?
           end
         end
@@ -68,9 +68,9 @@ namespace :universe do
     puts "   ..." if symbols.size > 10
   end
 
-  desc 'Show current universe statistics'
+  desc "Show current universe statistics"
   task stats: :environment do
-    universe_file = Rails.root.join('config/universe/master_universe.yml')
+    universe_file = Rails.root.join("config/universe/master_universe.yml")
 
     unless universe_file.exist?
       puts "❌ Universe file not found: #{universe_file}"
@@ -85,9 +85,9 @@ namespace :universe do
     puts "   Last 10: #{symbols.last(10).join(', ')}"
   end
 
-  desc 'Validate universe against imported instruments'
+  desc "Validate universe against imported instruments"
   task validate: :environment do
-    universe_file = Rails.root.join('config/universe/master_universe.yml')
+    universe_file = Rails.root.join("config/universe/master_universe.yml")
 
     unless universe_file.exist?
       puts "❌ Universe file not found: #{universe_file}"
@@ -96,7 +96,7 @@ namespace :universe do
     end
 
     universe_symbols = YAML.load_file(universe_file).to_set
-    imported_symbols = Instrument.pluck(:symbol_name).compact.map(&:upcase).to_set
+    imported_symbols = Instrument.pluck(:symbol_name).compact.to_set(&:upcase)
 
     matched = universe_symbols & imported_symbols
     missing = universe_symbols - imported_symbols
@@ -116,4 +116,3 @@ namespace :universe do
     end
   end
 end
-

@@ -3,7 +3,8 @@
 module Backtesting
   # Long-term trading backtester with rebalancing
   class LongTermBacktester < ApplicationService
-    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0, rebalance_frequency: :weekly, max_positions: 10, min_holding_days: 30, commission_rate: 0.0, slippage_pct: 0.0)
+    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0,
+                  rebalance_frequency: :weekly, max_positions: 10, min_holding_days: 30, commission_rate: 0.0, slippage_pct: 0.0)
       new(
         instruments: instruments,
         from_date: from_date,
@@ -14,11 +15,12 @@ module Backtesting
         max_positions: max_positions,
         min_holding_days: min_holding_days,
         commission_rate: commission_rate,
-        slippage_pct: slippage_pct
+        slippage_pct: slippage_pct,
       ).call
     end
 
-    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0, rebalance_frequency: :weekly, max_positions: 10, min_holding_days: 30, commission_rate: 0.0, slippage_pct: 0.0)
+    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0,
+                   rebalance_frequency: :weekly, max_positions: 10, min_holding_days: 30, commission_rate: 0.0, slippage_pct: 0.0)
       @instruments = instruments
       @from_date = from_date
       @to_date = to_date
@@ -31,7 +33,7 @@ module Backtesting
         initial_capital: @initial_capital,
         risk_per_trade: @risk_per_trade,
         commission_rate: commission_rate,
-        slippage_pct: slippage_pct
+        slippage_pct: slippage_pct,
       )
       @portfolio = Portfolio.new(initial_capital: @initial_capital, config: @config)
       @positions = []
@@ -46,21 +48,21 @@ module Backtesting
       # Load historical data (daily and weekly)
       daily_data = DataLoader.load_for_instruments(
         instruments: @instruments,
-        timeframe: '1D',
+        timeframe: "1D",
         from_date: @from_date,
-        to_date: @to_date
+        to_date: @to_date,
       )
 
       weekly_data = DataLoader.load_for_instruments(
         instruments: @instruments,
-        timeframe: '1W',
+        timeframe: "1W",
         from_date: @from_date,
-        to_date: @to_date
+        to_date: @to_date,
       )
 
       validated_daily = DataLoader.new.validate_data(daily_data, min_candles: 50)
       validated_weekly = DataLoader.new.validate_data(weekly_data, min_candles: 10)
-      return { success: false, error: 'Insufficient data' } if validated_daily.empty? || validated_weekly.empty?
+      return { success: false, error: "Insufficient data" } if validated_daily.empty? || validated_weekly.empty?
 
       # Walk forward through dates (avoid look-ahead bias)
       current_date = @from_date
@@ -76,7 +78,7 @@ module Backtesting
       analyzer = ResultAnalyzer.new(
         positions: @positions,
         initial_capital: @initial_capital,
-        final_capital: @portfolio.current_equity
+        final_capital: @portfolio.current_equity,
       )
 
       results = analyzer.analyze
@@ -93,7 +95,7 @@ module Backtesting
         success: true,
         results: results,
         positions: @positions,
-        portfolio: @portfolio
+        portfolio: @portfolio,
       }
     end
 
@@ -180,20 +182,20 @@ module Backtesting
           instrument_id: instrument_id,
           exit_date: date,
           exit_price: exit_check[:exit_price],
-          exit_reason: exit_check[:exit_reason]
+          exit_reason: exit_check[:exit_reason],
         )
       end
     end
 
-    def check_long_term_exit(position, current_price, date, holding_days)
+    def check_long_term_exit(position, current_price, date, _holding_days)
       # Check stop loss
       if position.direction == :long && current_price <= position.stop_loss
-        return { exit_price: position.stop_loss, exit_reason: 'stop_loss' }
+        return { exit_price: position.stop_loss, exit_reason: "stop_loss" }
       end
 
       # Check take profit
       if position.direction == :long && current_price >= position.take_profit
-        return { exit_price: position.take_profit, exit_reason: 'take_profit' }
+        return { exit_price: position.take_profit, exit_reason: "take_profit" }
       end
 
       # Check time-based exit (after minimum holding period)
@@ -228,7 +230,7 @@ module Backtesting
           instrument_id: instrument_id,
           instrument: instrument,
           daily_series: historical_daily,
-          weekly_series: historical_weekly
+          weekly_series: historical_weekly,
         }
       end
 
@@ -236,14 +238,14 @@ module Backtesting
       candidates.first(limit)
     end
 
-    def check_entry_signal(candidate, date, daily_data, weekly_data)
+    def check_entry_signal(candidate, date, _daily_data, _weekly_data)
       instrument = candidate[:instrument]
 
       # Create temporary series for signal generation
-      temp_daily = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+      temp_daily = CandleSeries.new(symbol: instrument.symbol_name, interval: "1D")
       candidate[:daily_series].each { |c| temp_daily.add_candle(c) }
 
-      temp_weekly = CandleSeries.new(symbol: instrument.symbol_name, interval: '1W')
+      temp_weekly = CandleSeries.new(symbol: instrument.symbol_name, interval: "1W")
       candidate[:weekly_series].each { |c| temp_weekly.add_candle(c) }
 
       # Use long-term strategy evaluator
@@ -251,7 +253,7 @@ module Backtesting
       screener_candidate = {
         instrument_id: instrument.id,
         symbol: instrument.symbol_name,
-        score: 70.0 # Default score for backtesting
+        score: 70.0, # Default score for backtesting
       }
 
       result = Strategies::LongTerm::Evaluator.call(screener_candidate)
@@ -286,7 +288,7 @@ module Backtesting
         direction: direction,
         stop_loss: stop_loss,
         take_profit: take_profit,
-        trailing_stop_pct: trailing_stop_pct
+        trailing_stop_pct: trailing_stop_pct,
       )
 
       return unless success
@@ -321,7 +323,7 @@ module Backtesting
           instrument_id: instrument_id,
           exit_date: date,
           exit_price: exit_check[:exit_price],
-          exit_reason: exit_check[:exit_reason]
+          exit_reason: exit_check[:exit_reason],
         )
       end
     end
@@ -337,7 +339,7 @@ module Backtesting
           instrument_id: instrument_id,
           exit_date: end_date,
           exit_price: current_price,
-          exit_reason: 'end_of_backtest'
+          exit_reason: "end_of_backtest",
         )
       end
     end
@@ -350,7 +352,7 @@ module Backtesting
           instrument = Instrument.find_by(id: id)
           instrument ? instrument.symbol_name : "ID:#{id}"
         end,
-        equity: @portfolio.current_equity
+        equity: @portfolio.current_equity,
       }
 
       @portfolio_composition << composition
@@ -364,4 +366,3 @@ module Backtesting
     end
   end
 end
-

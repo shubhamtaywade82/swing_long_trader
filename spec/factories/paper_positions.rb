@@ -2,13 +2,13 @@
 
 FactoryBot.define do
   factory :paper_position do
-    association :paper_portfolio
-    association :instrument
-    direction { 'long' }
+    paper_portfolio
+    instrument
+    direction { "long" }
     entry_price { 100.0 }
     current_price { 105.0 }
     quantity { 10 }
-    status { 'open' }
+    status { "open" }
     opened_at { Time.current }
     pnl { 0.0 }
     pnl_pct { 0.0 }
@@ -19,14 +19,13 @@ FactoryBot.define do
     metadata { nil }
 
     trait :short do
-      direction { 'short' }
+      direction { "short" }
     end
 
     trait :closed do
-      status { 'closed' }
+      status { "closed" }
       exit_price { 110.0 }
       closed_at { Time.current }
     end
   end
 end
-

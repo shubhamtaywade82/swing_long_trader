@@ -1,24 +1,24 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
-RSpec.describe 'Backtesting Complete Workflow', type: :integration do
+RSpec.describe "Backtesting Complete Workflow", type: :integration do
   let(:instrument) { create(:instrument) }
   let(:from_date) { 100.days.ago.to_date }
-  let(:to_date) { Date.today }
+  let(:to_date) { Time.zone.today }
 
   before do
     # Create historical candles
     100.times do |i|
       create(:candle_series_record,
-        instrument: instrument,
-        timeframe: '1D',
-        timestamp: (99 - i).days.ago,
-        open: 100.0 + (i * 0.1),
-        high: 105.0 + (i * 0.1),
-        low: 99.0 + (i * 0.1),
-        close: 103.0 + (i * 0.1),
-        volume: 1_000_000)
+             instrument: instrument,
+             timeframe: "1D",
+             timestamp: (99 - i).days.ago,
+             open: 100.0 + (i * 0.1),
+             high: 105.0 + (i * 0.1),
+             low: 99.0 + (i * 0.1),
+             close: 103.0 + (i * 0.1),
+             volume: 1_000_000)
     end
 
     # Mock strategy engine
@@ -31,21 +31,21 @@ RSpec.describe 'Backtesting Complete Workflow', type: :integration do
           entry_price: 110.0,
           sl: 105.0,
           tp: 120.0,
-          qty: 100
-        }
-      }
+          qty: 100,
+        },
+      },
     )
   end
 
-  describe 'Complete workflow: DataLoader -> SwingBacktester -> ResultAnalyzer -> ReportGenerator' do
-    context 'when all steps succeed' do
-      it 'executes complete backtesting workflow' do
+  describe "Complete workflow: DataLoader -> SwingBacktester -> ResultAnalyzer -> ReportGenerator" do
+    context "when all steps succeed" do
+      it "executes complete backtesting workflow" do
         # Step 1: Load data
         data = Backtesting::DataLoader.load_for_instruments(
           instruments: Instrument.where(id: instrument.id),
-          timeframe: '1D',
+          timeframe: "1D",
           from_date: from_date,
-          to_date: to_date
+          to_date: to_date,
         )
 
         expect(data).to be_present
@@ -57,7 +57,7 @@ RSpec.describe 'Backtesting Complete Workflow', type: :integration do
           from_date: from_date,
           to_date: to_date,
           initial_capital: 100_000,
-          risk_per_trade: 2.0
+          risk_per_trade: 2.0,
         )
 
         expect(result[:success]).to be true
@@ -69,7 +69,7 @@ RSpec.describe 'Backtesting Complete Workflow', type: :integration do
         analyzer = Backtesting::ResultAnalyzer.new(
           positions: result[:positions],
           initial_capital: 100_000,
-          final_capital: result[:portfolio].current_equity
+          final_capital: result[:portfolio].current_equity,
         )
 
         analysis = analyzer.analyze
@@ -81,11 +81,11 @@ RSpec.describe 'Backtesting Complete Workflow', type: :integration do
 
         # Step 4: Generate report
         backtest_run = create(:backtest_run,
-          instrument: instrument,
-          from_date: from_date,
-          to_date: to_date,
-          initial_capital: 100_000,
-          final_capital: result[:portfolio].current_equity)
+                              instrument: instrument,
+                              from_date: from_date,
+                              to_date: to_date,
+                              initial_capital: 100_000,
+                              final_capital: result[:portfolio].current_equity)
 
         report_generator = Backtesting::ReportGenerator.new(backtest_run: backtest_run)
         summary = report_generator.generate_summary
@@ -96,38 +96,38 @@ RSpec.describe 'Backtesting Complete Workflow', type: :integration do
       end
     end
 
-    context 'when data loading fails' do
-      it 'handles insufficient data gracefully' do
+    context "when data loading fails" do
+      it "handles insufficient data gracefully" do
         # Create only 10 candles (less than 50 required)
         CandleSeriesRecord.where(instrument: instrument).destroy_all
         create_list(:candle_series_record, 10,
-          instrument: instrument,
-          timeframe: '1D',
-          timestamp: (9.days.ago..Time.current).step(1.day).to_a)
+                    instrument: instrument,
+                    timeframe: "1D",
+                    timestamp: (9.days.ago..Time.current).step(1.day).to_a)
 
         result = Backtesting::SwingBacktester.call(
           instruments: Instrument.where(id: instrument.id),
           from_date: 10.days.ago.to_date,
-          to_date: Date.today
+          to_date: Time.zone.today,
         )
 
         expect(result[:success]).to be false
-        expect(result[:error]).to include('Insufficient data')
+        expect(result[:error]).to include("Insufficient data")
       end
     end
 
-    context 'when no signals are generated' do
+    context "when no signals are generated" do
       before do
         allow(Strategies::Swing::Engine).to receive(:call).and_return(
-          { success: false, error: 'No signal' }
+          { success: false, error: "No signal" },
         )
       end
 
-      it 'completes backtest with no positions' do
+      it "completes backtest with no positions" do
         result = Backtesting::SwingBacktester.call(
           instruments: Instrument.where(id: instrument.id),
           from_date: from_date,
-          to_date: to_date
+          to_date: to_date,
         )
 
         expect(result[:success]).to be true
@@ -135,36 +135,36 @@ RSpec.describe 'Backtesting Complete Workflow', type: :integration do
       end
     end
 
-    context 'when positions are closed at end date' do
-      it 'closes all positions at end of backtest' do
+    context "when positions are closed at end date" do
+      it "closes all positions at end of backtest" do
         result = Backtesting::SwingBacktester.call(
           instruments: Instrument.where(id: instrument.id),
           from_date: from_date,
-          to_date: to_date
+          to_date: to_date,
         )
 
         expect(result[:success]).to be true
         # All positions should be closed
-        open_positions = result[:positions].select { |p| p[:status] == 'open' }
+        open_positions = result[:positions].select { |p| p[:status] == "open" }
         expect(open_positions).to be_empty
       end
     end
 
-    context 'with multiple instruments' do
+    context "with multiple instruments" do
       let(:instrument2) { create(:instrument) }
 
       before do
         # Create candles for second instrument
         100.times do |i|
           create(:candle_series_record,
-            instrument: instrument2,
-            timeframe: '1D',
-            timestamp: (99 - i).days.ago,
-            open: 50.0 + (i * 0.05),
-            high: 52.0 + (i * 0.05),
-            low: 49.0 + (i * 0.05),
-            close: 51.0 + (i * 0.05),
-            volume: 500_000)
+                 instrument: instrument2,
+                 timeframe: "1D",
+                 timestamp: (99 - i).days.ago,
+                 open: 50.0 + (i * 0.05),
+                 high: 52.0 + (i * 0.05),
+                 low: 49.0 + (i * 0.05),
+                 close: 51.0 + (i * 0.05),
+                 volume: 500_000)
         end
 
         allow(Strategies::Swing::Engine).to receive(:call).and_return(
@@ -176,8 +176,8 @@ RSpec.describe 'Backtesting Complete Workflow', type: :integration do
               entry_price: 110.0,
               sl: 105.0,
               tp: 120.0,
-              qty: 100
-            }
+              qty: 100,
+            },
           },
           {
             success: true,
@@ -187,17 +187,17 @@ RSpec.describe 'Backtesting Complete Workflow', type: :integration do
               entry_price: 55.0,
               sl: 52.0,
               tp: 60.0,
-              qty: 200
-            }
-          }
+              qty: 200,
+            },
+          },
         )
       end
 
-      it 'backtests multiple instruments' do
+      it "backtests multiple instruments" do
         result = Backtesting::SwingBacktester.call(
           instruments: Instrument.where(id: [instrument.id, instrument2.id]),
           from_date: from_date,
-          to_date: to_date
+          to_date: to_date,
         )
 
         expect(result[:success]).to be true
@@ -205,14 +205,14 @@ RSpec.describe 'Backtesting Complete Workflow', type: :integration do
       end
     end
 
-    context 'with commission and slippage' do
-      it 'includes trading costs in results' do
+    context "with commission and slippage" do
+      it "includes trading costs in results" do
         result = Backtesting::SwingBacktester.call(
           instruments: Instrument.where(id: instrument.id),
           from_date: from_date,
           to_date: to_date,
           commission_rate: 0.1,
-          slippage_pct: 0.05
+          slippage_pct: 0.05,
         )
 
         expect(result[:success]).to be true

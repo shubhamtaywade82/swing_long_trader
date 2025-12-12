@@ -17,9 +17,7 @@ module Strategies
           signals << signal
 
           # Send signal alert to Telegram
-          if AlgoConfig.fetch([:notifications, :telegram, :notify_signals])
-            Telegram::Notifier.send_signal_alert(signal)
-          end
+          Telegram::Notifier.send_signal_alert(signal) if AlgoConfig.fetch(%i[notifications telegram notify_signals])
         end
 
         Rails.logger.info("[Strategies::Swing::AnalysisJob] Generated #{signals.size} signals")
@@ -27,7 +25,7 @@ module Strategies
         signals
       rescue StandardError => e
         Rails.logger.error("[Strategies::Swing::AnalysisJob] Failed: #{e.message}")
-        Telegram::Notifier.send_error_alert("Swing analysis failed: #{e.message}", context: 'SwingAnalysisJob')
+        Telegram::Notifier.send_error_alert("Swing analysis failed: #{e.message}", context: "SwingAnalysisJob")
         raise
       end
     end

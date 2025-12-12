@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module AlgoConfig
-  CONFIG_PATH = Rails.root.join('config', 'algo.yml')
+  CONFIG_PATH = Rails.root.join("config/algo.yml")
 
   def self.fetch(key_path = nil, default = nil)
     config = load_config
@@ -11,11 +11,9 @@ module AlgoConfig
     # Support dot notation, array notation, or symbol keys
     keys = case key_path
            when String
-             key_path.split('.')
+             key_path.split(".")
            when Array
              key_path
-           when Symbol
-             [key_path]
            else
              [key_path]
            end
@@ -30,7 +28,7 @@ module AlgoConfig
   end
 
   def self.load_config
-    @config ||= begin
+    @load_config ||= begin
       erb = ERB.new(File.read(CONFIG_PATH))
       YAML.safe_load(erb.result, permitted_classes: [Symbol], aliases: true) || {}
     end
@@ -45,4 +43,3 @@ module AlgoConfig
     fetch(key)
   end
 end
-

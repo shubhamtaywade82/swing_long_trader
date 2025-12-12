@@ -20,7 +20,7 @@ module PaperTrading
         check_max_total_exposure,
         check_max_open_positions,
         check_daily_loss_limit,
-        check_drawdown_limit
+        check_drawdown_limit,
       ]
 
       failed_check = checks.find { |check| !check[:success] }
@@ -39,7 +39,7 @@ module PaperTrading
       if required_capital > @portfolio.available_capital
         return {
           success: false,
-          error: "Insufficient capital: ₹#{required_capital.round(2)} required, ₹#{@portfolio.available_capital.round(2)} available"
+          error: "Insufficient capital: ₹#{required_capital.round(2)} required, ₹#{@portfolio.available_capital.round(2)} available",
         }
       end
 
@@ -54,7 +54,7 @@ module PaperTrading
       if order_value > max_value
         return {
           success: false,
-          error: "Order exceeds max position size: ₹#{order_value.round(2)} > ₹#{max_value.round(2)} (#{max_pct}%)"
+          error: "Order exceeds max position size: ₹#{order_value.round(2)} > ₹#{max_value.round(2)} (#{max_pct}%)",
         }
       end
 
@@ -71,7 +71,7 @@ module PaperTrading
       if total_exposure > max_value
         return {
           success: false,
-          error: "Total exposure exceeds limit: ₹#{total_exposure.round(2)} > ₹#{max_value.round(2)} (#{max_pct}%)"
+          error: "Total exposure exceeds limit: ₹#{total_exposure.round(2)} > ₹#{max_value.round(2)} (#{max_pct}%)",
         }
       end
 
@@ -85,7 +85,7 @@ module PaperTrading
       if current_open >= max_positions
         return {
           success: false,
-          error: "Max open positions reached: #{current_open}/#{max_positions}"
+          error: "Max open positions reached: #{current_open}/#{max_positions}",
         }
       end
 
@@ -100,7 +100,7 @@ module PaperTrading
       if today_loss.abs > max_daily_loss
         return {
           success: false,
-          error: "Daily loss limit exceeded: ₹#{today_loss.abs.round(2)} > ₹#{max_daily_loss.round(2)} (#{max_daily_loss_pct}%)"
+          error: "Daily loss limit exceeded: ₹#{today_loss.abs.round(2)} > ₹#{max_daily_loss.round(2)} (#{max_daily_loss_pct}%)",
         }
       end
 
@@ -114,7 +114,7 @@ module PaperTrading
       if current_drawdown > max_drawdown_pct
         return {
           success: false,
-          error: "Max drawdown exceeded: #{current_drawdown.round(2)}% > #{max_drawdown_pct}%"
+          error: "Max drawdown exceeded: #{current_drawdown.round(2)}% > #{max_drawdown_pct}%",
         }
       end
 
@@ -123,7 +123,7 @@ module PaperTrading
 
     def calculate_today_loss
       today_start = Time.current.beginning_of_day
-      today_ledgers = @portfolio.paper_ledgers.where('created_at >= ?', today_start)
+      today_ledgers = @portfolio.paper_ledgers.where(created_at: today_start..)
       today_credits = today_ledgers.credits.sum(:amount)
       today_debits = today_ledgers.debits.sum(:amount)
       today_credits - today_debits

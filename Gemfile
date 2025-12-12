@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 source "https://rubygems.org"
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
@@ -23,12 +25,12 @@ gem "jbuilder"
 # gem "bcrypt", "~> 3.1.7"
 
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
-gem "tzinfo-data", platforms: %i[ windows jruby ]
+gem "tzinfo-data", platforms: %i[windows jruby]
 
 # Use the database-backed adapters for Rails.cache, Active Job, and Action Cable
+gem "solid_cable"
 gem "solid_cache"
 gem "solid_queue"
-gem "solid_cable"
 
 # Core dependencies for trading system
 gem "concurrent-ruby"
@@ -67,7 +69,7 @@ gem "image_processing", "~> 1.2"
 
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
-  gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
+  gem "debug", platforms: %i[mri windows], require: "debug/prelude"
 
   # Environment variables
   gem "dotenv-rails"
@@ -80,20 +82,20 @@ group :development, :test do
 
   # RuboCop and plugins for code quality
   gem "rubocop", require: false
-  gem "rubocop-rails", require: false
-  gem "rubocop-performance", require: false
-  gem "rubocop-rspec", require: false
   gem "rubocop-factory_bot", require: false
+  gem "rubocop-performance", require: false
+  gem "rubocop-rails", require: false
+  gem "rubocop-rspec", require: false
   gem "rubocop-rspec_rails", require: false
 
   # Testing
-  gem "rspec-rails", "~> 7.0"
   gem "database_cleaner-active_record", "~> 2.2"
-  gem "webmock", "~> 3.18"
-  gem "vcr", "~> 6.2"
   gem "factory_bot_rails", "~> 6.4"
+  gem "rspec-rails", "~> 7.0"
   gem "shoulda-matchers", "~> 6.0"
   gem "simplecov", require: false
+  gem "vcr", "~> 6.2"
+  gem "webmock", "~> 3.18"
 end
 
 group :development do

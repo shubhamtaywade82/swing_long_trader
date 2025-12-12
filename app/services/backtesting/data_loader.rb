@@ -9,7 +9,7 @@ module Backtesting
         timeframe: timeframe,
         from_date: from_date,
         to_date: to_date,
-        interpolate_missing: interpolate_missing
+        interpolate_missing: interpolate_missing,
       )
     end
 
@@ -21,7 +21,7 @@ module Backtesting
           instrument: instrument,
           timeframe: timeframe,
           from_date: from_date,
-          to_date: to_date
+          to_date: to_date,
         )
 
         data[instrument.id] = series if series
@@ -33,18 +33,18 @@ module Backtesting
     def load_for_instrument(instrument:, timeframe:, from_date:, to_date:, interpolate_missing: false)
       # Load candles from database
       records = CandleSeriesRecord
-        .for_instrument(instrument)
-        .for_timeframe(timeframe)
-        .between_dates(from_date, to_date)
-        .ordered
-        .to_a
+                .for_instrument(instrument)
+                .for_timeframe(timeframe)
+                .between_dates(from_date, to_date)
+                .ordered
+                .to_a
 
       return nil if records.empty?
 
       # Convert to CandleSeries format
       series = CandleSeries.new(
         symbol: instrument.symbol_name,
-        interval: timeframe
+        interval: timeframe,
       )
 
       # Build hash of existing candles by date
@@ -57,12 +57,12 @@ module Backtesting
           high: record.high,
           low: record.low,
           close: record.close,
-          volume: record.volume
+          volume: record.volume,
         )
       end
 
       # Fill missing dates if interpolation is enabled
-      if interpolate_missing && timeframe == '1D'
+      if interpolate_missing && timeframe == "1D"
         fill_missing_daily_candles(series, existing_candles, from_date, to_date, interpolate_missing)
       else
         # Just add existing candles in order
@@ -92,7 +92,7 @@ module Backtesting
             high: last_candle.close,
             low: last_candle.close,
             close: last_candle.close,
-            volume: 0 # No volume for interpolated candles
+            volume: 0, # No volume for interpolated candles
           )
           series.add_candle(interpolated)
           # Don't update last_candle - keep using previous real candle for interpolation
@@ -116,7 +116,7 @@ module Backtesting
         if large_gaps.any?
           Rails.logger.warn(
             "[Backtesting::DataLoader] Large gaps detected for instrument #{instrument_id}: " \
-            "#{large_gaps.map { |g| "#{g[:days]} days" }.join(', ')}"
+            "#{large_gaps.map { |g| "#{g[:days]} days" }.join(', ')}",
           )
         end
 
@@ -126,7 +126,7 @@ module Backtesting
         else
           Rails.logger.warn(
             "[Backtesting::DataLoader] Insufficient candles for instrument #{instrument_id}: " \
-            "#{series.candles.size} < #{min_candles}"
+            "#{series.candles.size} < #{min_candles}",
           )
         end
       end
@@ -143,18 +143,16 @@ module Backtesting
         curr_date = candles[i].timestamp.to_date
         gap_days = (curr_date - prev_date).to_i - 1
 
-        if gap_days > 0
-          gaps << {
-            from: prev_date,
-            to: curr_date,
-            days: gap_days
-          }
-        end
+        next unless gap_days.positive?
+
+        gaps << {
+          from: prev_date,
+          to: curr_date,
+          days: gap_days,
+        }
       end
 
       gaps
     end
   end
 end
-
-

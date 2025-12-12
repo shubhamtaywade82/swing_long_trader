@@ -7,11 +7,11 @@ module PaperTrading
       new(
         portfolio: portfolio,
         amount: amount,
-        transaction_type: 'credit',
+        transaction_type: "credit",
         reason: reason,
         description: description,
         position: position,
-        meta: meta
+        meta: meta,
       ).record
     end
 
@@ -19,11 +19,11 @@ module PaperTrading
       new(
         portfolio: portfolio,
         amount: amount,
-        transaction_type: 'debit',
+        transaction_type: "debit",
         reason: reason,
         description: description,
         position: position,
-        meta: meta
+        meta: meta,
       ).record
     end
 
@@ -45,7 +45,7 @@ module PaperTrading
         transaction_type: @transaction_type,
         reason: @reason,
         description: @description,
-        meta: @meta.to_json
+        meta: @meta.to_json,
       )
 
       # Update portfolio capital
@@ -61,7 +61,7 @@ module PaperTrading
     private
 
     def update_portfolio_capital
-      if @transaction_type == 'credit'
+      if @transaction_type == "credit"
         @portfolio.increment!(:capital, @amount)
       else
         @portfolio.decrement!(:capital, @amount)

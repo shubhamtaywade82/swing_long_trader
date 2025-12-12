@@ -7,9 +7,9 @@ class BacktestRun < ApplicationRecord
   validates :strategy_type, inclusion: { in: %w[swing long_term] }
   validates :status, inclusion: { in: %w[pending running completed failed] }
 
-  scope :completed, -> { where(status: 'completed') }
-  scope :swing, -> { where(strategy_type: 'swing') }
-  scope :long_term, -> { where(strategy_type: 'long_term') }
+  scope :completed, -> { where(status: "completed") }
+  scope :swing, -> { where(strategy_type: "swing") }
+  scope :long_term, -> { where(strategy_type: "long_term") }
 
   def config_hash
     return {} if config.blank?
@@ -27,4 +27,3 @@ class BacktestRun < ApplicationRecord
     {}
   end
 end
-

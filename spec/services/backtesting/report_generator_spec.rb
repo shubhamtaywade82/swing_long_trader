@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe Backtesting::ReportGenerator, type: :service do
   let(:instrument) { create(:instrument) }
@@ -11,8 +11,8 @@ RSpec.describe Backtesting::ReportGenerator, type: :service do
     position
   end
 
-  describe '.generate' do
-    it 'delegates to instance method' do
+  describe ".generate" do
+    it "delegates to instance method" do
       allow_any_instance_of(described_class).to receive(:generate_all).and_return({})
 
       described_class.generate(backtest_run)
@@ -21,8 +21,8 @@ RSpec.describe Backtesting::ReportGenerator, type: :service do
     end
   end
 
-  describe '#generate_all' do
-    it 'generates all report components' do
+  describe "#generate_all" do
+    it "generates all report components" do
       generator = described_class.new(backtest_run)
       result = generator.generate_all
 
@@ -34,51 +34,51 @@ RSpec.describe Backtesting::ReportGenerator, type: :service do
     end
   end
 
-  describe '#generate_summary' do
-    it 'generates summary text' do
+  describe "#generate_summary" do
+    it "generates summary text" do
       generator = described_class.new(backtest_run)
       summary = generator.generate_summary
 
-      expect(summary).to include('Backtest Run Summary')
+      expect(summary).to include("Backtest Run Summary")
       expect(summary).to include(backtest_run.strategy_name)
       expect(summary).to include(backtest_run.initial_capital.to_s)
     end
   end
 
-  describe '#generate_trades_csv' do
-    it 'generates CSV with position data' do
+  describe "#generate_trades_csv" do
+    it "generates CSV with position data" do
       generator = described_class.new(backtest_run)
       csv = generator.generate_trades_csv
 
-      expect(csv).to include('Symbol')
-      expect(csv).to include('Direction')
-      expect(csv).to include('EntryDate')
+      expect(csv).to include("Symbol")
+      expect(csv).to include("Direction")
+      expect(csv).to include("EntryDate")
       expect(csv).to include(instrument.symbol_name)
     end
   end
 
-  describe '#generate_equity_curve_csv' do
-    it 'generates equity curve CSV' do
+  describe "#generate_equity_curve_csv" do
+    it "generates equity curve CSV" do
       generator = described_class.new(backtest_run)
       csv = generator.generate_equity_curve_csv
 
-      expect(csv).to include('Date')
-      expect(csv).to include('Equity')
+      expect(csv).to include("Date")
+      expect(csv).to include("Equity")
     end
   end
 
-  describe '#generate_metrics_report' do
-    it 'generates metrics report' do
+  describe "#generate_metrics_report" do
+    it "generates metrics report" do
       generator = described_class.new(backtest_run)
       report = generator.generate_metrics_report
 
       expect(report).to be_a(String)
-      expect(report).to include('Performance Metrics')
+      expect(report).to include("Performance Metrics")
     end
   end
 
-  describe '#generate_visualization_data' do
-    it 'generates visualization data' do
+  describe "#generate_visualization_data" do
+    it "generates visualization data" do
       generator = described_class.new(backtest_run)
       data = generator.generate_visualization_data
 
@@ -89,31 +89,31 @@ RSpec.describe Backtesting::ReportGenerator, type: :service do
     end
   end
 
-  describe 'edge cases' do
-    context 'when backtest_run has no positions' do
+  describe "edge cases" do
+    context "when backtest_run has no positions" do
       let(:empty_backtest_run) { create(:backtest_run) }
 
       before do
         allow(empty_backtest_run).to receive(:backtest_positions).and_return(BacktestPosition.none)
       end
 
-      it 'generates empty CSV' do
+      it "generates empty CSV" do
         generator = described_class.new(empty_backtest_run)
         csv = generator.generate_trades_csv
 
-        expect(csv).to include('Symbol')
+        expect(csv).to include("Symbol")
         expect(csv.lines.count).to eq(2) # Header + empty
       end
 
-      it 'generates empty equity curve' do
+      it "generates empty equity curve" do
         generator = described_class.new(empty_backtest_run)
         csv = generator.generate_equity_curve_csv
 
-        expect(csv).to include('Date')
+        expect(csv).to include("Date")
       end
     end
 
-    context 'when position has no instrument' do
+    context "when position has no instrument" do
       let(:position_no_instrument) do
         create(:backtest_position, backtest_run: backtest_run, instrument: nil)
       end
@@ -122,26 +122,25 @@ RSpec.describe Backtesting::ReportGenerator, type: :service do
         position_no_instrument
       end
 
-      it 'handles missing instrument gracefully' do
+      it "handles missing instrument gracefully" do
         generator = described_class.new(backtest_run)
         csv = generator.generate_trades_csv
 
-        expect(csv).to include('N/A')
+        expect(csv).to include("N/A")
       end
     end
 
-    context 'when metrics are missing' do
+    context "when metrics are missing" do
       before do
         allow(backtest_run).to receive(:metrics).and_return(nil)
       end
 
-      it 'handles missing metrics in summary' do
+      it "handles missing metrics in summary" do
         generator = described_class.new(backtest_run)
         summary = generator.generate_summary
 
-        expect(summary).to include('N/A')
+        expect(summary).to include("N/A")
       end
     end
   end
 end
-

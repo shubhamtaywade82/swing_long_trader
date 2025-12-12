@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe Indicators::Calculator, type: :service do
-  let(:series) { CandleSeries.new(symbol: 'TEST', interval: '1D') }
+  let(:series) { CandleSeries.new(symbol: "TEST", interval: "1D") }
 
   before do
     50.times { series.add_candle(create(:candle)) }
   end
 
-  describe '#rsi' do
-    it 'delegates to series.rsi' do
+  describe "#rsi" do
+    it "delegates to series.rsi" do
       allow(series).to receive(:rsi).and_return(65.0)
 
       calculator = described_class.new(series)
@@ -20,7 +20,7 @@ RSpec.describe Indicators::Calculator, type: :service do
       expect(series).to have_received(:rsi).with(14)
     end
 
-    it 'uses default period of 14' do
+    it "uses default period of 14" do
       allow(series).to receive(:rsi).and_return(65.0)
 
       calculator = described_class.new(series)
@@ -30,8 +30,8 @@ RSpec.describe Indicators::Calculator, type: :service do
     end
   end
 
-  describe '#macd' do
-    it 'delegates to series.macd' do
+  describe "#macd" do
+    it "delegates to series.macd" do
       allow(series).to receive(:macd).and_return({ macd: 1.0, signal: 0.5, histogram: 0.5 })
 
       calculator = described_class.new(series)
@@ -42,8 +42,8 @@ RSpec.describe Indicators::Calculator, type: :service do
     end
   end
 
-  describe '#adx' do
-    it 'delegates to series.adx' do
+  describe "#adx" do
+    it "delegates to series.adx" do
       allow(series).to receive(:adx).and_return(25.0)
 
       calculator = described_class.new(series)
@@ -54,29 +54,25 @@ RSpec.describe Indicators::Calculator, type: :service do
     end
   end
 
-  describe '#bullish_signal?' do
-    context 'when conditions are met' do
+  describe "#bullish_signal?" do
+    context "when conditions are met" do
       before do
-        allow(series).to receive(:rsi).and_return(25.0)
-        allow(series).to receive(:adx).and_return(25.0)
-        allow(series).to receive(:closes).and_return([100.0, 105.0, 110.0])
+        allow(series).to receive_messages(rsi: 25.0, adx: 25.0, closes: [100.0, 105.0, 110.0])
       end
 
-      it 'returns true' do
+      it "returns true" do
         calculator = described_class.new(series)
 
         expect(calculator.bullish_signal?).to be true
       end
     end
 
-    context 'when conditions are not met' do
+    context "when conditions are not met" do
       before do
-        allow(series).to receive(:rsi).and_return(50.0)
-        allow(series).to receive(:adx).and_return(15.0)
-        allow(series).to receive(:closes).and_return([100.0, 95.0, 90.0])
+        allow(series).to receive_messages(rsi: 50.0, adx: 15.0, closes: [100.0, 95.0, 90.0])
       end
 
-      it 'returns false' do
+      it "returns false" do
         calculator = described_class.new(series)
 
         expect(calculator.bullish_signal?).to be false
@@ -84,29 +80,25 @@ RSpec.describe Indicators::Calculator, type: :service do
     end
   end
 
-  describe '#bearish_signal?' do
-    context 'when conditions are met' do
+  describe "#bearish_signal?" do
+    context "when conditions are met" do
       before do
-        allow(series).to receive(:rsi).and_return(75.0)
-        allow(series).to receive(:adx).and_return(25.0)
-        allow(series).to receive(:closes).and_return([110.0, 105.0, 100.0])
+        allow(series).to receive_messages(rsi: 75.0, adx: 25.0, closes: [110.0, 105.0, 100.0])
       end
 
-      it 'returns true' do
+      it "returns true" do
         calculator = described_class.new(series)
 
         expect(calculator.bearish_signal?).to be true
       end
     end
 
-    context 'when conditions are not met' do
+    context "when conditions are not met" do
       before do
-        allow(series).to receive(:rsi).and_return(50.0)
-        allow(series).to receive(:adx).and_return(15.0)
-        allow(series).to receive(:closes).and_return([100.0, 105.0, 110.0])
+        allow(series).to receive_messages(rsi: 50.0, adx: 15.0, closes: [100.0, 105.0, 110.0])
       end
 
-      it 'returns false' do
+      it "returns false" do
         calculator = described_class.new(series)
 
         expect(calculator.bearish_signal?).to be false
@@ -114,4 +106,3 @@ RSpec.describe Indicators::Calculator, type: :service do
     end
   end
 end
-

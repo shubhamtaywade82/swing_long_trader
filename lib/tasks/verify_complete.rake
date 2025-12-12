@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 namespace :verify do
-  desc 'Verify system completeness and readiness'
+  desc "Verify system completeness and readiness"
   task complete: :environment do
     puts "\n=== ✅ SYSTEM COMPLETENESS VERIFICATION ===\n\n"
 
@@ -21,23 +21,29 @@ namespace :verify do
     # 2. Check Services
     puts "\n2. Checking Services..."
     services = [
-      'Candles::DailyIngestor',
-      'Candles::WeeklyIngestor',
-      'Candles::IntradayFetcher',
-      'Screeners::SwingScreener',
-      'Screeners::LongTermScreener',
-      'Screeners::AIRanker',
-      'Screeners::FinalSelector',
-      'Strategies::Swing::Engine',
-      'Strategies::Swing::SignalBuilder',
-      'Strategies::Swing::Evaluator',
-      'Strategies::Swing::Executor',
-      'Dhan::Orders',
-      'Orders::Approval',
-      'Openai::Service',
-      'Telegram::Notifier'
+      "Candles::DailyIngestor",
+      "Candles::WeeklyIngestor",
+      "Candles::IntradayFetcher",
+      "Screeners::SwingScreener",
+      "Screeners::LongTermScreener",
+      "Screeners::AIRanker",
+      "Screeners::FinalSelector",
+      "Strategies::Swing::Engine",
+      "Strategies::Swing::SignalBuilder",
+      "Strategies::Swing::Evaluator",
+      "Strategies::Swing::Executor",
+      "Dhan::Orders",
+      "Orders::Approval",
+      "Openai::Service",
+      "Telegram::Notifier",
     ]
-    missing_services = services.reject { |s| Object.const_defined?(s.split('::').inject(Object) { |o, c| o.const_get(c) }) rescue false }
+    missing_services = services.reject do |s|
+      Object.const_defined?(s.split("::").inject(Object) do |o, c|
+        o.const_get(c)
+      end)
+    rescue StandardError
+      false
+    end
     if missing_services.empty?
       puts "   ✅ All core services present"
     else
@@ -47,15 +53,21 @@ namespace :verify do
     # 3. Check Jobs
     puts "\n3. Checking Jobs..."
     jobs = [
-      'Candles::DailyIngestorJob',
-      'Candles::WeeklyIngestorJob',
-      'Screeners::SwingScreenerJob',
-      'Strategies::Swing::AnalysisJob',
-      'MonitorJob',
-      'ExecutorJob',
-      'Orders::ProcessApprovedJob'
+      "Candles::DailyIngestorJob",
+      "Candles::WeeklyIngestorJob",
+      "Screeners::SwingScreenerJob",
+      "Strategies::Swing::AnalysisJob",
+      "MonitorJob",
+      "ExecutorJob",
+      "Orders::ProcessApprovedJob",
     ]
-    missing_jobs = jobs.reject { |j| Object.const_defined?(j.split('::').inject(Object) { |o, c| o.const_get(c) }) rescue false }
+    missing_jobs = jobs.reject do |j|
+      Object.const_defined?(j.split("::").inject(Object) do |o, c|
+        o.const_get(c)
+      end)
+    rescue StandardError
+      false
+    end
     if missing_jobs.empty?
       puts "   ✅ All core jobs present"
     else
@@ -65,15 +77,21 @@ namespace :verify do
     # 4. Check Backtesting Services
     puts "\n4. Checking Backtesting Framework..."
     backtesting_services = [
-      'Backtesting::SwingBacktester',
-      'Backtesting::LongTermBacktester',
-      'Backtesting::WalkForward',
-      'Backtesting::Optimizer',
-      'Backtesting::MonteCarlo',
-      'Backtesting::Portfolio',
-      'Backtesting::Position'
+      "Backtesting::SwingBacktester",
+      "Backtesting::LongTermBacktester",
+      "Backtesting::WalkForward",
+      "Backtesting::Optimizer",
+      "Backtesting::MonteCarlo",
+      "Backtesting::Portfolio",
+      "Backtesting::Position",
     ]
-    missing_backtesting = backtesting_services.reject { |s| Object.const_defined?(s.split('::').inject(Object) { |o, c| o.const_get(c) }) rescue false }
+    missing_backtesting = backtesting_services.reject do |s|
+      Object.const_defined?(s.split("::").inject(Object) do |o, c|
+        o.const_get(c)
+      end)
+    rescue StandardError
+      false
+    end
     if missing_backtesting.empty?
       puts "   ✅ All backtesting services present"
     else
@@ -83,14 +101,20 @@ namespace :verify do
     # 5. Check SMC Services
     puts "\n5. Checking SMC Components..."
     smc_services = [
-      'Smc::Bos',
-      'Smc::Choch',
-      'Smc::OrderBlock',
-      'Smc::FairValueGap',
-      'Smc::MitigationBlock',
-      'Smc::StructureValidator'
+      "Smc::Bos",
+      "Smc::Choch",
+      "Smc::OrderBlock",
+      "Smc::FairValueGap",
+      "Smc::MitigationBlock",
+      "Smc::StructureValidator",
     ]
-    missing_smc = smc_services.reject { |s| Object.const_defined?(s.split('::').inject(Object) { |o, c| o.const_get(c) }) rescue false }
+    missing_smc = smc_services.reject do |s|
+      Object.const_defined?(s.split("::").inject(Object) do |o, c|
+        o.const_get(c)
+      end)
+    rescue StandardError
+      false
+    end
     if missing_smc.empty?
       puts "   ✅ All SMC components present"
     else
@@ -100,13 +124,13 @@ namespace :verify do
     # 6. Check Configuration Files
     puts "\n6. Checking Configuration Files..."
     config_files = {
-      'config/algo.yml' => 'Trading configuration',
-      'config/recurring.yml' => 'Job schedules',
-      'config/application.rb' => 'Rails configuration',
-      '.env.example' => 'Environment variables template'
+      "config/algo.yml" => "Trading configuration",
+      "config/recurring.yml" => "Job schedules",
+      "config/application.rb" => "Rails configuration",
+      ".env.example" => "Environment variables template",
     }
     config_files.each do |file, description|
-      if File.exist?(Rails.root.join(file))
+      if Rails.root.join(file).exist?
         puts "   ✅ #{description}: #{file}"
       else
         puts "   ❌ Missing: #{file} (#{description})"
@@ -116,16 +140,16 @@ namespace :verify do
 
     # 7. Check Migrations
     puts "\n7. Checking Database Migrations..."
-    migration_files = Dir[Rails.root.join('db/migrate/*.rb')]
-    expected_migrations = [
-      'create_instruments',
-      'create_candle_series',
-      'create_settings',
-      'create_backtest_runs',
-      'create_backtest_positions',
-      'create_optimization_runs',
-      'create_orders',
-      'add_approval_fields_to_orders'
+    migration_files = Rails.root.glob("db/migrate/*.rb")
+    expected_migrations = %w[
+      create_instruments
+      create_candle_series
+      create_settings
+      create_backtest_runs
+      create_backtest_positions
+      create_optimization_runs
+      create_orders
+      add_approval_fields_to_orders
     ]
     migration_names = migration_files.map { |f| File.basename(f) }
     found_migrations = expected_migrations.select do |name|
@@ -134,26 +158,26 @@ namespace :verify do
     if found_migrations.size == expected_migrations.size
       puts "   ✅ All expected migrations present (#{found_migrations.size})"
     else
-      missing = expected_migrations - found_migrations.map { |m| m.gsub(/^\d+_/, '') }
+      missing = expected_migrations - found_migrations.map { |m| m.gsub(/^\d+_/, "") }
       puts "   ⚠️  Missing migrations: #{missing.join(', ')}" if missing.any?
       puts "   ✅ Found #{found_migrations.size}/#{expected_migrations.size} migrations"
     end
 
     # 8. Check Rake Tasks
     puts "\n8. Checking Rake Tasks..."
-    rake_files = Dir[Rails.root.join('lib/tasks/**/*.rake')]
+    rake_files = Rails.root.glob("lib/tasks/**/*.rake")
     expected_tasks = [
-      'instruments.rake',
-      'universe.rake',
-      'indicators.rake',
-      'backtest.rake',
-      'metrics.rake',
-      'solid_queue.rake',
-      'hardening.rake',
-      'verify_risks.rake',
-      'production_ready.rake',
-      'orders.rake',
-      'test_risk_controls.rake'
+      "instruments.rake",
+      "universe.rake",
+      "indicators.rake",
+      "backtest.rake",
+      "metrics.rake",
+      "solid_queue.rake",
+      "hardening.rake",
+      "verify_risks.rake",
+      "production_ready.rake",
+      "orders.rake",
+      "test_risk_controls.rake",
     ]
     found_tasks = expected_tasks.select do |task|
       rake_files.any? { |f| File.basename(f) == task }
@@ -168,18 +192,18 @@ namespace :verify do
     # 9. Check Documentation
     puts "\n9. Checking Documentation..."
     doc_files = {
-      'docs/SYSTEM_OVERVIEW.md' => 'System overview',
-      'docs/architecture.md' => 'Architecture',
-      'docs/runbook.md' => 'Runbook',
-      'docs/BACKTESTING.md' => 'Backtesting guide',
-      'docs/DEPLOYMENT_QUICKSTART.md' => 'Deployment guide',
-      'docs/ENV_SETUP.md' => 'Environment setup',
-      'docs/UNIVERSE_SETUP.md' => 'Universe setup',
-      'docs/PRODUCTION_CHECKLIST.md' => 'Production checklist',
-      'docs/MANUAL_VERIFICATION_STEPS.md' => 'Manual verification',
-      'README.md' => 'Main README'
+      "docs/SYSTEM_OVERVIEW.md" => "System overview",
+      "docs/architecture.md" => "Architecture",
+      "docs/runbook.md" => "Runbook",
+      "docs/BACKTESTING.md" => "Backtesting guide",
+      "docs/DEPLOYMENT_QUICKSTART.md" => "Deployment guide",
+      "docs/ENV_SETUP.md" => "Environment setup",
+      "docs/UNIVERSE_SETUP.md" => "Universe setup",
+      "docs/PRODUCTION_CHECKLIST.md" => "Production checklist",
+      "docs/MANUAL_VERIFICATION_STEPS.md" => "Manual verification",
+      "README.md" => "Main README",
     }
-    missing_docs = doc_files.reject { |file, _| File.exist?(Rails.root.join(file)) }
+    missing_docs = doc_files.reject { |file, _| Rails.root.join(file).exist? }
     if missing_docs.empty?
       puts "   ✅ All documentation present"
     else
@@ -189,15 +213,15 @@ namespace :verify do
     # 10. Check Test Infrastructure
     puts "\n10. Checking Test Infrastructure..."
     test_files = {
-      'spec/spec_helper.rb' => 'RSpec configuration',
-      'spec/rails_helper.rb' => 'Rails helper',
-      'spec/support/database_cleaner.rb' => 'Database Cleaner',
-      'spec/support/vcr.rb' => 'VCR configuration',
-      'spec/support/webmock.rb' => 'WebMock configuration',
-      '.rspec' => 'RSpec config file',
-      '.simplecov' => 'SimpleCov configuration'
+      "spec/spec_helper.rb" => "RSpec configuration",
+      "spec/rails_helper.rb" => "Rails helper",
+      "spec/support/database_cleaner.rb" => "Database Cleaner",
+      "spec/support/vcr.rb" => "VCR configuration",
+      "spec/support/webmock.rb" => "WebMock configuration",
+      ".rspec" => "RSpec config file",
+      ".simplecov" => "SimpleCov configuration",
     }
-    missing_tests = test_files.reject { |file, _| File.exist?(Rails.root.join(file)) }
+    missing_tests = test_files.reject { |file, _| Rails.root.join(file).exist? }
     if missing_tests.empty?
       puts "   ✅ All test infrastructure present"
     else
@@ -221,18 +245,18 @@ namespace :verify do
     puts "\n"
   end
 
-  desc 'Show implementation status summary'
+  desc "Show implementation status summary"
   task status: :environment do
     puts "\n=== 📋 IMPLEMENTATION STATUS ===\n\n"
 
     # Count implemented components
-    models_count = Dir[Rails.root.join('app/models/*.rb')].count
-    services_count = Dir[Rails.root.join('app/services/**/*.rb')].count
-    jobs_count = Dir[Rails.root.join('app/jobs/**/*.rb')].count
-    migrations_count = Dir[Rails.root.join('db/migrate/*.rb')].count
-    rake_tasks_count = Dir[Rails.root.join('lib/tasks/**/*.rake')].count
-    spec_files_count = Dir[Rails.root.join('spec/**/*_spec.rb')].count
-    doc_files_count = Dir[Rails.root.join('docs/*.md')].count
+    models_count = Rails.root.glob("app/models/*.rb").count
+    services_count = Rails.root.glob("app/services/**/*.rb").count
+    jobs_count = Rails.root.glob("app/jobs/**/*.rb").count
+    migrations_count = Rails.root.glob("db/migrate/*.rb").count
+    rake_tasks_count = Rails.root.glob("lib/tasks/**/*.rake").count
+    spec_files_count = Rails.root.glob("spec/**/*_spec.rb").count
+    doc_files_count = Rails.root.glob("docs/*.md").count
 
     puts "📦 Components:"
     puts "   Models: #{models_count}"
@@ -265,4 +289,3 @@ namespace :verify do
     puts "\n"
   end
 end
-

@@ -8,8 +8,8 @@ begin
   $VERBOSE = nil
   # SimpleCov must be required before any application code is loaded
   # Configuration is handled by .simplecov file
-  require 'simplecov'
-  SimpleCov.start 'rails'
+  require "simplecov"
+  SimpleCov.start "rails"
 ensure
   $VERBOSE = original_verbose
 end
@@ -108,4 +108,3 @@ RSpec.configure do |config|
   # as the one that triggered the failure.
   # Kernel.srand config.seed
 end
-

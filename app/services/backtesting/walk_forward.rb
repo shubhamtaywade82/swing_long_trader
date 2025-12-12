@@ -6,7 +6,8 @@ module Backtesting
   class WalkForward < ApplicationService
     WINDOW_TYPES = %i[rolling expanding].freeze
 
-    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, window_type: :rolling, in_sample_days: 90, out_of_sample_days: 30, backtester_class: SwingBacktester, backtester_options: {})
+    def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, window_type: :rolling,
+                  in_sample_days: 90, out_of_sample_days: 30, backtester_class: SwingBacktester, backtester_options: {})
       new(
         instruments: instruments,
         from_date: from_date,
@@ -16,11 +17,12 @@ module Backtesting
         in_sample_days: in_sample_days,
         out_of_sample_days: out_of_sample_days,
         backtester_class: backtester_class,
-        backtester_options: backtester_options
+        backtester_options: backtester_options,
       ).call
     end
 
-    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, window_type: :rolling, in_sample_days: 90, out_of_sample_days: 30, backtester_class: SwingBacktester, backtester_options: {})
+    def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, window_type: :rolling,
+                   in_sample_days: 90, out_of_sample_days: 30, backtester_class: SwingBacktester, backtester_options: {})
       @instruments = instruments
       @from_date = from_date
       @to_date = to_date
@@ -36,7 +38,7 @@ module Backtesting
 
     def call
       windows = generate_windows
-      return { success: false, error: 'No valid windows generated' } if windows.empty?
+      return { success: false, error: "No valid windows generated" } if windows.empty?
 
       in_sample_results = []
       out_of_sample_results = []
@@ -48,7 +50,7 @@ module Backtesting
           from_date: window[:in_sample_start],
           to_date: window[:in_sample_end],
           window_index: index,
-          period_type: 'in_sample'
+          period_type: "in_sample",
         )
 
         next unless in_sample_result[:success]
@@ -57,7 +59,7 @@ module Backtesting
           window_index: index,
           start_date: window[:in_sample_start],
           end_date: window[:in_sample_end],
-          results: in_sample_result[:results]
+          results: in_sample_result[:results],
         }
 
         # Run out-of-sample backtest
@@ -65,8 +67,8 @@ module Backtesting
           from_date: window[:out_of_sample_start],
           to_date: window[:out_of_sample_end],
           window_index: index,
-          period_type: 'out_of_sample',
-          initial_capital: @initial_capital # Reset capital for each OOS period
+          period_type: "out_of_sample",
+          initial_capital: @initial_capital, # Reset capital for each OOS period
         )
 
         next unless out_of_sample_result[:success]
@@ -75,13 +77,13 @@ module Backtesting
           window_index: index,
           start_date: window[:out_of_sample_start],
           end_date: window[:out_of_sample_end],
-          results: out_of_sample_result[:results]
+          results: out_of_sample_result[:results],
         }
 
         all_results << {
           window_index: index,
           in_sample: in_sample_result[:results],
-          out_of_sample: out_of_sample_result[:results]
+          out_of_sample: out_of_sample_result[:results],
         }
       end
 
@@ -94,7 +96,7 @@ module Backtesting
         in_sample_results: in_sample_results,
         out_of_sample_results: out_of_sample_results,
         aggregated: aggregated,
-        comparison: compare_in_sample_vs_out_of_sample(in_sample_results, out_of_sample_results)
+        comparison: compare_in_sample_vs_out_of_sample(in_sample_results, out_of_sample_results),
       }
     end
 
@@ -126,7 +128,7 @@ module Backtesting
           in_sample_start: in_sample_start,
           in_sample_end: in_sample_end,
           out_of_sample_start: out_of_sample_start,
-          out_of_sample_end: out_of_sample_end
+          out_of_sample_end: out_of_sample_end,
         }
 
         # Move to next window
@@ -144,7 +146,7 @@ module Backtesting
 
       # For expanding windows, adjust in_sample_start
       if @window_type == :expanding
-        windows.each_with_index do |window, index|
+        windows.each_with_index do |window, _index|
           window[:in_sample_start] = @from_date
           window[:in_sample_end] = window[:out_of_sample_start] - 1.day
         end
@@ -158,7 +160,7 @@ module Backtesting
         instruments: @instruments,
         from_date: from_date,
         to_date: to_date,
-        initial_capital: initial_capital
+        initial_capital: initial_capital,
       )
 
       @backtester_class.call(**options)
@@ -167,7 +169,7 @@ module Backtesting
     def aggregate_results(in_sample_results, out_of_sample_results)
       {
         in_sample: aggregate_period_results(in_sample_results),
-        out_of_sample: aggregate_period_results(out_of_sample_results)
+        out_of_sample: aggregate_period_results(out_of_sample_results),
       }
     end
 
@@ -185,12 +187,12 @@ module Backtesting
         avg_profit_factor: average_metric(period_results, :profit_factor),
         total_trades: sum_metric(period_results, :total_trades),
         avg_trades_per_period: average_metric(period_results, :total_trades),
-        periods_count: period_results.size
+        periods_count: period_results.size,
       }
     end
 
     def average_metric(period_results, metric_key)
-      values = period_results.map { |r| r[:results][metric_key] }.compact
+      values = period_results.filter_map { |r| r[:results][metric_key] }
       return 0.0 if values.empty?
 
       (values.sum.to_f / values.size).round(2)
@@ -205,12 +207,15 @@ module Backtesting
       out_of_sample_agg = aggregate_period_results(out_of_sample_results)
 
       {
-        return_degradation: calculate_degradation(in_sample_agg[:avg_total_return], out_of_sample_agg[:avg_total_return]),
-        sharpe_degradation: calculate_degradation(in_sample_agg[:avg_sharpe_ratio], out_of_sample_agg[:avg_sharpe_ratio]),
+        return_degradation: calculate_degradation(in_sample_agg[:avg_total_return],
+                                                  out_of_sample_agg[:avg_total_return]),
+        sharpe_degradation: calculate_degradation(in_sample_agg[:avg_sharpe_ratio],
+                                                  out_of_sample_agg[:avg_sharpe_ratio]),
         drawdown_increase: calculate_increase(in_sample_agg[:avg_max_drawdown], out_of_sample_agg[:avg_max_drawdown]),
         win_rate_degradation: calculate_degradation(in_sample_agg[:avg_win_rate], out_of_sample_agg[:avg_win_rate]),
-        profit_factor_degradation: calculate_degradation(in_sample_agg[:avg_profit_factor], out_of_sample_agg[:avg_profit_factor]),
-        consistency_score: calculate_consistency_score(in_sample_results, out_of_sample_results)
+        profit_factor_degradation: calculate_degradation(in_sample_agg[:avg_profit_factor],
+                                                         out_of_sample_agg[:avg_profit_factor]),
+        consistency_score: calculate_consistency_score(in_sample_results, out_of_sample_results),
       }
     end
 
@@ -247,7 +252,7 @@ module Backtesting
           consistency_scores << 100
         else
           # Linear interpolation between 0 and 100
-          ratio = (oos_return - is_return * 0.5) / (is_return * 0.3)
+          ratio = (oos_return - (is_return * 0.5)) / (is_return * 0.3)
           consistency_scores << (ratio * 100).clamp(0, 100)
         end
       end
@@ -258,4 +263,3 @@ module Backtesting
     end
   end
 end
-

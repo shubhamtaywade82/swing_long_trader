@@ -12,10 +12,8 @@ module Screeners
       ranked
     rescue StandardError => e
       Rails.logger.error("[Screeners::AIRankerJob] Failed: #{e.message}")
-      Telegram::Notifier.send_error_alert("AI ranker failed: #{e.message}", context: 'AIRankerJob')
+      Telegram::Notifier.send_error_alert("AI ranker failed: #{e.message}", context: "AIRankerJob")
       raise
     end
   end
 end
-
-

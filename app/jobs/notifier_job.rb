@@ -18,13 +18,13 @@ class NotifierJob < ApplicationJob
       Telegram::Notifier.send_exit_alert(payload[:exit_info] || {})
     when :error_alert
       Telegram::Notifier.send_error_alert(
-        payload[:message] || '',
-        context: payload[:context] || 'NotifierJob'
+        payload[:message] || "",
+        context: payload[:context] || "NotifierJob",
       )
     when :portfolio_snapshot
       Telegram::Notifier.send_portfolio_snapshot(payload[:portfolio] || {})
     when :message
-      Telegram::Notifier.send_message(payload[:message] || '')
+      Telegram::Notifier.send_message(payload[:message] || "")
     else
       Rails.logger.warn("[NotifierJob] Unknown notification type: #{notification_type}")
     end
@@ -33,4 +33,3 @@ class NotifierJob < ApplicationJob
     # Don't raise - notification failures shouldn't break the job queue
   end
 end
-

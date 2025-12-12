@@ -29,7 +29,7 @@ module PaperTrading
       log_error("Paper trading reconciliation failed: #{e.message}")
       Telegram::Notifier.send_error_alert(
         "Paper trading reconciliation failed: #{e.message}",
-        context: 'PaperTrading::ReconciliationJob'
+        context: "PaperTrading::ReconciliationJob",
       )
       raise
     end

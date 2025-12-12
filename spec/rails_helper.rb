@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 # This file is copied to spec/ when you run 'rails generate rspec:install'
-require 'spec_helper'
-ENV['RAILS_ENV'] ||= 'test'
+require "spec_helper"
+ENV["RAILS_ENV"] ||= "test"
 
 # Suppress warnings from third-party gems while loading Rails
 # These warnings come from:
@@ -14,7 +14,7 @@ ENV['RAILS_ENV'] ||= 'test'
 original_verbose = $VERBOSE
 begin
   $VERBOSE = nil
-  require_relative '../config/environment'
+  require_relative "../config/environment"
 ensure
   $VERBOSE = original_verbose
 end
@@ -35,12 +35,12 @@ module WarningFilter
       # Filter out method redefinition warnings from rake tasks
       return if message.is_a?(String) && (
         message.match?(/method redefined.*discarding old/) ||
-        message.match?(/previous definition of/) ||
-        message.match?(/already initialized constant/) ||
-        message.match?(/cache_digests\.rake/) ||
+        message.include?("previous definition of") ||
+        message.include?("already initialized constant") ||
+        message.include?("cache_digests.rake") ||
         message.match?(/jsbundling.*build\.rake/) ||
-        message.match?(/turbo_tasks\.rake/) ||
-        message.match?(/stimulus_tasks\.rake/) ||
+        message.include?("turbo_tasks.rake") ||
+        message.include?("stimulus_tasks.rake") ||
         message.match?(/cssbundling.*build\.rake/) ||
         message.match?(/railties.*tasks.*log\.rake/) ||
         message.match?(/railties.*tasks.*misc\.rake/)
@@ -55,7 +55,7 @@ end
 WarningFilter.setup
 # Prevent database truncation if the environment is production
 abort("The Rails environment is running in production mode!") if Rails.env.production?
-require 'rspec/rails'
+require "rspec/rails"
 # Add additional requires below this line. Rails is not loaded until this point!
 
 # Requires supporting ruby files with custom matchers and macros, etc, in
@@ -71,7 +71,7 @@ require 'rspec/rails'
 # `rails generate rspec:install` multiple times. It is recommended that you
 # comment it out until you actually need it. For more information, see:
 # https://rspec.info/features/3-12/rspec-core/configuration/zero-monkey-patching-mode/
-Dir[Rails.root.join('spec', 'support', '**', '*.rb')].sort.each { |f| require f }
+Rails.root.glob("spec/support/**/*.rb").each { |f| require f }
 
 # Checks for pending migrations and applies them before tests are run.
 # If you are not using ActiveRecord, you can remove these lines.
@@ -84,7 +84,7 @@ end
 RSpec.configure do |config|
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_paths = [
-    Rails.root.join('spec/fixtures')
+    Rails.root.join("spec/fixtures"),
   ]
 
   # If you're not using ActiveRecord, or you'd prefer not to run each of your
@@ -93,7 +93,7 @@ RSpec.configure do |config|
   config.use_transactional_fixtures = false
 
   # Configure ActiveJob test adapter
-  config.before(:each) do
+  config.before do
     ActiveJob::Base.queue_adapter = :test
   end
 
@@ -123,4 +123,3 @@ RSpec.configure do |config|
   # Include FactoryBot syntax methods
   config.include FactoryBot::Syntax::Methods
 end
-

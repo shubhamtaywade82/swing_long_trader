@@ -12,7 +12,7 @@ module Strategies
       def initialize(signal:, dry_run: nil)
         @signal = signal
         @instrument = Instrument.find_by(id: signal[:instrument_id])
-        @dry_run = dry_run.nil? ? (ENV['DRY_RUN'] == 'true') : dry_run
+        @dry_run = dry_run.nil? ? (ENV["DRY_RUN"] == "true") : dry_run
         @risk_config = AlgoConfig.fetch(:risk) || {}
       end
 
@@ -22,9 +22,7 @@ module Strategies
         return validation unless validation[:success]
 
         # If paper trading is enabled, skip live trading checks and route directly
-        if Rails.configuration.x.paper_trading.enabled
-          return place_entry_order
-        end
+        return place_entry_order if Rails.configuration.x.paper_trading.enabled
 
         # Check risk limits (for live trading)
         risk_check = check_risk_limits
@@ -45,11 +43,11 @@ module Strategies
       private
 
       def validate_signal
-        return { success: false, error: 'Invalid signal' } unless @signal.present?
-        return { success: false, error: 'Instrument not found' } unless @instrument.present?
-        return { success: false, error: 'Missing entry price' } unless @signal[:entry_price]
-        return { success: false, error: 'Missing quantity' } unless @signal[:qty]
-        return { success: false, error: 'Missing direction' } unless @signal[:direction]
+        return { success: false, error: "Invalid signal" } if @signal.blank?
+        return { success: false, error: "Instrument not found" } if @instrument.blank?
+        return { success: false, error: "Missing entry price" } unless @signal[:entry_price]
+        return { success: false, error: "Missing quantity" } unless @signal[:qty]
+        return { success: false, error: "Missing direction" } unless @signal[:direction]
 
         { success: true }
       end
@@ -67,7 +65,7 @@ module Strategies
         if order_value > max_value
           return {
             success: false,
-            error: "Order exceeds max position size: ₹#{order_value.round(2)} > ₹#{max_value.round(2)} (#{max_per_instrument}%)"
+            error: "Order exceeds max position size: ₹#{order_value.round(2)} > ₹#{max_value.round(2)} (#{max_per_instrument}%)",
           }
         end
 
@@ -79,7 +77,7 @@ module Strategies
         if total_exposure > max_total_value
           return {
             success: false,
-            error: "Total exposure exceeds limit: ₹#{total_exposure.round(2)} > ₹#{max_total_value.round(2)} (#{max_total}%)"
+            error: "Total exposure exceeds limit: ₹#{total_exposure.round(2)} > ₹#{max_total_value.round(2)} (#{max_total}%)",
           }
         end
 
@@ -91,7 +89,7 @@ module Strategies
         return { success: true } if Rails.configuration.x.paper_trading.enabled
 
         # Check recent order failure rate (only for live orders)
-        recent_orders = Order.real.where('created_at > ?', 1.hour.ago)
+        recent_orders = Order.real.where("created_at > ?", 1.hour.ago)
         total_recent = recent_orders.count
         failed_recent = recent_orders.failed.count
 
@@ -103,7 +101,7 @@ module Strategies
         if failure_rate > max_failure_rate
           return {
             success: false,
-            error: "Circuit breaker activated: #{failure_rate.round(1)}% failure rate in last hour"
+            error: "Circuit breaker activated: #{failure_rate.round(1)}% failure rate in last hour",
           }
         end
 
@@ -126,7 +124,7 @@ module Strategies
         return { success: true } unless manual_approval_enabled
 
         # Count executed trades (excluding dry-run)
-        executed_count = Order.real.where(status: 'executed').count
+        executed_count = Order.real.where(status: "executed").count
 
         # If we've already executed 30+ trades, no approval needed
         return { success: true } if executed_count >= manual_approval_count
@@ -139,27 +137,25 @@ module Strategies
           requires_approval: true,
           executed_count: executed_count,
           remaining: manual_approval_count - executed_count,
-          error: "Manual approval required for first #{manual_approval_count} trades (#{executed_count}/#{manual_approval_count} executed)"
+          error: "Manual approval required for first #{manual_approval_count} trades (#{executed_count}/#{manual_approval_count} executed)",
         }
       end
 
       def place_entry_order
         # Check if paper trading is enabled
-        if Rails.configuration.x.paper_trading.enabled
-          return execute_paper_trade
-        end
+        return execute_paper_trade if Rails.configuration.x.paper_trading.enabled
 
         # Determine order type (MARKET for swing trading)
-        order_type = 'MARKET' # Swing trading typically uses market orders
+        order_type = "MARKET" # Swing trading typically uses market orders
 
         # Map direction to transaction type
-        transaction_type = @signal[:direction] == :long ? 'BUY' : 'SELL'
+        transaction_type = @signal[:direction] == :long ? "BUY" : "SELL"
 
         # Check if manual approval is required
         execution_config = AlgoConfig.fetch(:execution) || {}
         manual_approval_enabled = execution_config[:manual_approval]&.dig(:enabled) != false
         manual_approval_count = execution_config[:manual_approval]&.dig(:count) || 30
-        executed_count = Order.real.where(status: 'executed').count
+        executed_count = Order.real.where(status: "executed").count
         requires_approval = manual_approval_enabled && !@dry_run && executed_count < manual_approval_count
 
         # Check if large order (requires confirmation)
@@ -172,9 +168,7 @@ module Strategies
         end
 
         # If approval required, create order with requires_approval flag
-        if requires_approval
-          return create_pending_approval_order(order_type, transaction_type, order_value)
-        end
+        return create_pending_approval_order(order_type, transaction_type, order_value) if requires_approval
 
         # Place order via DhanHQ wrapper
         result = Dhan::Orders.place_order(
@@ -184,7 +178,7 @@ module Strategies
           quantity: @signal[:qty],
           price: nil, # Market order
           client_order_id: generate_order_id,
-          dry_run: @dry_run
+          dry_run: @dry_run,
         )
 
         # Log order placement
@@ -205,13 +199,13 @@ module Strategies
             success: true,
             order: result[:position],
             paper_trade: true,
-            message: result[:message]
+            message: result[:message],
           }
         else
           {
             success: false,
             error: result[:error],
-            paper_trade: true
+            paper_trade: true,
           }
         end
       rescue StandardError => e
@@ -219,7 +213,7 @@ module Strategies
         {
           success: false,
           error: "Paper trade failed: #{e.message}",
-          paper_trade: true
+          paper_trade: true,
         }
       end
 
@@ -231,21 +225,21 @@ module Strategies
           symbol: @instrument.symbol_name,
           exchange_segment: @instrument.exchange_segment,
           security_id: @instrument.security_id,
-          product_type: 'EQUITY',
+          product_type: "EQUITY",
           order_type: order_type,
           transaction_type: transaction_type,
           quantity: @signal[:qty],
           price: @signal[:entry_price],
-          validity: 'DAY',
-          status: 'pending',
+          validity: "DAY",
+          status: "pending",
           dry_run: false,
           requires_approval: true,
           metadata: {
             signal: @signal,
             order_value: order_value,
             created_at: Time.current,
-            requires_approval: true
-          }.to_json
+            requires_approval: true,
+          }.to_json,
         )
 
         # Send approval request notification
@@ -255,7 +249,7 @@ module Strategies
           success: false,
           requires_approval: true,
           order: order,
-          message: "Order created, awaiting manual approval (#{Order.real.where(status: 'executed').count}/30 executed)"
+          message: "Order created, awaiting manual approval (#{Order.real.where(status: 'executed').count}/30 executed)",
         }
       rescue StandardError => e
         Rails.logger.error("[Strategies::Swing::Executor] Failed to create pending approval order: #{e.message}")
@@ -263,7 +257,7 @@ module Strategies
       end
 
       def send_approval_request(order, order_value)
-        executed_count = Order.real.where(status: 'executed').count
+        executed_count = Order.real.where(status: "executed").count
         remaining = 30 - executed_count
 
         message = "🔔 <b>Order Approval Required</b>\n\n"
@@ -279,17 +273,16 @@ module Strategies
         message += "\n\nApprove: rails orders:approve[#{order.id}]"
         message += "\nReject: rails orders:reject[#{order.id},reason]"
 
-        Telegram::Notifier.send_error_alert(message, context: 'Order Approval Required')
+        Telegram::Notifier.send_error_alert(message, context: "Order Approval Required")
       rescue StandardError => e
         Rails.logger.error("[Strategies::Swing::Executor] Failed to send approval request: #{e.message}")
       end
 
       def calculate_instrument_exposure
         # Calculate current exposure for this instrument
-        active_orders = Order.where(instrument: @instrument, status: %w[pending placed]).sum do |order|
+        Order.where(instrument: @instrument, status: %w[pending placed]).sum do |order|
           (order.price || 0) * order.quantity
         end
-        active_orders
       end
 
       def calculate_total_exposure
@@ -301,7 +294,7 @@ module Strategies
 
       def get_current_capital
         # Get current capital (from settings or default)
-        Setting.fetch_i('portfolio.current_capital', 100_000)
+        Setting.fetch_i("portfolio.current_capital", 100_000)
       end
 
       def generate_order_id
@@ -317,7 +310,7 @@ module Strategies
         message += "Quantity: #{@signal[:qty]}\n"
         message += "\nThis order exceeds 5% of capital. Please review."
 
-        Telegram::Notifier.send_error_alert(message, context: 'Large Order')
+        Telegram::Notifier.send_error_alert(message, context: "Large Order")
       rescue StandardError => e
         Rails.logger.error("[Strategies::Swing::Executor] Failed to send large order alert: #{e.message}")
       end
@@ -334,40 +327,39 @@ module Strategies
         message += "Status: #{order.status}\n"
         message += "Order ID: #{order.client_order_id}"
 
-        Telegram::Notifier.send_error_alert(message, context: 'Order Placement')
+        Telegram::Notifier.send_error_alert(message, context: "Order Placement")
       rescue StandardError => e
         Rails.logger.error("[Strategies::Swing::Executor] Failed to send order notification: #{e.message}")
       end
 
       def log_order_placement(result)
         mode = if result[:paper_trade]
-                 'PAPER'
+                 "PAPER"
                elsif @dry_run
-                 'DRY RUN'
+                 "DRY RUN"
                else
-                 'LIVE'
+                 "LIVE"
                end
 
         if result[:success]
           order_info = if result[:paper_trade]
-                        position = result[:position] || result[:order]
-                        "#{position&.instrument&.symbol_name} #{@signal[:direction].to_s.upcase} " \
-                        "#{@signal[:qty]} @ ₹#{@signal[:entry_price]}"
-                      else
-                        "#{result[:order]&.symbol} #{result[:order]&.transaction_type} " \
-                        "#{result[:order]&.quantity} @ #{result[:order]&.price || 'Market'}"
-                      end
+                         position = result[:position] || result[:order]
+                         "#{position&.instrument&.symbol_name} #{@signal[:direction].to_s.upcase} " \
+                           "#{@signal[:qty]} @ ₹#{@signal[:entry_price]}"
+                       else
+                         "#{result[:order]&.symbol} #{result[:order]&.transaction_type} " \
+                           "#{result[:order]&.quantity} @ #{result[:order]&.price || 'Market'}"
+                       end
 
           Rails.logger.info(
-            "[Strategies::Swing::Executor] Order placed: #{order_info} (#{mode})"
+            "[Strategies::Swing::Executor] Order placed: #{order_info} (#{mode})",
           )
         else
           Rails.logger.error(
-            "[Strategies::Swing::Executor] Order failed: #{result[:error]} (#{mode})"
+            "[Strategies::Swing::Executor] Order failed: #{result[:error]} (#{mode})",
           )
         end
       end
     end
   end
 end
-

@@ -10,19 +10,19 @@ module Strategies
       def initialize(candidate:)
         @candidate = candidate
         @instrument = Instrument.find_by(id: candidate[:instrument_id])
-        @config = AlgoConfig.fetch([:long_term_trading, :strategy]) || {}
+        @config = AlgoConfig.fetch(%i[long_term_trading strategy]) || {}
       end
 
       def call
-        return { success: false, error: 'Invalid candidate' } unless @candidate.present?
-        return { success: false, error: 'Instrument not found' } unless @instrument.present?
+        return { success: false, error: "Invalid candidate" } if @candidate.blank?
+        return { success: false, error: "Instrument not found" } if @instrument.blank?
 
         # Load candles
         daily_series = @instrument.load_daily_candles(limit: 200)
         weekly_series = @instrument.load_weekly_candles(limit: 52)
 
-        return { success: false, error: 'Failed to load candles' } unless daily_series&.candles&.any?
-        return { success: false, error: 'Failed to load weekly candles' } unless weekly_series&.candles&.any?
+        return { success: false, error: "Failed to load candles" } unless daily_series&.candles&.any?
+        return { success: false, error: "Failed to load weekly candles" } unless weekly_series&.candles&.any?
 
         # Check entry conditions
         entry_check = check_entry_conditions(daily_series, weekly_series)
@@ -31,7 +31,7 @@ module Strategies
         # Build signal for long-term
         signal = build_long_term_signal(daily_series, weekly_series)
 
-        return { success: false, error: 'Signal generation failed' } unless signal
+        return { success: false, error: "Signal generation failed" } unless signal
 
         {
           success: true,
@@ -39,8 +39,8 @@ module Strategies
           metadata: {
             evaluated_at: Time.current,
             daily_candles: daily_series.candles.size,
-            weekly_candles: weekly_series.candles.size
-          }
+            weekly_candles: weekly_series.candles.size,
+          },
         }
       end
 
@@ -52,14 +52,23 @@ module Strategies
         # Check weekly trend requirement
         if entry_config[:require_weekly_trend]
           weekly_indicators = calculate_indicators(weekly_series)
-          return { allowed: false, error: 'Weekly trend not bullish' } unless weekly_indicators[:ema20] && weekly_indicators[:ema50]
-          return { allowed: false, error: 'Weekly EMA not aligned' } unless weekly_indicators[:ema20] > weekly_indicators[:ema50]
+          unless weekly_indicators[:ema20] && weekly_indicators[:ema50]
+            return { allowed: false,
+                     error: "Weekly trend not bullish" }
+          end
+          unless weekly_indicators[:ema20] > weekly_indicators[:ema50]
+            return { allowed: false,
+                     error: "Weekly EMA not aligned" }
+          end
         end
 
         # Check momentum score
         if entry_config[:min_momentum_score]
           momentum = calculate_momentum_score(daily_series, weekly_series)
-          return { allowed: false, error: "Momentum too low: #{momentum}" } if momentum < entry_config[:min_momentum_score]
+          if momentum < entry_config[:min_momentum_score]
+            return { allowed: false,
+                     error: "Momentum too low: #{momentum}" }
+          end
         end
 
         { allowed: true }
@@ -71,7 +80,7 @@ module Strategies
           ema50: series.ema(50),
           ema200: series.ema(200),
           rsi: series.rsi(14),
-          adx: series.adx(14)
+          adx: series.adx(14),
         }
       end
 
@@ -82,25 +91,17 @@ module Strategies
         score = 0.0
 
         # RSI momentum
-        if daily_indicators[:rsi] && daily_indicators[:rsi] > 50
-          score += 0.2
-        end
-        if weekly_indicators[:rsi] && weekly_indicators[:rsi] > 50
-          score += 0.2
-        end
+        score += 0.2 if daily_indicators[:rsi] && daily_indicators[:rsi] > 50
+        score += 0.2 if weekly_indicators[:rsi] && weekly_indicators[:rsi] > 50
 
         # ADX strength
-        if daily_indicators[:adx] && daily_indicators[:adx] > 20
-          score += 0.3
-        end
-        if weekly_indicators[:adx] && weekly_indicators[:adx] > 20
-          score += 0.3
-        end
+        score += 0.3 if daily_indicators[:adx] && daily_indicators[:adx] > 20
+        score += 0.3 if weekly_indicators[:adx] && weekly_indicators[:adx] > 20
 
         score
       end
 
-      def build_long_term_signal(daily_series, weekly_series)
+      def build_long_term_signal(daily_series, _weekly_series)
         latest_close = daily_series.candles.last&.close
         return nil unless latest_close
 
@@ -109,8 +110,8 @@ module Strategies
         stop_loss_pct = exit_config[:stop_loss_pct] || 15.0
 
         entry_price = latest_close
-        stop_loss = entry_price * (1 - stop_loss_pct / 100.0)
-        take_profit = entry_price * (1 + profit_target_pct / 100.0)
+        stop_loss = entry_price * (1 - (stop_loss_pct / 100.0))
+        take_profit = entry_price * (1 + (profit_target_pct / 100.0))
 
         risk_reward = ((take_profit - entry_price) / (entry_price - stop_loss)).round(2)
 
@@ -127,8 +128,8 @@ module Strategies
           holding_days_estimate: @config[:holding_period_days] || 30,
           metadata: {
             strategy_type: :long_term,
-            created_at: Time.current
-          }
+            created_at: Time.current,
+          },
         }
       end
 
@@ -153,4 +154,3 @@ module Strategies
     end
   end
 end
-

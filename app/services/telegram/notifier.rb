@@ -80,9 +80,7 @@ module Telegram
     def send_message(text)
       return unless enabled? && text.present?
 
-      ::TelegramNotifier.send_message(text, parse_mode: 'HTML')
+      ::TelegramNotifier.send_message(text, parse_mode: "HTML")
     end
   end
 end
-
-

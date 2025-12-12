@@ -3,16 +3,15 @@
 module Candles
   # Base helper for candle ingestion with deduplication and upsert logic
   class Ingestor < ApplicationService
-
     def self.upsert_candles(instrument:, timeframe:, candles_data:)
       new.upsert_candles(instrument: instrument, timeframe: timeframe, candles_data: candles_data)
     end
 
     def upsert_candles(instrument:, timeframe:, candles_data:)
-      return { success: false, error: 'No candles data provided' } if candles_data.blank?
+      return { success: false, error: "No candles data provided" } if candles_data.blank?
 
       normalized = normalize_candles(candles_data)
-      return { success: false, error: 'Failed to normalize candles' } if normalized.empty?
+      return { success: false, error: "Failed to normalize candles" } if normalized.empty?
 
       upserted = 0
       skipped = 0
@@ -27,7 +26,7 @@ module Candles
           high: candle_hash[:high],
           low: candle_hash[:low],
           close: candle_hash[:close],
-          volume: candle_hash[:volume]
+          volume: candle_hash[:volume],
         )
 
         if result[:success]
@@ -44,7 +43,7 @@ module Candles
         upserted: upserted,
         skipped: skipped,
         errors: errors.compact,
-        total: normalized.size
+        total: normalized.size,
       }
     end
 
@@ -56,7 +55,7 @@ module Candles
 
       # Check if candle already exists
       # For daily candles, normalize existing timestamps to beginning_of_day for comparison
-      if timeframe == '1D'
+      if timeframe == "1D"
         # Use range query to handle timestamp precision differences (microseconds, etc.)
         # The normalized timestamp should be at the beginning of the day
         day_start = normalized_timestamp.beginning_of_day
@@ -64,13 +63,13 @@ module Candles
         # Use range syntax which is more reliable for timestamp comparisons
         existing = CandleSeriesRecord.where(
           instrument_id: instrument.id,
-          timeframe: timeframe
+          timeframe: timeframe,
         ).where(timestamp: day_start..day_end).first
       else
         existing = CandleSeriesRecord.find_by(
           instrument_id: instrument.id,
           timeframe: timeframe,
-          timestamp: normalized_timestamp
+          timestamp: normalized_timestamp,
         )
       end
 
@@ -82,7 +81,7 @@ module Candles
             high: high,
             low: low,
             close: close,
-            volume: volume
+            volume: volume,
           )
           return { success: true, action: :updated }
         end
@@ -98,7 +97,7 @@ module Candles
         high: high,
         low: low,
         close: close,
-        volume: volume
+        volume: volume,
       )
 
       { success: true, action: :created }
@@ -116,16 +115,16 @@ module Candles
              end
 
       # Keep in application timezone (IST) for consistency with database
-      return time.beginning_of_day if timeframe == '1D'
-      return time.beginning_of_week if timeframe == '1W'
+      return time.beginning_of_day if timeframe == "1D"
+      return time.beginning_of_week if timeframe == "1W"
 
       # For intraday timeframes, round to nearest interval
       case timeframe
-      when '15'
+      when "15"
         time.beginning_of_minute + ((time.min / 15) * 15).minutes
-      when '60'
+      when "60"
         time.beginning_of_hour
-      when '120'
+      when "120"
         time.beginning_of_hour + ((time.hour / 2) * 2).hours
       else
         time.beginning_of_minute
@@ -145,9 +144,9 @@ module Candles
 
       # Handle array of hashes
       if data.is_a?(Array)
-        data.map { |c| normalize_single_candle(c) }.compact
+        data.filter_map { |c| normalize_single_candle(c) }
       # Handle hash with arrays (DhanHQ format)
-      elsif data.is_a?(Hash) && data['high'].is_a?(Array)
+      elsif data.is_a?(Hash) && data["high"].is_a?(Array)
         normalize_hash_format(data)
       # Handle single hash
       elsif data.is_a?(Hash)
@@ -158,17 +157,17 @@ module Candles
     end
 
     def normalize_hash_format(data)
-      size = data['high']&.size || 0
+      size = data["high"]&.size || 0
       return [] if size.zero?
 
       (0...size).map do |i|
         {
-          timestamp: parse_timestamp(data['timestamp']&.[](i)),
-          open: data['open']&.[](i)&.to_f || 0,
-          high: data['high']&.[](i)&.to_f || 0,
-          low: data['low']&.[](i)&.to_f || 0,
-          close: data['close']&.[](i)&.to_f || 0,
-          volume: data['volume']&.[](i)&.to_i || 0
+          timestamp: parse_timestamp(data["timestamp"]&.[](i)),
+          open: data["open"]&.[](i)&.to_f || 0,
+          high: data["high"]&.[](i)&.to_f || 0,
+          low: data["low"]&.[](i)&.to_f || 0,
+          close: data["close"]&.[](i)&.to_f || 0,
+          volume: data["volume"]&.[](i).to_i,
         }
       end
     end
@@ -177,12 +176,12 @@ module Candles
       return nil unless candle
 
       {
-        timestamp: parse_timestamp(candle[:timestamp] || candle['timestamp']),
-        open: (candle[:open] || candle['open']).to_f,
-        high: (candle[:high] || candle['high']).to_f,
-        low: (candle[:low] || candle['low']).to_f,
-        close: (candle[:close] || candle['close']).to_f,
-        volume: (candle[:volume] || candle['volume'] || 0).to_i
+        timestamp: parse_timestamp(candle[:timestamp] || candle["timestamp"]),
+        open: (candle[:open] || candle["open"]).to_f,
+        high: (candle[:high] || candle["high"]).to_f,
+        low: (candle[:low] || candle["low"]).to_f,
+        close: (candle[:close] || candle["close"]).to_f,
+        volume: (candle[:volume] || candle["volume"] || 0).to_i,
       }
     rescue StandardError => e
       Rails.logger.warn("[Candles::Ingestor] Failed to normalize candle: #{e.message}")
@@ -207,4 +206,3 @@ module Candles
     end
   end
 end
-

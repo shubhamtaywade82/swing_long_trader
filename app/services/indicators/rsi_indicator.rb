@@ -39,7 +39,7 @@ module Indicators
       {
         value: rsi_value,
         direction: direction,
-        confidence: confidence
+        confidence: confidence,
       }
     end
 

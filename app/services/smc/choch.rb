@@ -26,17 +26,15 @@ module Smc
       previous_structure = determine_structure(previous_candles, lookback)
 
       # Check if structure changed
-      if previous_structure && current_structure != previous_structure
-        {
-          type: current_structure,
-          index: candles.size - 1,
-          previous_structure: previous_structure,
-          new_structure: current_structure
-        }
-      end
-    end
+      return unless previous_structure && current_structure != previous_structure
 
-    private
+      {
+        type: current_structure,
+        index: candles.size - 1,
+        previous_structure: previous_structure,
+        new_structure: current_structure,
+      }
+    end
 
     def self.determine_structure(candles, lookback)
       return nil if candles.size < lookback
@@ -78,4 +76,3 @@ module Smc
     end
   end
 end
-

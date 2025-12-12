@@ -9,7 +9,7 @@ module Candles
     end
 
     def initialize(instruments: nil, weeks_back: nil)
-      @instruments = instruments || Instrument.where(instrument_type: ['EQUITY', 'INDEX'])
+      @instruments = instruments || Instrument.where(instrument_type: %w[EQUITY INDEX])
       @weeks_back = weeks_back || DEFAULT_WEEKS_BACK
     end
 
@@ -19,7 +19,7 @@ module Candles
         success: 0,
         failed: 0,
         total_candles: 0,
-        errors: []
+        errors: [],
       }
 
       @instruments.find_each(batch_size: 100) do |instrument|
@@ -35,7 +35,7 @@ module Candles
         end
 
         # Rate limiting: small delay to avoid API throttling
-        sleep(0.1) if results[:processed] % 10 == 0
+        sleep(0.1) if (results[:processed] % 10).zero?
       end
 
       log_summary(results)
@@ -45,8 +45,8 @@ module Candles
     private
 
     def fetch_and_store_weekly_candles(instrument)
-      return { success: false, error: 'Invalid instrument' } unless instrument.present?
-      return { success: false, error: 'Missing security_id' } unless instrument.security_id.present?
+      return { success: false, error: "Invalid instrument" } if instrument.blank?
+      return { success: false, error: "Missing security_id" } if instrument.security_id.blank?
 
       # Calculate date range (weeks back)
       to_date = Time.zone.today - 1 # Yesterday
@@ -56,27 +56,27 @@ module Candles
       daily_candles = fetch_daily_candles(
         instrument: instrument,
         from_date: from_date,
-        to_date: to_date
+        to_date: to_date,
       )
 
-      return { success: false, error: 'No daily candles data received' } if daily_candles.blank?
+      return { success: false, error: "No daily candles data received" } if daily_candles.blank?
 
       # Aggregate daily candles to weekly
       weekly_candles = aggregate_to_weekly(daily_candles)
 
-      return { success: false, error: 'No weekly candles after aggregation' } if weekly_candles.empty?
+      return { success: false, error: "No weekly candles after aggregation" } if weekly_candles.empty?
 
       # Upsert weekly candles to database
       result = Ingestor.upsert_candles(
         instrument: instrument,
-        timeframe: '1W',
-        candles_data: weekly_candles
+        timeframe: "1W",
+        candles_data: weekly_candles,
       )
 
       if result[:success]
         Rails.logger.info(
           "[Candles::WeeklyIngestor] #{instrument.symbol_name}: " \
-          "upserted=#{result[:upserted]}, skipped=#{result[:skipped]}, total=#{result[:total]}"
+          "upserted=#{result[:upserted]}, skipped=#{result[:skipped]}, total=#{result[:total]}",
         )
       end
 
@@ -92,7 +92,7 @@ module Candles
       instrument.historical_ohlc(from_date: from_date, to_date: to_date, oi: false)
     rescue StandardError => e
       Rails.logger.error(
-        "[Candles::WeeklyIngestor] DhanHQ API error for #{instrument.symbol_name}: #{e.message}"
+        "[Candles::WeeklyIngestor] DhanHQ API error for #{instrument.symbol_name}: #{e.message}",
       )
       nil
     end
@@ -104,7 +104,7 @@ module Candles
 
       # Group by week (Monday to Sunday)
       weekly_groups = normalized.group_by do |candle|
-        week_start = parse_timestamp(candle[:timestamp] || candle['timestamp']).beginning_of_week
+        week_start = parse_timestamp(candle[:timestamp] || candle["timestamp"]).beginning_of_week
         week_start
       end
 
@@ -112,11 +112,11 @@ module Candles
       weekly_groups.map do |week_start, week_candles|
         {
           timestamp: week_start,
-          open: week_candles.first[:open] || week_candles.first['open'],
-          high: week_candles.map { |c| c[:high] || c['high'] }.max,
-          low: week_candles.map { |c| c[:low] || c['low'] }.min,
-          close: week_candles.last[:close] || week_candles.last['close'],
-          volume: week_candles.sum { |c| c[:volume] || c['volume'] || 0 }
+          open: week_candles.first[:open] || week_candles.first["open"],
+          high: week_candles.map { |c| c[:high] || c["high"] }.max,
+          low: week_candles.map { |c| c[:low] || c["low"] }.min,
+          close: week_candles.last[:close] || week_candles.last["close"],
+          volume: week_candles.sum { |c| c[:volume] || c["volume"] || 0 },
         }
       end.sort_by { |c| c[:timestamp] }
     end
@@ -126,9 +126,9 @@ module Candles
 
       # Handle array of hashes
       if data.is_a?(Array)
-        data.map { |c| normalize_single_candle(c) }.compact
+        data.filter_map { |c| normalize_single_candle(c) }
       # Handle hash with arrays (DhanHQ format)
-      elsif data.is_a?(Hash) && data['high'].is_a?(Array)
+      elsif data.is_a?(Hash) && data["high"].is_a?(Array)
         normalize_hash_format(data)
       # Handle single hash
       elsif data.is_a?(Hash)
@@ -139,17 +139,17 @@ module Candles
     end
 
     def normalize_hash_format(data)
-      size = data['high']&.size || 0
+      size = data["high"]&.size || 0
       return [] if size.zero?
 
       (0...size).map do |i|
         {
-          timestamp: parse_timestamp(data['timestamp']&.[](i)),
-          open: data['open']&.[](i)&.to_f || 0,
-          high: data['high']&.[](i)&.to_f || 0,
-          low: data['low']&.[](i)&.to_f || 0,
-          close: data['close']&.[](i)&.to_f || 0,
-          volume: data['volume']&.[](i)&.to_i || 0
+          timestamp: parse_timestamp(data["timestamp"]&.[](i)),
+          open: data["open"]&.[](i)&.to_f || 0,
+          high: data["high"]&.[](i)&.to_f || 0,
+          low: data["low"]&.[](i)&.to_f || 0,
+          close: data["close"]&.[](i)&.to_f || 0,
+          volume: data["volume"]&.[](i).to_i,
         }
       end
     end
@@ -158,12 +158,12 @@ module Candles
       return nil unless candle
 
       {
-        timestamp: parse_timestamp(candle[:timestamp] || candle['timestamp']),
-        open: (candle[:open] || candle['open']).to_f,
-        high: (candle[:high] || candle['high']).to_f,
-        low: (candle[:low] || candle['low']).to_f,
-        close: (candle[:close] || candle['close']).to_f,
-        volume: (candle[:volume] || candle['volume'] || 0).to_i
+        timestamp: parse_timestamp(candle[:timestamp] || candle["timestamp"]),
+        open: (candle[:open] || candle["open"]).to_f,
+        high: (candle[:high] || candle["high"]).to_f,
+        low: (candle[:low] || candle["low"]).to_f,
+        close: (candle[:close] || candle["close"]).to_f,
+        volume: (candle[:volume] || candle["volume"] || 0).to_i,
       }
     rescue StandardError => e
       Rails.logger.warn("[Candles::WeeklyIngestor] Failed to normalize candle: #{e.message}")
@@ -193,16 +193,15 @@ module Candles
         "processed=#{results[:processed]}, " \
         "success=#{results[:success]}, " \
         "failed=#{results[:failed]}, " \
-        "total_candles=#{results[:total_candles]}"
+        "total_candles=#{results[:total_candles]}",
       )
 
-      if results[:errors].any?
-        Rails.logger.warn(
-          "[Candles::WeeklyIngestor] Errors (#{results[:errors].size}): " \
-          "#{results[:errors].first(5).map { |e| e[:instrument] }.join(', ')}"
-        )
-      end
+      return unless results[:errors].any?
+
+      Rails.logger.warn(
+        "[Candles::WeeklyIngestor] Errors (#{results[:errors].size}): " \
+        "#{results[:errors].first(5).pluck(:instrument).join(', ')}",
+      )
     end
   end
 end
-

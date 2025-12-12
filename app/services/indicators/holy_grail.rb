@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require 'ruby_technical_analysis'
-require 'technical_analysis'
+require "ruby_technical_analysis"
+require "technical_analysis"
 
 module Indicators
   class HolyGrail < ApplicationService
@@ -31,7 +31,7 @@ module Indicators
       rsi_up_min: 40.0,
       rsi_down_max: 60.0,
 
-      min_candles: EMA_SLOW
+      min_candles: EMA_SLOW,
     }.freeze
 
     def self.demo_config
@@ -39,7 +39,7 @@ module Indicators
         adx_gate: 0.0,
         rsi_up_min: 0.0,
         rsi_down_max: 100.0,
-        min_candles: 1
+        min_candles: 1,
       }
     end
 
@@ -159,16 +159,16 @@ module Indicators
       {
         level: level,
         atr_value: atr_value,
-        volatility_percentile: volatility_percentile
+        volatility_percentile: volatility_percentile,
       }
     end
 
     private
 
-    def closes = @candles['close'].map(&:to_f)
-    def highs  = @candles['high'].map(&:to_f)
-    def lows   = @candles['low'].map(&:to_f)
-    def stamps = @candles['timestamp'] || []
+    def closes = @candles["close"].map(&:to_f)
+    def highs  = @candles["high"].map(&:to_f)
+    def lows   = @candles["low"].map(&:to_f)
+    def stamps = @candles["timestamp"] || []
 
     def ohlc_rows
       @ohlc_rows ||= highs.each_index.map do |i|
@@ -176,7 +176,7 @@ module Indicators
           date_time: Time.zone.at(stamps[i] || 0),
           high: highs[i],
           low: lows[i],
-          close: closes[i]
+          close: closes[i],
         }
       end
     end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'database_cleaner/active_record'
+require "database_cleaner/active_record"
 
 RSpec.configure do |config|
   config.before(:suite) do
@@ -8,10 +8,9 @@ RSpec.configure do |config|
     DatabaseCleaner.clean_with(:truncation)
   end
 
-  config.around(:each) do |example|
+  config.around do |example|
     DatabaseCleaner.cleaning do
       example.run
     end
   end
 end
-

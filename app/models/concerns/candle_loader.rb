@@ -15,10 +15,10 @@ module CandleLoader
   def load_daily_candles(limit: nil, from_date: nil, to_date: nil)
     Candles::Loader.load_for_instrument(
       instrument: self,
-      timeframe: '1D',
+      timeframe: "1D",
       limit: limit,
       from_date: from_date,
-      to_date: to_date
+      to_date: to_date,
     )
   end
 
@@ -30,10 +30,10 @@ module CandleLoader
   def load_weekly_candles(limit: nil, from_date: nil, to_date: nil)
     Candles::Loader.load_for_instrument(
       instrument: self,
-      timeframe: '1W',
+      timeframe: "1W",
       limit: limit,
       from_date: from_date,
-      to_date: to_date
+      to_date: to_date,
     )
   end
 
@@ -45,14 +45,14 @@ module CandleLoader
     Candles::Loader.load_latest(
       instrument: self,
       timeframe: timeframe,
-      count: count
+      count: count,
     )
   end
 
   # Check if instrument has candles for a given timeframe
   # @param timeframe [String] Timeframe to check
   # @return [Boolean]
-  def has_candles?(timeframe:)
+  def has_candles?(timeframe:) # rubocop:disable Naming/PredicatePrefix
     CandleSeriesRecord
       .for_instrument(self)
       .for_timeframe(timeframe)
@@ -67,4 +67,3 @@ module CandleLoader
     latest&.timestamp
   end
 end
-

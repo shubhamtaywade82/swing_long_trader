@@ -41,9 +41,9 @@ module PaperTrading
     def update_position_price(position)
       # Get latest price from candle series
       latest_candle = CandleSeriesRecord
-        .where(instrument_id: position.instrument_id, timeframe: '1D')
-        .order(timestamp: :desc)
-        .first
+                      .where(instrument_id: position.instrument_id, timeframe: "1D")
+                      .order(timestamp: :desc)
+                      .first
 
       return unless latest_candle
 
@@ -56,8 +56,8 @@ module PaperTrading
       if position.check_sl_hit?
         return {
           should_exit: true,
-          reason: 'sl_hit',
-          exit_price: position.sl
+          reason: "sl_hit",
+          exit_price: position.sl,
         }
       end
 
@@ -65,18 +65,18 @@ module PaperTrading
       if position.check_tp_hit?
         return {
           should_exit: true,
-          reason: 'tp_hit',
-          exit_price: position.tp
+          reason: "tp_hit",
+          exit_price: position.tp,
         }
       end
 
       # Check time-based exit (max holding days)
-      max_holding_days = AlgoConfig.fetch([:swing_trading, :strategy, :max_holding_days]) || 20
+      max_holding_days = AlgoConfig.fetch(%i[swing_trading strategy max_holding_days]) || 20
       if position.days_held >= max_holding_days
         return {
           should_exit: true,
-          reason: 'time_based',
-          exit_price: position.current_price
+          reason: "time_based",
+          exit_price: position.current_price,
         }
       end
 
@@ -85,11 +85,11 @@ module PaperTrading
 
     def exit_position(position, reason, exit_price)
       # Calculate P&L
-      if position.long?
-        pnl = (exit_price - position.entry_price) * position.quantity
-      else
-        pnl = (position.entry_price - exit_price) * position.quantity
-      end
+      pnl = if position.long?
+              (exit_price - position.entry_price) * position.quantity
+            else
+              (position.entry_price - exit_price) * position.quantity
+            end
 
       pnl_pct = if position.long?
                   ((exit_price - position.entry_price) / position.entry_price * 100).round(2)
@@ -99,13 +99,13 @@ module PaperTrading
 
       # Update position
       position.update!(
-        status: 'closed',
+        status: "closed",
         exit_price: exit_price,
         exit_reason: reason,
         closed_at: Time.current,
         pnl: pnl,
         pnl_pct: pnl_pct,
-        holding_days: position.days_held
+        holding_days: position.days_held,
       )
 
       # Release reserved capital
@@ -114,37 +114,36 @@ module PaperTrading
 
       # Update portfolio P&L and capital
       # Capital increases/decreases by the P&L amount
-      if pnl > 0
-        @portfolio.increment!(:pnl_realized, pnl)
+      @portfolio.increment!(:pnl_realized, pnl)
+      if pnl.positive?
         @portfolio.increment!(:capital, pnl) # Add profit to capital
         PaperTrading::Ledger.credit(
           portfolio: @portfolio,
           amount: pnl,
-          reason: 'profit',
+          reason: "profit",
           description: "Profit from #{position.instrument.symbol_name}",
           position: position,
           meta: {
             symbol: position.instrument.symbol_name,
             entry_price: position.entry_price,
             exit_price: exit_price,
-            pnl: pnl
-          }
+            pnl: pnl,
+          },
         )
       else
-        @portfolio.increment!(:pnl_realized, pnl) # pnl is negative
         @portfolio.decrement!(:capital, pnl.abs) # Subtract loss from capital
         PaperTrading::Ledger.debit(
           portfolio: @portfolio,
           amount: pnl.abs,
-          reason: 'loss',
+          reason: "loss",
           description: "Loss from #{position.instrument.symbol_name}",
           position: position,
           meta: {
             symbol: position.instrument.symbol_name,
             entry_price: position.entry_price,
             exit_price: exit_price,
-            pnl: pnl
-          }
+            pnl: pnl,
+          },
         )
       end
 
@@ -154,15 +153,15 @@ module PaperTrading
         paper_portfolio: @portfolio,
         paper_position: position,
         amount: exit_value,
-        transaction_type: 'credit',
-        reason: 'trade_exit',
+        transaction_type: "credit",
+        reason: "trade_exit",
         description: "Exit: #{position.instrument.symbol_name} #{position.direction.to_s.upcase} @ ₹#{exit_price}",
         meta: {
           symbol: position.instrument.symbol_name,
           exit_price: exit_price,
           exit_reason: reason,
-          pnl: pnl
-        }.to_json
+          pnl: pnl,
+        }.to_json,
       )
 
       # Update portfolio equity
@@ -178,13 +177,13 @@ module PaperTrading
     def send_exit_notification(position, reason, exit_price, pnl)
       return unless Telegram::Notifier.enabled?
 
-      emoji = pnl >= 0 ? '✅' : '❌'
+      emoji = pnl >= 0 ? "✅" : "❌"
       reason_text = {
-        'sl_hit' => 'Stop Loss Hit',
-        'tp_hit' => 'Take Profit Hit',
-        'time_based' => 'Time-Based Exit',
-        'manual' => 'Manual Exit',
-        'signal_exit' => 'Signal Exit'
+        "sl_hit" => "Stop Loss Hit",
+        "tp_hit" => "Take Profit Hit",
+        "time_based" => "Time-Based Exit",
+        "manual" => "Manual Exit",
+        "signal_exit" => "Signal Exit",
       }[reason] || reason
 
       message = "#{emoji} <b>PAPER TRADE EXITED</b>\n\n"
@@ -197,7 +196,7 @@ module PaperTrading
       message += "P&L: ₹#{pnl.round(2)} (#{position.pnl_pct}%)\n"
       message += "Portfolio Equity: ₹#{@portfolio.total_equity.round(2)}"
 
-      Telegram::Notifier.send_error_alert(message, context: 'Paper Trade Exit')
+      Telegram::Notifier.send_error_alert(message, context: "Paper Trade Exit")
     rescue StandardError => e
       log_error("Failed to send exit notification: #{e.message}")
     end

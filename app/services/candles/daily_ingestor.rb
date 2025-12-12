@@ -9,7 +9,7 @@ module Candles
     end
 
     def initialize(instruments: nil, days_back: nil)
-      @instruments = instruments || Instrument.where(instrument_type: ['EQUITY', 'INDEX'])
+      @instruments = instruments || Instrument.where(instrument_type: %w[EQUITY INDEX])
       @days_back = days_back || DEFAULT_DAYS_BACK
     end
 
@@ -19,7 +19,7 @@ module Candles
         success: 0,
         failed: 0,
         total_candles: 0,
-        errors: []
+        errors: [],
       }
 
       @instruments.find_each(batch_size: 100) do |instrument|
@@ -35,7 +35,7 @@ module Candles
         end
 
         # Rate limiting: small delay to avoid API throttling
-        sleep(0.1) if results[:processed] % 10 == 0
+        sleep(0.1) if (results[:processed] % 10).zero?
       end
 
       log_summary(results)
@@ -45,8 +45,8 @@ module Candles
     private
 
     def fetch_and_store_daily_candles(instrument)
-      return { success: false, error: 'Invalid instrument' } unless instrument.present?
-      return { success: false, error: 'Missing security_id' } unless instrument.security_id.present?
+      return { success: false, error: "Invalid instrument" } if instrument.blank?
+      return { success: false, error: "Missing security_id" } if instrument.security_id.blank?
 
       # Calculate date range
       to_date = Time.zone.today - 1 # Yesterday (today's data may not be complete)
@@ -56,22 +56,22 @@ module Candles
       candles_data = fetch_daily_candles(
         instrument: instrument,
         from_date: from_date,
-        to_date: to_date
+        to_date: to_date,
       )
 
-      return { success: false, error: 'No candles data received' } if candles_data.blank?
+      return { success: false, error: "No candles data received" } if candles_data.blank?
 
       # Upsert candles to database
       result = Ingestor.upsert_candles(
         instrument: instrument,
-        timeframe: '1D',
-        candles_data: candles_data
+        timeframe: "1D",
+        candles_data: candles_data,
       )
 
       if result[:success]
         Rails.logger.info(
           "[Candles::DailyIngestor] #{instrument.symbol_name}: " \
-          "upserted=#{result[:upserted]}, skipped=#{result[:skipped]}, total=#{result[:total]}"
+          "upserted=#{result[:upserted]}, skipped=#{result[:skipped]}, total=#{result[:total]}",
         )
       end
 
@@ -87,7 +87,7 @@ module Candles
       instrument.historical_ohlc(from_date: from_date, to_date: to_date, oi: false)
     rescue StandardError => e
       Rails.logger.error(
-        "[Candles::DailyIngestor] DhanHQ API error for #{instrument.symbol_name}: #{e.message}"
+        "[Candles::DailyIngestor] DhanHQ API error for #{instrument.symbol_name}: #{e.message}",
       )
       nil
     end
@@ -98,16 +98,15 @@ module Candles
         "processed=#{results[:processed]}, " \
         "success=#{results[:success]}, " \
         "failed=#{results[:failed]}, " \
-        "total_candles=#{results[:total_candles]}"
+        "total_candles=#{results[:total_candles]}",
       )
 
-      if results[:errors].any?
-        Rails.logger.warn(
-          "[Candles::DailyIngestor] Errors (#{results[:errors].size}): " \
-          "#{results[:errors].first(5).map { |e| e[:instrument] }.join(', ')}"
-        )
-      end
+      return unless results[:errors].any?
+
+      Rails.logger.warn(
+        "[Candles::DailyIngestor] Errors (#{results[:errors].size}): " \
+        "#{results[:errors].first(5).pluck(:instrument).join(', ')}",
+      )
     end
   end
 end
-

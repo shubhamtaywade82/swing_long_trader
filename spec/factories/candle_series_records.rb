@@ -2,8 +2,8 @@
 
 FactoryBot.define do
   factory :candle_series_record do
-    association :instrument
-    timeframe { '1D' }
+    instrument
+    timeframe { "1D" }
     timestamp { 1.day.ago }
     open { 100.0 }
     high { 105.0 }
@@ -13,13 +13,11 @@ FactoryBot.define do
   end
 
   factory :daily_candle, parent: :candle_series_record do
-    timeframe { '1D' }
+    timeframe { "1D" }
   end
 
   factory :weekly_candle, parent: :candle_series_record do
-    timeframe { '1W' }
+    timeframe { "1W" }
     timestamp { 1.week.ago }
   end
 end
-
-

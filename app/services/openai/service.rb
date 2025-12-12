@@ -3,7 +3,7 @@
 module Openai
   class Service < ApplicationService
     MAX_CALLS_PER_DAY = 50
-    DEFAULT_MODEL = 'gpt-4o-mini'
+    DEFAULT_MODEL = "gpt-4o-mini"
     DEFAULT_TEMPERATURE = 0.3
     DEFAULT_MAX_TOKENS = 200
 
@@ -13,7 +13,7 @@ module Openai
         model: model,
         temperature: temperature,
         max_tokens: max_tokens,
-        cache: cache
+        cache: cache,
       ).call
     end
 
@@ -26,8 +26,8 @@ module Openai
     end
 
     def call
-      return { success: false, error: 'No API key configured' } unless api_key_configured?
-      return { success: false, error: 'Rate limit exceeded' } if rate_limit_exceeded?
+      return { success: false, error: "No API key configured" } unless api_key_configured?
+      return { success: false, error: "Rate limit exceeded" } if rate_limit_exceeded?
 
       # Check cache
       if @cache
@@ -37,7 +37,7 @@ module Openai
 
       # Call OpenAI API
       response = call_api
-      return { success: false, error: 'API call failed' } unless response
+      return { success: false, error: "API call failed" } unless response
 
       # Track usage
       track_api_call(response)
@@ -49,7 +49,7 @@ module Openai
         success: true,
         content: response[:content],
         usage: response[:usage],
-        cached: false
+        cached: false,
       }
     rescue StandardError => e
       Rails.logger.error("[Openai::Service] Error: #{e.message}")
@@ -59,36 +59,36 @@ module Openai
     private
 
     def api_key_configured?
-      ENV['OPENAI_API_KEY'].present?
+      ENV["OPENAI_API_KEY"].present?
     end
 
     def call_api
-      require 'ruby/openai' unless defined?(Ruby::OpenAI)
+      require "ruby/openai" unless defined?(Ruby::OpenAI)
 
-      client = Ruby::OpenAI::Client.new(access_token: ENV['OPENAI_API_KEY'])
+      client = Ruby::OpenAI::Client.new(access_token: ENV.fetch("OPENAI_API_KEY", nil))
 
       response = client.chat(
         parameters: {
           model: @model,
           messages: [
-            { role: 'system', content: 'You are a technical analysis expert. Always respond with valid JSON only.' },
-            { role: 'user', content: @prompt }
+            { role: "system", content: "You are a technical analysis expert. Always respond with valid JSON only." },
+            { role: "user", content: @prompt },
           ],
           temperature: @temperature,
-          max_tokens: @max_tokens
-        }
+          max_tokens: @max_tokens,
+        },
       )
 
-      content = response.dig('choices', 0, 'message', 'content')
-      usage = response['usage'] || {}
+      content = response.dig("choices", 0, "message", "content")
+      usage = response["usage"] || {}
 
       {
         content: content,
         usage: {
-          prompt_tokens: usage['prompt_tokens'] || 0,
-          completion_tokens: usage['completion_tokens'] || 0,
-          total_tokens: usage['total_tokens'] || 0
-        }
+          prompt_tokens: usage["prompt_tokens"] || 0,
+          completion_tokens: usage["completion_tokens"] || 0,
+          total_tokens: usage["total_tokens"] || 0,
+        },
       }
     rescue StandardError => e
       Rails.logger.error("[Openai::Service] API error: #{e.message}")
@@ -107,7 +107,7 @@ module Openai
         success: true,
         content: cached[:content],
         usage: cached[:usage] || {},
-        cached: true
+        cached: true,
       }
     end
 
@@ -116,49 +116,49 @@ module Openai
         cache_key,
         {
           content: response[:content],
-          usage: response[:usage]
+          usage: response[:usage],
         },
-        expires_in: 24.hours
+        expires_in: 24.hours,
       )
     end
 
     def rate_limit_exceeded?
-      today = Date.today.to_s
+      today = Time.zone.today.to_s
       cache_key = "openai_calls:#{today}"
       calls_today = Rails.cache.read(cache_key) || 0
       calls_today >= MAX_CALLS_PER_DAY
     end
 
     def track_api_call(response)
-      today = Date.today.to_s
+      today = Time.zone.today.to_s
       cache_key = "openai_calls:#{today}"
       calls_today = Rails.cache.read(cache_key) || 0
       Rails.cache.write(cache_key, calls_today + 1, expires_in: 1.day)
 
       # Track token usage
-      if response[:usage]
-        tokens_key = "openai_tokens:#{today}"
-        tokens_today = Rails.cache.read(tokens_key) || { prompt: 0, completion: 0, total: 0 }
-        tokens_today[:prompt] += response[:usage][:prompt_tokens] || 0
-        tokens_today[:completion] += response[:usage][:completion_tokens] || 0
-        tokens_today[:total] += response[:usage][:total_tokens] || 0
-        Rails.cache.write(tokens_key, tokens_today, expires_in: 1.day)
+      return unless response[:usage]
 
-        # Calculate and track cost
-        cost = calculate_cost(response[:usage], @model)
-        if cost > 0
-          cost_key = "openai_cost:#{today}"
-          cost_today = Rails.cache.read(cost_key) || 0.0
-          new_total = cost_today + cost
-          Rails.cache.write(cost_key, new_total, expires_in: 1.day)
+      tokens_key = "openai_tokens:#{today}"
+      tokens_today = Rails.cache.read(tokens_key) || { prompt: 0, completion: 0, total: 0 }
+      tokens_today[:prompt] += response[:usage][:prompt_tokens] || 0
+      tokens_today[:completion] += response[:usage][:completion_tokens] || 0
+      tokens_today[:total] += response[:usage][:total_tokens] || 0
+      Rails.cache.write(tokens_key, tokens_today, expires_in: 1.day)
 
-          # Track in metrics
-          Metrics::Tracker.track_openai_cost(cost) if defined?(Metrics::Tracker)
+      # Calculate and track cost
+      cost = calculate_cost(response[:usage], @model)
+      return unless cost.positive?
 
-          # Check cost thresholds and alert if exceeded
-          check_cost_thresholds(new_total, today)
-        end
-      end
+      cost_key = "openai_cost:#{today}"
+      cost_today = Rails.cache.read(cost_key) || 0.0
+      new_total = cost_today + cost
+      Rails.cache.write(cost_key, new_total, expires_in: 1.day)
+
+      # Track in metrics
+      Metrics::Tracker.track_openai_cost(cost) if defined?(Metrics::Tracker)
+
+      # Check cost thresholds and alert if exceeded
+      check_cost_thresholds(new_total, today)
     end
 
     def calculate_cost(usage, model)
@@ -167,13 +167,13 @@ module Openai
       # gpt-4o: $2.50/$10.00 (input/output)
       # gpt-4-turbo: $10.00/$30.00 (input/output)
       pricing = {
-        'gpt-4o-mini' => { input: 0.15, output: 0.60 },
-        'gpt-4o' => { input: 2.50, output: 10.00 },
-        'gpt-4-turbo' => { input: 10.00, output: 30.00 },
-        'gpt-3.5-turbo' => { input: 0.50, output: 1.50 }
+        "gpt-4o-mini" => { input: 0.15, output: 0.60 },
+        "gpt-4o" => { input: 2.50, output: 10.00 },
+        "gpt-4-turbo" => { input: 10.00, output: 30.00 },
+        "gpt-3.5-turbo" => { input: 0.50, output: 1.50 },
       }
 
-      model_pricing = pricing[model] || pricing['gpt-4o-mini']
+      model_pricing = pricing[model] || pricing["gpt-4o-mini"]
       prompt_tokens = usage[:prompt_tokens] || 0
       completion_tokens = usage[:completion_tokens] || 0
 
@@ -185,7 +185,7 @@ module Openai
 
     def check_cost_thresholds(daily_cost, date)
       # Get cost thresholds from config
-      cost_config = AlgoConfig.fetch([:openai, :cost_monitoring]) || {}
+      cost_config = AlgoConfig.fetch(%i[openai cost_monitoring]) || {}
       return unless cost_config[:enabled]
 
       daily_threshold = cost_config[:daily_threshold] || 10.0
@@ -228,8 +228,8 @@ module Openai
 
       # Send alerts if any thresholds exceeded
       if alerts.any?
-        message = "💰 OpenAI Cost Alert\n\n" + alerts.join("\n")
-        Telegram::Notifier.send_error_alert(message, context: 'Openai::Service') if defined?(Telegram::Notifier)
+        message = "💰 OpenAI Cost Alert\n\n#{alerts.join("\n")}"
+        Telegram::Notifier.send_error_alert(message, context: "Openai::Service") if defined?(Telegram::Notifier)
       end
     rescue StandardError => e
       Rails.logger.warn("[Openai::Service] Cost threshold check failed: #{e.message}")
@@ -238,7 +238,7 @@ module Openai
     def calculate_weekly_cost(week_start, current_date)
       total = 0.0
       (week_start..current_date).each do |date|
-        cost_key = "openai_cost:#{date.to_s}"
+        cost_key = "openai_cost:#{date}"
         total += Rails.cache.read(cost_key) || 0.0
       end
       total
@@ -247,11 +247,10 @@ module Openai
     def calculate_monthly_cost(month_start, current_date)
       total = 0.0
       (month_start..current_date).each do |date|
-        cost_key = "openai_cost:#{date.to_s}"
+        cost_key = "openai_cost:#{date}"
         total += Rails.cache.read(cost_key) || 0.0
       end
       total
     end
   end
 end
-

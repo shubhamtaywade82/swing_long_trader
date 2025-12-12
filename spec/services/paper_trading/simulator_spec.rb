@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe PaperTrading::Simulator, type: :service do
   let(:portfolio) { create(:paper_portfolio, capital: 100_000) }
   let(:instrument) { create(:instrument) }
 
-  describe '.check_exits' do
-    context 'when portfolio is provided' do
-      it 'uses provided portfolio' do
+  describe ".check_exits" do
+    context "when portfolio is provided" do
+      it "uses provided portfolio" do
         allow(PaperTrading::Portfolio).to receive(:find_or_create_default)
         allow_any_instance_of(described_class).to receive(:check_exits).and_return({ checked: 0, exited: 0 })
 
@@ -18,15 +18,15 @@ RSpec.describe PaperTrading::Simulator, type: :service do
       end
     end
 
-    context 'when portfolio is not provided' do
-      let(:default_portfolio) { create(:paper_portfolio, name: 'default') }
+    context "when portfolio is not provided" do
+      let(:default_portfolio) { create(:paper_portfolio, name: "default") }
 
       before do
         allow(PaperTrading::Portfolio).to receive(:find_or_create_default).and_return(default_portfolio)
         allow_any_instance_of(described_class).to receive(:check_exits).and_return({ checked: 0, exited: 0 })
       end
 
-      it 'uses default portfolio' do
+      it "uses default portfolio" do
         described_class.check_exits
 
         expect(PaperTrading::Portfolio).to have_received(:find_or_create_default)
@@ -34,9 +34,9 @@ RSpec.describe PaperTrading::Simulator, type: :service do
     end
   end
 
-  describe '#check_exits' do
-    context 'when there are no open positions' do
-      it 'returns zero checked and exited' do
+  describe "#check_exits" do
+    context "when there are no open positions" do
+      it "returns zero checked and exited" do
         result = described_class.new(portfolio: portfolio).check_exits
 
         expect(result[:checked]).to eq(0)
@@ -44,45 +44,45 @@ RSpec.describe PaperTrading::Simulator, type: :service do
       end
     end
 
-    context 'when position hits stop loss' do
+    context "when position hits stop loss" do
       let(:position) do
         create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          sl: 95.0,
-          status: 'open')
+               paper_portfolio: portfolio,
+               instrument: instrument,
+               entry_price: 100.0,
+               current_price: 100.0,
+               sl: 95.0,
+               status: "open")
       end
 
       before do
         position
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          close: 94.0,
-          timestamp: Time.current)
+               instrument: instrument,
+               timeframe: "1D",
+               close: 94.0,
+               timestamp: Time.current)
         allow(position).to receive(:check_sl_hit?).and_return(true)
         allow(position).to receive(:update_current_price!)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
       end
 
-      it 'exits the position' do
+      it "exits the position" do
         expect do
           described_class.new(portfolio: portfolio).check_exits
-        end.to change { position.reload.status }.from('open').to('closed')
+        end.to change { position.reload.status }.from("open").to("closed")
       end
 
-      it 'updates position with exit details' do
+      it "updates position with exit details" do
         described_class.new(portfolio: portfolio).check_exits
 
         position.reload
-        expect(position.exit_reason).to eq('sl_hit')
+        expect(position.exit_reason).to eq("sl_hit")
         expect(position.exit_price).to eq(95.0)
         expect(position.closed_at).to be_present
       end
 
-      it 'releases reserved capital' do
+      it "releases reserved capital" do
         initial_reserved = portfolio.reserved_capital
         entry_value = position.entry_price * position.quantity
 
@@ -93,40 +93,39 @@ RSpec.describe PaperTrading::Simulator, type: :service do
       end
     end
 
-    context 'when position hits take profit' do
+    context "when position hits take profit" do
       let(:position) do
         create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          tp: 110.0,
-          status: 'open')
+               paper_portfolio: portfolio,
+               instrument: instrument,
+               entry_price: 100.0,
+               current_price: 100.0,
+               tp: 110.0,
+               status: "open")
       end
 
       before do
         position
-        allow(position).to receive(:check_sl_hit?).and_return(false)
-        allow(position).to receive(:check_tp_hit?).and_return(true)
+        allow(position).to receive_messages(check_sl_hit?: false, check_tp_hit?: true)
         allow(position).to receive(:update_current_price!)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
       end
 
-      it 'exits the position' do
+      it "exits the position" do
         expect do
           described_class.new(portfolio: portfolio).check_exits
-        end.to change { position.reload.status }.from('open').to('closed')
+        end.to change { position.reload.status }.from("open").to("closed")
       end
 
-      it 'updates position with exit details' do
+      it "updates position with exit details" do
         described_class.new(portfolio: portfolio).check_exits
 
         position.reload
-        expect(position.exit_reason).to eq('tp_hit')
+        expect(position.exit_reason).to eq("tp_hit")
         expect(position.exit_price).to eq(110.0)
       end
 
-      it 'calculates profit correctly for long position' do
+      it "calculates profit correctly for long position" do
         described_class.new(portfolio: portfolio).check_exits
 
         position.reload
@@ -136,93 +135,89 @@ RSpec.describe PaperTrading::Simulator, type: :service do
       end
     end
 
-    context 'when position exceeds max holding days' do
+    context "when position exceeds max holding days" do
       let(:position) do
         create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          opened_at: 21.days.ago,
-          status: 'open')
+               paper_portfolio: portfolio,
+               instrument: instrument,
+               entry_price: 100.0,
+               current_price: 100.0,
+               opened_at: 21.days.ago,
+               status: "open")
       end
 
       before do
         position
-        allow(position).to receive(:check_sl_hit?).and_return(false)
-        allow(position).to receive(:check_tp_hit?).and_return(false)
-        allow(position).to receive(:days_held).and_return(21)
+        allow(position).to receive_messages(check_sl_hit?: false, check_tp_hit?: false, days_held: 21)
         allow(position).to receive(:update_current_price!)
         allow(AlgoConfig).to receive(:fetch).and_return(20)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
       end
 
-      it 'exits the position' do
+      it "exits the position" do
         expect do
           described_class.new(portfolio: portfolio).check_exits
-        end.to change { position.reload.status }.from('open').to('closed')
+        end.to change { position.reload.status }.from("open").to("closed")
       end
 
-      it 'sets exit reason to time_based' do
+      it "sets exit reason to time_based" do
         described_class.new(portfolio: portfolio).check_exits
 
         position.reload
-        expect(position.exit_reason).to eq('time_based')
+        expect(position.exit_reason).to eq("time_based")
       end
     end
 
-    context 'when position does not meet exit conditions' do
+    context "when position does not meet exit conditions" do
       let(:position) do
         create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          sl: 95.0,
-          tp: 110.0,
-          opened_at: 5.days.ago,
-          status: 'open')
+               paper_portfolio: portfolio,
+               instrument: instrument,
+               entry_price: 100.0,
+               current_price: 100.0,
+               sl: 95.0,
+               tp: 110.0,
+               opened_at: 5.days.ago,
+               status: "open")
       end
 
       before do
         position
-        allow(position).to receive(:check_sl_hit?).and_return(false)
-        allow(position).to receive(:check_tp_hit?).and_return(false)
-        allow(position).to receive(:days_held).and_return(5)
+        allow(position).to receive_messages(check_sl_hit?: false, check_tp_hit?: false, days_held: 5)
         allow(position).to receive(:update_current_price!)
         allow(AlgoConfig).to receive(:fetch).and_return(20)
       end
 
-      it 'does not exit the position' do
+      it "does not exit the position" do
         expect do
           described_class.new(portfolio: portfolio).check_exits
-        end.not_to change { position.reload.status }
+        end.not_to(change { position.reload.status })
       end
     end
 
-    context 'when exit check fails' do
+    context "when exit check fails" do
       before do
-        allow(portfolio).to receive(:open_positions).and_raise(StandardError, 'Database error')
+        allow(portfolio).to receive(:open_positions).and_raise(StandardError, "Database error")
       end
 
-      it 'raises error' do
+      it "raises error" do
         expect do
           described_class.new(portfolio: portfolio).check_exits
-        end.to raise_error(StandardError, 'Database error')
+        end.to raise_error(StandardError, "Database error")
       end
     end
 
-    context 'with short positions' do
+    context "with short positions" do
       let(:short_position) do
         create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          direction: 'short',
-          entry_price: 100.0,
-          current_price: 100.0,
-          sl: 105.0,
-          tp: 95.0,
-          status: 'open')
+               paper_portfolio: portfolio,
+               instrument: instrument,
+               direction: "short",
+               entry_price: 100.0,
+               current_price: 100.0,
+               sl: 105.0,
+               tp: 95.0,
+               status: "open")
       end
 
       before do
@@ -231,36 +226,33 @@ RSpec.describe PaperTrading::Simulator, type: :service do
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
       end
 
-      it 'exits short position when SL hit (price goes up)' do
-        short_position.update(current_price: 106.0)
-        allow(short_position).to receive(:check_sl_hit?).and_return(true)
-        allow(short_position).to receive(:check_tp_hit?).and_return(false)
+      it "exits short position when SL hit (price goes up)" do
+        short_position.update!(current_price: 106.0)
+        allow(short_position).to receive_messages(check_sl_hit?: true, check_tp_hit?: false)
 
         described_class.new(portfolio: portfolio).check_exits
 
         short_position.reload
-        expect(short_position.status).to eq('closed')
-        expect(short_position.exit_reason).to eq('sl_hit')
+        expect(short_position.status).to eq("closed")
+        expect(short_position.exit_reason).to eq("sl_hit")
         expect(short_position.pnl).to be < 0 # Loss on short when price goes up
       end
 
-      it 'exits short position when TP hit (price goes down)' do
-        short_position.update(current_price: 94.0)
-        allow(short_position).to receive(:check_sl_hit?).and_return(false)
-        allow(short_position).to receive(:check_tp_hit?).and_return(true)
+      it "exits short position when TP hit (price goes down)" do
+        short_position.update!(current_price: 94.0)
+        allow(short_position).to receive_messages(check_sl_hit?: false, check_tp_hit?: true)
 
         described_class.new(portfolio: portfolio).check_exits
 
         short_position.reload
-        expect(short_position.status).to eq('closed')
-        expect(short_position.exit_reason).to eq('tp_hit')
+        expect(short_position.status).to eq("closed")
+        expect(short_position.exit_reason).to eq("tp_hit")
         expect(short_position.pnl).to be > 0 # Profit on short when price goes down
       end
 
-      it 'calculates loss correctly for short position' do
-        short_position.update(current_price: 106.0)
-        allow(short_position).to receive(:check_sl_hit?).and_return(true)
-        allow(short_position).to receive(:check_tp_hit?).and_return(false)
+      it "calculates loss correctly for short position" do
+        short_position.update!(current_price: 106.0)
+        allow(short_position).to receive_messages(check_sl_hit?: true, check_tp_hit?: false)
 
         described_class.new(portfolio: portfolio).check_exits
 
@@ -271,30 +263,30 @@ RSpec.describe PaperTrading::Simulator, type: :service do
       end
     end
 
-    context 'with loss scenarios' do
+    context "with loss scenarios" do
       let(:losing_position) do
         create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          sl: 95.0,
-          status: 'open')
+               paper_portfolio: portfolio,
+               instrument: instrument,
+               entry_price: 100.0,
+               current_price: 100.0,
+               sl: 95.0,
+               status: "open")
       end
 
       before do
         losing_position
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          close: 94.0,
-          timestamp: Time.current)
+               instrument: instrument,
+               timeframe: "1D",
+               close: 94.0,
+               timestamp: Time.current)
         allow(losing_position).to receive(:check_sl_hit?).and_return(true)
         allow(losing_position).to receive(:update_current_price!)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
       end
 
-      it 'decrements capital on loss' do
+      it "decrements capital on loss" do
         initial_capital = portfolio.capital
         _entry_value = losing_position.entry_price * losing_position.quantity
         expected_loss = (95.0 - 100.0) * losing_position.quantity
@@ -305,37 +297,35 @@ RSpec.describe PaperTrading::Simulator, type: :service do
         expect(portfolio.capital).to eq(initial_capital - expected_loss.abs)
       end
 
-      it 'creates debit ledger entry for loss' do
+      it "creates debit ledger entry for loss" do
         expect do
           described_class.new(portfolio: portfolio).check_exits
         end.to change(PaperLedger, :count).by(1)
 
         ledger = PaperLedger.last
-        expect(ledger.transaction_type).to eq('debit')
-        expect(ledger.reason).to eq('loss')
+        expect(ledger.transaction_type).to eq("debit")
+        expect(ledger.reason).to eq("loss")
       end
     end
 
-    context 'when no candle available for price update' do
+    context "when no candle available for price update" do
       let(:position) do
         create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          status: 'open')
+               paper_portfolio: portfolio,
+               instrument: instrument,
+               entry_price: 100.0,
+               current_price: 100.0,
+               status: "open")
       end
 
       before do
         position
         # No candles created
-        allow(position).to receive(:check_sl_hit?).and_return(false)
-        allow(position).to receive(:check_tp_hit?).and_return(false)
-        allow(position).to receive(:days_held).and_return(5)
+        allow(position).to receive_messages(check_sl_hit?: false, check_tp_hit?: false, days_held: 5)
         allow(AlgoConfig).to receive(:fetch).and_return(20)
       end
 
-      it 'skips price update but still checks exit conditions' do
+      it "skips price update but still checks exit conditions" do
         result = described_class.new(portfolio: portfolio).check_exits
 
         expect(result[:checked]).to eq(1)
@@ -343,26 +333,24 @@ RSpec.describe PaperTrading::Simulator, type: :service do
       end
     end
 
-    context 'with edge cases' do
-      it 'handles positions with nil SL/TP' do
+    context "with edge cases" do
+      it "handles positions with nil SL/TP" do
         position = create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          sl: nil,
-          tp: nil,
-          status: 'open')
+                          paper_portfolio: portfolio,
+                          instrument: instrument,
+                          entry_price: 100.0,
+                          current_price: 100.0,
+                          sl: nil,
+                          tp: nil,
+                          status: "open")
 
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          close: 100.0,
-          timestamp: Time.current)
+               instrument: instrument,
+               timeframe: "1D",
+               close: 100.0,
+               timestamp: Time.current)
 
-        allow(position).to receive(:check_sl_hit?).and_return(false)
-        allow(position).to receive(:check_tp_hit?).and_return(false)
-        allow(position).to receive(:days_held).and_return(5)
+        allow(position).to receive_messages(check_sl_hit?: false, check_tp_hit?: false, days_held: 5)
         allow(AlgoConfig).to receive(:fetch).and_return(20)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
 
@@ -372,23 +360,21 @@ RSpec.describe PaperTrading::Simulator, type: :service do
         expect(result[:exited]).to eq(0)
       end
 
-      it 'handles zero P&L correctly' do
+      it "handles zero P&L correctly" do
         position = create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          status: 'open')
+                          paper_portfolio: portfolio,
+                          instrument: instrument,
+                          entry_price: 100.0,
+                          current_price: 100.0,
+                          status: "open")
 
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          close: 100.0,
-          timestamp: Time.current)
+               instrument: instrument,
+               timeframe: "1D",
+               close: 100.0,
+               timestamp: Time.current)
 
-        allow(position).to receive(:check_sl_hit?).and_return(false)
-        allow(position).to receive(:check_tp_hit?).and_return(false)
-        allow(position).to receive(:days_held).and_return(21) # Exceeds max holding days
+        allow(position).to receive_messages(check_sl_hit?: false, check_tp_hit?: false, days_held: 21) # Exceeds max holding days
         allow(AlgoConfig).to receive(:fetch).and_return(20)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
 
@@ -397,67 +383,65 @@ RSpec.describe PaperTrading::Simulator, type: :service do
         described_class.new(portfolio: portfolio).check_exits
 
         position.reload
-        expect(position.status).to eq('closed')
+        expect(position.status).to eq("closed")
         expect(position.pnl).to eq(0.0)
         expect(portfolio.reload.capital).to eq(initial_capital) # No change for zero P&L
       end
 
-      it 'handles multiple positions with different exit conditions' do
+      it "handles multiple positions with different exit conditions" do
         position1 = create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          sl: 95.0,
-          tp: 110.0,
-          status: 'open')
+                           paper_portfolio: portfolio,
+                           instrument: instrument,
+                           entry_price: 100.0,
+                           current_price: 100.0,
+                           sl: 95.0,
+                           tp: 110.0,
+                           status: "open")
 
         instrument2 = create(:instrument)
         position2 = create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument2,
-          entry_price: 50.0,
-          current_price: 50.0,
-          sl: 45.0,
-          tp: 60.0,
-          status: 'open')
+                           paper_portfolio: portfolio,
+                           instrument: instrument2,
+                           entry_price: 50.0,
+                           current_price: 50.0,
+                           sl: 45.0,
+                           tp: 60.0,
+                           status: "open")
 
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          close: 94.0,
-          timestamp: Time.current)
+               instrument: instrument,
+               timeframe: "1D",
+               close: 94.0,
+               timestamp: Time.current)
         create(:candle_series_record,
-          instrument: instrument2,
-          timeframe: '1D',
-          close: 61.0,
-          timestamp: Time.current)
+               instrument: instrument2,
+               timeframe: "1D",
+               close: 61.0,
+               timestamp: Time.current)
 
-        allow(position1).to receive(:check_sl_hit?).and_return(true)
-        allow(position1).to receive(:check_tp_hit?).and_return(false)
-        allow(position2).to receive(:check_sl_hit?).and_return(false)
-        allow(position2).to receive(:check_tp_hit?).and_return(true)
+        allow(position1).to receive_messages(check_sl_hit?: true, check_tp_hit?: false)
+        allow(position2).to receive_messages(check_sl_hit?: false, check_tp_hit?: true)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
 
         result = described_class.new(portfolio: portfolio).check_exits
 
         expect(result[:checked]).to eq(2)
         expect(result[:exited]).to eq(2)
-        expect(position1.reload.status).to eq('closed')
-        expect(position2.reload.status).to eq('closed')
+        expect(position1.reload.status).to eq("closed")
+        expect(position2.reload.status).to eq("closed")
       end
 
-      it 'handles position with missing instrument' do
+      it "handles position with missing instrument" do
         position = create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          status: 'open')
+                          paper_portfolio: portfolio,
+                          instrument: instrument,
+                          entry_price: 100.0,
+                          current_price: 100.0,
+                          status: "open")
 
         # Delete instrument to simulate missing instrument
         _instrument_id = position.instrument_id
-        instrument.destroy
+        instrument.destroy!
 
         # Reload position to get nil instrument
         position.reload
@@ -468,25 +452,24 @@ RSpec.describe PaperTrading::Simulator, type: :service do
         expect(result[:checked]).to be >= 0
       end
 
-      it 'handles reserved capital release correctly' do
+      it "handles reserved capital release correctly" do
         position = create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          quantity: 10,
-          sl: 95.0,
-          status: 'open')
+                          paper_portfolio: portfolio,
+                          instrument: instrument,
+                          entry_price: 100.0,
+                          current_price: 100.0,
+                          quantity: 10,
+                          sl: 95.0,
+                          status: "open")
 
-        portfolio.update(reserved_capital: 1000.0) # Reserve capital for position
+        portfolio.update!(reserved_capital: 1000.0) # Reserve capital for position
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          close: 94.0,
-          timestamp: Time.current)
+               instrument: instrument,
+               timeframe: "1D",
+               close: 94.0,
+               timestamp: Time.current)
 
-        allow(position).to receive(:check_sl_hit?).and_return(true)
-        allow(position).to receive(:check_tp_hit?).and_return(false)
+        allow(position).to receive_messages(check_sl_hit?: true, check_tp_hit?: false)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
 
         initial_reserved = portfolio.reserved_capital
@@ -498,23 +481,21 @@ RSpec.describe PaperTrading::Simulator, type: :service do
         expect(portfolio.reserved_capital).to eq(initial_reserved - entry_value)
       end
 
-      it 'logs exit check summary' do
+      it "logs exit check summary" do
         position = create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          status: 'open')
+                          paper_portfolio: portfolio,
+                          instrument: instrument,
+                          entry_price: 100.0,
+                          current_price: 100.0,
+                          status: "open")
 
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          close: 100.0,
-          timestamp: Time.current)
+               instrument: instrument,
+               timeframe: "1D",
+               close: 100.0,
+               timestamp: Time.current)
 
-        allow(position).to receive(:check_sl_hit?).and_return(false)
-        allow(position).to receive(:check_tp_hit?).and_return(false)
-        allow(position).to receive(:days_held).and_return(5)
+        allow(position).to receive_messages(check_sl_hit?: false, check_tp_hit?: false, days_held: 5)
         allow(AlgoConfig).to receive(:fetch).and_return(20)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
         allow(Rails.logger).to receive(:info)
@@ -524,45 +505,44 @@ RSpec.describe PaperTrading::Simulator, type: :service do
         expect(Rails.logger).to have_received(:info).at_least(:once)
       end
 
-      it 'handles error during exit check' do
+      it "handles error during exit check" do
         _position = create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          entry_price: 100.0,
-          current_price: 100.0,
-          status: 'open')
+                           paper_portfolio: portfolio,
+                           instrument: instrument,
+                           entry_price: 100.0,
+                           current_price: 100.0,
+                           status: "open")
 
-        allow(portfolio).to receive(:open_positions).and_raise(StandardError.new('Database error'))
+        allow(portfolio).to receive(:open_positions).and_raise(StandardError.new("Database error"))
         allow(Rails.logger).to receive(:error)
 
         expect do
           described_class.new(portfolio: portfolio).check_exits
-        end.to raise_error(StandardError, 'Database error')
+        end.to raise_error(StandardError, "Database error")
 
         expect(Rails.logger).to have_received(:error)
       end
     end
 
-    context 'with P&L calculations' do
-      it 'calculates P&L percentage correctly for long position' do
+    context "with P&L calculations" do
+      it "calculates P&L percentage correctly for long position" do
         position = create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          direction: 'long',
-          entry_price: 100.0,
-          current_price: 100.0,
-          quantity: 10,
-          tp: 110.0,
-          status: 'open')
+                          paper_portfolio: portfolio,
+                          instrument: instrument,
+                          direction: "long",
+                          entry_price: 100.0,
+                          current_price: 100.0,
+                          quantity: 10,
+                          tp: 110.0,
+                          status: "open")
 
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          close: 110.0,
-          timestamp: Time.current)
+               instrument: instrument,
+               timeframe: "1D",
+               close: 110.0,
+               timestamp: Time.current)
 
-        allow(position).to receive(:check_sl_hit?).and_return(false)
-        allow(position).to receive(:check_tp_hit?).and_return(true)
+        allow(position).to receive_messages(check_sl_hit?: false, check_tp_hit?: true)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
 
         described_class.new(portfolio: portfolio).check_exits
@@ -572,25 +552,24 @@ RSpec.describe PaperTrading::Simulator, type: :service do
         expect(position.pnl_pct).to eq(expected_pnl_pct)
       end
 
-      it 'calculates P&L percentage correctly for short position' do
+      it "calculates P&L percentage correctly for short position" do
         position = create(:paper_position,
-          paper_portfolio: portfolio,
-          instrument: instrument,
-          direction: 'short',
-          entry_price: 100.0,
-          current_price: 100.0,
-          quantity: 10,
-          tp: 90.0,
-          status: 'open')
+                          paper_portfolio: portfolio,
+                          instrument: instrument,
+                          direction: "short",
+                          entry_price: 100.0,
+                          current_price: 100.0,
+                          quantity: 10,
+                          tp: 90.0,
+                          status: "open")
 
         create(:candle_series_record,
-          instrument: instrument,
-          timeframe: '1D',
-          close: 90.0,
-          timestamp: Time.current)
+               instrument: instrument,
+               timeframe: "1D",
+               close: 90.0,
+               timestamp: Time.current)
 
-        allow(position).to receive(:check_sl_hit?).and_return(false)
-        allow(position).to receive(:check_tp_hit?).and_return(true)
+        allow(position).to receive_messages(check_sl_hit?: false, check_tp_hit?: true)
         allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
 
         described_class.new(portfolio: portfolio).check_exits
@@ -602,4 +581,3 @@ RSpec.describe PaperTrading::Simulator, type: :service do
     end
   end
 end
-

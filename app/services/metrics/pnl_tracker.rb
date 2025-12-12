@@ -34,19 +34,19 @@ module Metrics
       end
     end
 
-    def self.get_daily_pnl(date = Date.today)
+    def self.get_daily_pnl(date = Time.zone.today)
       # Use date range to handle timezone-aware timestamps correctly
-      orders = Order.where(created_at: date.beginning_of_day..date.end_of_day)
+      orders = Order.where(created_at: date.all_day)
       calculate_total_pnl(orders)
     end
 
-    def self.get_weekly_pnl(week_start = Date.today.beginning_of_week)
+    def self.get_weekly_pnl(week_start = Time.zone.today.beginning_of_week)
       week_end = week_start.end_of_week
       orders = Order.where(created_at: week_start..week_end)
       calculate_total_pnl(orders)
     end
 
-    def self.get_monthly_pnl(month_start = Date.today.beginning_of_month)
+    def self.get_monthly_pnl(month_start = Time.zone.today.beginning_of_month)
       month_end = month_start.end_of_month
       orders = Order.where(created_at: month_start..month_end)
       calculate_total_pnl(orders)
@@ -65,10 +65,10 @@ module Metrics
 
       # Store P&L in order metadata
       metadata = order.metadata_hash
-      metadata['pnl'] = pnl
-      metadata['pnl_pct'] = pnl_pct
-      metadata['executed_at'] = Time.current
-      order.update(metadata: metadata.to_json)
+      metadata["pnl"] = pnl
+      metadata["pnl_pct"] = pnl_pct
+      metadata["executed_at"] = Time.current
+      order.update!(metadata: metadata.to_json)
 
       # Track in daily metrics
       track_daily_pnl(order.created_at.to_date, pnl)
@@ -78,7 +78,7 @@ module Metrics
         "order_id=#{order.id}, " \
         "symbol=#{order.symbol}, " \
         "pnl=₹#{pnl.round(2)}, " \
-        "pnl_pct=#{pnl_pct.round(2)}%"
+        "pnl_pct=#{pnl_pct.round(2)}%",
       )
 
       { pnl: pnl, pnl_pct: pnl_pct }
@@ -102,11 +102,10 @@ module Metrics
     def self.calculate_total_pnl(orders)
       total = 0.0
       orders.executed.find_each do |order|
-        pnl = order.metadata_hash['pnl'] || calculate_realized_pnl(order)
+        pnl = order.metadata_hash["pnl"] || calculate_realized_pnl(order)
         total += pnl.to_f
       end
       total
     end
   end
 end
-

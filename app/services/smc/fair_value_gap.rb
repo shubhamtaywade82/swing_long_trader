@@ -21,7 +21,7 @@ module Smc
       analyzed_range = candles.last([lookback, candles.size].min)
 
       # Check each set of three consecutive candles
-      (0...analyzed_range.size - 2).each do |i|
+      (0...(analyzed_range.size - 2)).each do |i|
         candle1 = analyzed_range[i]
         candle2 = analyzed_range[i + 1]
         candle3 = analyzed_range[i + 2]
@@ -31,24 +31,22 @@ module Smc
         if bullish_gap
           gaps << bullish_gap.merge(
             index: i + 1,
-            filled: check_if_filled(candles, bullish_gap[:gap_range], i + 1)
+            filled: check_if_filled(candles, bullish_gap[:gap_range], i + 1),
           )
         end
 
         # Check for bearish FVG (gap down)
         bearish_gap = detect_bearish_fvg(candle1, candle2, candle3)
-        if bearish_gap
-          gaps << bearish_gap.merge(
-            index: i + 1,
-            filled: check_if_filled(candles, bearish_gap[:gap_range], i + 1)
-          )
-        end
+        next unless bearish_gap
+
+        gaps << bearish_gap.merge(
+          index: i + 1,
+          filled: check_if_filled(candles, bearish_gap[:gap_range], i + 1),
+        )
       end
 
       gaps
     end
-
-    private
 
     def self.detect_bullish_fvg(candle1, candle2, candle3)
       # Bullish FVG: candle3's low > candle1's high
@@ -65,8 +63,8 @@ module Smc
         type: :bullish,
         gap_range: {
           high: candle3.low,
-          low: candle1.high
-        }
+          low: candle1.high,
+        },
       }
     end
 
@@ -85,8 +83,8 @@ module Smc
         type: :bearish,
         gap_range: {
           high: candle1.low,
-          low: candle3.high
-        }
+          low: candle3.high,
+        },
       }
     end
 
@@ -94,16 +92,13 @@ module Smc
       # Check if any candle after the gap has filled it
       return false if gap_index >= candles.size - 1
 
-      (gap_index + 1...candles.size).each do |i|
+      ((gap_index + 1)...candles.size).each do |i|
         candle = candles[i]
         # Gap is filled if candle's range overlaps with gap range
-        if candle.low <= gap_range[:high] && candle.high >= gap_range[:low]
-          return true
-        end
+        return true if candle.low <= gap_range[:high] && candle.high >= gap_range[:low]
       end
 
       false
     end
   end
 end
-

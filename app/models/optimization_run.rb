@@ -4,11 +4,13 @@ class OptimizationRun < ApplicationRecord
   validates :start_date, :end_date, :strategy_type, :initial_capital, :optimization_metric, presence: true
   validates :strategy_type, inclusion: { in: %w[swing long_term] }
   validates :status, inclusion: { in: %w[pending running completed failed] }
-  validates :optimization_metric, inclusion: { in: %w[sharpe_ratio sortino_ratio total_return annualized_return profit_factor win_rate composite] }
+  validates :optimization_metric,
+            inclusion: { in: %w[sharpe_ratio sortino_ratio total_return annualized_return profit_factor win_rate
+                                composite] }
 
-  scope :completed, -> { where(status: 'completed') }
-  scope :swing, -> { where(strategy_type: 'swing') }
-  scope :long_term, -> { where(strategy_type: 'long_term') }
+  scope :completed, -> { where(status: "completed") }
+  scope :swing, -> { where(strategy_type: "swing") }
+  scope :long_term, -> { where(strategy_type: "long_term") }
   scope :recent, -> { order(created_at: :desc) }
 
   def parameter_ranges_hash
@@ -58,8 +60,7 @@ class OptimizationRun < ApplicationRecord
     best_metrics_hash[metric_key] || best_metrics_hash[optimization_metric] || 0
   end
 
-  def top_n_results(n = 10)
-    all_results_array.sort_by { |r| -(r['score'] || r[:score] || 0) }.first(n)
+  def top_n_results(count = 10)
+    all_results_array.sort_by { |r| -(r["score"] || r[:score] || 0) }.first(count)
   end
 end
-

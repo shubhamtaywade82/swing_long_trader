@@ -93,7 +93,7 @@ class Instrument < ApplicationRecord
     "BSE_CURRENCY" => "currency",
     "C" => "currency",
     "MCX_COMM" => "commodity",
-    "M" => "commodity"
+    "M" => "commodity",
   }.freeze
 
   class << self
@@ -159,7 +159,7 @@ class Instrument < ApplicationRecord
     data = DhanHQ::Models::OptionChain.fetch(
       underlying_scrip: security_id.to_i,
       underlying_seg: exchange_segment,
-      expiry: expiry
+      expiry: expiry,
     )
     return nil unless data
 
@@ -169,7 +169,7 @@ class Instrument < ApplicationRecord
   rescue StandardError => e
     _error_info = DhanhqErrorHandler.handle_dhanhq_error(
       e,
-      context: "fetch_option_chain(Instrument #{security_id}, expiry: #{expiry})"
+      context: "fetch_option_chain(Instrument #{security_id}, expiry: #{expiry})",
     )
     Rails.logger.error("Failed to fetch Option Chain for Instrument #{security_id}: #{e.message}")
     nil
@@ -206,7 +206,7 @@ class Instrument < ApplicationRecord
   def expiry_list
     DhanHQ::Models::OptionChain.fetch_expiry_list(
       underlying_scrip: security_id.to_i,
-      underlying_seg: exchange_segment
+      underlying_seg: exchange_segment,
     )
   end
 

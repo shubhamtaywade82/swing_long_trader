@@ -4,7 +4,7 @@ module CandleExtension
   extend ActiveSupport::Concern
 
   included do
-    def candles(interval: '5')
+    def candles(interval: "5")
       @ohlc_cache ||= {}
 
       # Check if caching is disabled for fresh data
@@ -45,16 +45,16 @@ module CandleExtension
       @last_ohlc_fetched[interval] = Time.current
     end
 
-    def candle_series(interval: '5')
+    def candle_series(interval: "5")
       candles(interval: interval)
     end
 
-    def rsi(period = 14, interval: '5')
+    def rsi(period = 14, interval: "5")
       cs = candles(interval: interval)
       cs&.rsi(period)
     end
 
-    def macd(fast_period = 12, slow_period = 26, signal_period = 9, interval: '5')
+    def macd(fast_period = 12, slow_period = 26, signal_period = 9, interval: "5")
       cs = candles(interval: interval)
       macd_result = cs&.macd(fast_period, slow_period, signal_period)
       return nil unless macd_result
@@ -62,51 +62,51 @@ module CandleExtension
       {
         macd: macd_result[0],
         signal: macd_result[1],
-        histogram: macd_result[2]
+        histogram: macd_result[2],
       }
     end
 
-    def adx(period = 14, interval: '5')
+    def adx(period = 14, interval: "5")
       cs = candles(interval: interval)
       cs&.adx(period)
     end
 
-    def supertrend_signal(interval: '5')
+    def supertrend_signal(interval: "5")
       cs = candles(interval: interval)
       cs&.supertrend_signal
     end
 
-    def liquidity_grab_up?(interval: '5')
+    def liquidity_grab_up?(interval: "5")
       cs = candles(interval: interval)
       cs&.liquidity_grab_up?
     end
 
-    def liquidity_grab_down?(interval: '5')
+    def liquidity_grab_down?(interval: "5")
       cs = candles(interval: interval)
       cs&.liquidity_grab_down?
     end
 
-    def bollinger_bands(period: 20, interval: '5')
+    def bollinger_bands(period: 20, interval: "5")
       cs = candles(interval: interval)
       return nil unless cs
 
       cs.bollinger_bands(period: period)
     end
 
-    def donchian_channel(period: 20, interval: '5')
+    def donchian_channel(period: 20, interval: "5")
       cs = candles(interval: interval)
       return nil unless cs
 
       dc = cs.candles.each_with_index.map do |c, _i|
         {
           date_time: Time.zone.at(c.timestamp || 0),
-          value: c.close
+          value: c.close,
         }
       end
       TechnicalAnalysis::Dc.calculate(dc, period: period)
     end
 
-    def obv(interval: '5')
+    def obv(interval: "5")
       series = candles(interval: interval)
       return nil unless series
 
@@ -114,7 +114,7 @@ module CandleExtension
         {
           date_time: Time.zone.at(c.timestamp || 0),
           close: c.close,
-          volume: c.volume || 0
+          volume: c.volume || 0,
         }
       end
 

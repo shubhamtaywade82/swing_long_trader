@@ -16,7 +16,7 @@ module Providers
     def option_chain(index)
       inst = index_config(index)
       raise "missing_index_config:#{index}" unless inst
-      raise 'dhanhq_client_missing' unless @client
+      raise "dhanhq_client_missing" unless @client
 
       chain = @client.option_chain(inst[:key])
       Array(chain).map do |opt|
@@ -28,7 +28,7 @@ module Providers
           ask: opt.respond_to?(:ask_price) ? opt.ask_price : opt[:ask_price],
           oi: opt.respond_to?(:open_interest) ? opt.open_interest : opt[:open_interest],
           iv: opt.respond_to?(:iv) ? opt.iv : opt[:iv],
-          volume: opt.respond_to?(:volume) ? opt.volume : opt[:volume]
+          volume: opt.respond_to?(:volume) ? opt.volume : opt[:volume],
         }
       end
     end
@@ -49,7 +49,7 @@ module Providers
     end
 
     def fetch_api_type
-      raw = ENV['DHAN_API_TYPE'] || ENV['DHANHQ_API_TYPE']
+      raw = ENV["DHAN_API_TYPE"] || ENV.fetch("DHANHQ_API_TYPE", nil)
       return DEFAULT_API_TYPE unless raw
 
       candidate = raw.to_s.strip.downcase.to_sym
@@ -57,4 +57,3 @@ module Providers
     end
   end
 end
-

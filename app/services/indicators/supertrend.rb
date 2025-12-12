@@ -36,7 +36,7 @@ module Indicators
       elsif series.respond_to?(:candles)
         # Extract from candles array
         candles = series.candles
-        return default_result if candles.nil? || candles.empty?
+        return default_result if candles.blank?
 
         highs = candles.map(&:high)
         lows = candles.map(&:low)
@@ -64,7 +64,7 @@ module Indicators
         trend: trend,
         last_value: last_index ? supertrend_line[last_index] : nil,
         atr: atr_values,
-        adaptive_multipliers: adaptive_multipliers
+        adaptive_multipliers: adaptive_multipliers,
       }
     end
 
@@ -88,7 +88,7 @@ module Indicators
       {
         multiplier_scores: performance_scores.dup,
         total_clusters: num_clusters,
-        training_period: training_period
+        training_period: training_period,
       }
     end
 
@@ -105,7 +105,7 @@ module Indicators
         trend: nil,
         last_value: nil,
         atr: [],
-        adaptive_multipliers: []
+        adaptive_multipliers: [],
       }
     end
 
@@ -129,7 +129,7 @@ module Indicators
         candidates = [
           high - low,
           (high - prev_close).abs,
-          (low - prev_close).abs
+          (low - prev_close).abs,
         ].compact
 
         true_ranges[i] = candidates.max

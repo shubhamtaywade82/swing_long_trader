@@ -29,7 +29,7 @@ module PaperTrading
       log_error("Paper trading exit monitor failed: #{e.message}")
       Telegram::Notifier.send_error_alert(
         "Paper trading exit monitor failed: #{e.message}",
-        context: 'PaperTrading::ExitMonitorJob'
+        context: "PaperTrading::ExitMonitorJob",
       )
       raise
     end

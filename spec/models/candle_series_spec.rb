@@ -1,32 +1,32 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
-RSpec.describe CandleSeries, type: :model do
-  let(:series) { CandleSeries.new(symbol: 'TEST', interval: '1D') }
+RSpec.describe CandleSeries do
+  let(:series) { described_class.new(symbol: "TEST", interval: "1D") }
 
-  describe 'initialization' do
-    it 'creates a series with symbol and interval' do
-      expect(series.symbol).to eq('TEST')
-      expect(series.interval).to eq('1D')
+  describe "initialization" do
+    it "creates a series with symbol and interval" do
+      expect(series.symbol).to eq("TEST")
+      expect(series.interval).to eq("1D")
       expect(series.candles).to eq([])
     end
 
-    it 'uses default interval if not provided' do
-      series = CandleSeries.new(symbol: 'TEST')
-      expect(series.interval).to eq('5')
+    it "uses default interval if not provided" do
+      series = described_class.new(symbol: "TEST")
+      expect(series.interval).to eq("5")
     end
   end
 
-  describe '#add_candle' do
-    it 'adds a candle to the series' do
+  describe "#add_candle" do
+    it "adds a candle to the series" do
       candle = Candle.new(
         timestamp: Time.current,
         open: 100.0,
         high: 105.0,
         low: 99.0,
         close: 103.0,
-        volume: 1_000_000
+        volume: 1_000_000,
       )
 
       series.add_candle(candle)
@@ -36,24 +36,23 @@ RSpec.describe CandleSeries, type: :model do
     end
   end
 
-  describe '#each' do
-    it 'iterates over candles' do
+  describe "#each" do
+    it "iterates over candles" do
       candle1 = Candle.new(timestamp: Time.current, open: 100, high: 105, low: 99, close: 103, volume: 1000)
       candle2 = Candle.new(timestamp: Time.current, open: 103, high: 108, low: 102, close: 106, volume: 1000)
 
       series.add_candle(candle1)
       series.add_candle(candle2)
 
-      candles = []
-      series.each { |c| candles << c }
+      candles = series.map { |c| c }
 
       expect(candles.size).to eq(2)
       expect(candles).to include(candle1, candle2)
     end
   end
 
-  describe '#load_from_raw' do
-    it 'loads candles from raw response array' do
+  describe "#load_from_raw" do
+    it "loads candles from raw response array" do
       raw_response = [
         {
           timestamp: Time.current,
@@ -61,16 +60,16 @@ RSpec.describe CandleSeries, type: :model do
           high: 105.0,
           low: 99.0,
           close: 103.0,
-          volume: 1_000_000
+          volume: 1_000_000,
         },
         {
-          timestamp: Time.current + 1.day,
+          timestamp: 1.day.from_now,
           open: 103.0,
           high: 108.0,
           low: 102.0,
           close: 106.0,
-          volume: 1_100_000
-        }
+          volume: 1_100_000,
+        },
       ]
 
       series.load_from_raw(raw_response)
@@ -80,14 +79,14 @@ RSpec.describe CandleSeries, type: :model do
       expect(series.candles.last.close).to eq(106.0)
     end
 
-    it 'handles hash format with arrays' do
+    it "handles hash format with arrays" do
       raw_response = {
-        'timestamp' => [Time.current.to_i, (Time.current + 1.day).to_i],
-        'open' => [100.0, 103.0],
-        'high' => [105.0, 108.0],
-        'low' => [99.0, 102.0],
-        'close' => [103.0, 106.0],
-        'volume' => [1_000_000, 1_100_000]
+        "timestamp" => [Time.current.to_i, 1.day.from_now.to_i],
+        "open" => [100.0, 103.0],
+        "high" => [105.0, 108.0],
+        "low" => [99.0, 102.0],
+        "close" => [103.0, 106.0],
+        "volume" => [1_000_000, 1_100_000],
       }
 
       series.load_from_raw(raw_response)
@@ -98,15 +97,15 @@ RSpec.describe CandleSeries, type: :model do
     end
   end
 
-  describe '#normalise_candles' do
-    it 'returns empty array for blank response' do
+  describe "#normalise_candles" do
+    it "returns empty array for blank response" do
       expect(series.normalise_candles(nil)).to eq([])
       expect(series.normalise_candles([])).to eq([])
     end
 
-    it 'handles array format' do
+    it "handles array format" do
       response = [
-        { timestamp: Time.current, open: 100, high: 105, low: 99, close: 103, volume: 1000 }
+        { timestamp: Time.current, open: 100, high: 105, low: 99, close: 103, volume: 1000 },
       ]
 
       result = series.normalise_candles(response)
@@ -115,15 +114,15 @@ RSpec.describe CandleSeries, type: :model do
     end
   end
 
-  describe 'edge cases' do
-    it 'handles normalise_candles with hash format missing arrays' do
-      response = { 'high' => [105.0] }
-      expect {
+  describe "edge cases" do
+    it "handles normalise_candles with hash format missing arrays" do
+      response = { "high" => [105.0] }
+      expect do
         series.normalise_candles(response)
-      }.to raise_error(RuntimeError, /Unexpected candle format/)
+      end.to raise_error(RuntimeError, /Unexpected candle format/)
     end
 
-    it 'handles slice_candle with array format' do
+    it "handles slice_candle with array format" do
       candle_array = [Time.current, 100.0, 105.0, 99.0, 103.0, 1_000_000]
       result = series.slice_candle(candle_array)
 
@@ -135,14 +134,14 @@ RSpec.describe CandleSeries, type: :model do
       expect(result[:volume]).to eq(1_000_000)
     end
 
-    it 'handles slice_candle with hash using string keys' do
+    it "handles slice_candle with hash using string keys" do
       candle_hash = {
-        'timestamp' => Time.current,
-        'open' => 100.0,
-        'high' => 105.0,
-        'low' => 99.0,
-        'close' => 103.0,
-        'volume' => 1_000_000
+        "timestamp" => Time.current,
+        "open" => 100.0,
+        "high" => 105.0,
+        "low" => 99.0,
+        "close" => 103.0,
+        "volume" => 1_000_000,
       }
       result = series.slice_candle(candle_hash)
 
@@ -150,14 +149,14 @@ RSpec.describe CandleSeries, type: :model do
       expect(result[:close]).to eq(103.0)
     end
 
-    it 'handles slice_candle with hash using symbol keys' do
+    it "handles slice_candle with hash using symbol keys" do
       candle_hash = {
         timestamp: Time.current,
         open: 100.0,
         high: 105.0,
         low: 99.0,
         close: 103.0,
-        volume: 1_000_000
+        volume: 1_000_000,
       }
       result = series.slice_candle(candle_hash)
 
@@ -165,64 +164,64 @@ RSpec.describe CandleSeries, type: :model do
       expect(result[:close]).to eq(103.0)
     end
 
-    it 'handles slice_candle with missing volume' do
+    it "handles slice_candle with missing volume" do
       candle_hash = {
         timestamp: Time.current,
         open: 100.0,
         high: 105.0,
         low: 99.0,
-        close: 103.0
+        close: 103.0,
       }
       result = series.slice_candle(candle_hash)
 
       expect(result[:volume]).to eq(0)
     end
 
-    it 'handles slice_candle with unexpected format' do
-      expect {
-        series.slice_candle('invalid')
-      }.to raise_error(RuntimeError, /Unexpected candle format/)
+    it "handles slice_candle with unexpected format" do
+      expect do
+        series.slice_candle("invalid")
+      end.to raise_error(RuntimeError, /Unexpected candle format/)
     end
 
-    it 'handles slice_candle with array too short' do
+    it "handles slice_candle with array too short" do
       short_array = [Time.current, 100.0, 105.0] # Only 3 elements, need 6
-      expect {
+      expect do
         series.slice_candle(short_array)
-      }.to raise_error(RuntimeError, /Unexpected candle format/)
+      end.to raise_error(RuntimeError, /Unexpected candle format/)
     end
   end
 
-  describe 'accessor methods' do
+  describe "accessor methods" do
     before do
       5.times do |i|
         series.add_candle(create(:candle,
-          timestamp: i.days.ago,
-          open: 100.0 + i,
-          high: 105.0 + i,
-          low: 99.0 + i,
-          close: 103.0 + i,
-          volume: 1_000_000 + i))
+                                 timestamp: i.days.ago,
+                                 open: 100.0 + i,
+                                 high: 105.0 + i,
+                                 low: 99.0 + i,
+                                 close: 103.0 + i,
+                                 volume: 1_000_000 + i))
       end
     end
 
-    it 'returns opens array' do
+    it "returns opens array" do
       expect(series.opens).to eq([104.0, 103.0, 102.0, 101.0, 100.0])
     end
 
-    it 'returns closes array' do
+    it "returns closes array" do
       expect(series.closes).to eq([107.0, 106.0, 105.0, 104.0, 103.0])
     end
 
-    it 'returns highs array' do
+    it "returns highs array" do
       expect(series.highs).to eq([109.0, 108.0, 107.0, 106.0, 105.0])
     end
 
-    it 'returns lows array' do
+    it "returns lows array" do
       expect(series.lows).to eq([103.0, 102.0, 101.0, 100.0, 99.0])
     end
 
-    it 'handles empty series' do
-      empty_series = CandleSeries.new(symbol: 'TEST', interval: '1D')
+    it "handles empty series" do
+      empty_series = described_class.new(symbol: "TEST", interval: "1D")
       expect(empty_series.opens).to eq([])
       expect(empty_series.closes).to eq([])
       expect(empty_series.highs).to eq([])
@@ -230,47 +229,47 @@ RSpec.describe CandleSeries, type: :model do
     end
   end
 
-  describe '#to_hash' do
+  describe "#to_hash" do
     before do
       3.times do |i|
         series.add_candle(create(:candle,
-          timestamp: i.days.ago,
-          open: 100.0 + i,
-          high: 105.0 + i,
-          low: 99.0 + i,
-          close: 103.0 + i,
-          volume: 1_000_000 + i))
+                                 timestamp: i.days.ago,
+                                 open: 100.0 + i,
+                                 high: 105.0 + i,
+                                 low: 99.0 + i,
+                                 close: 103.0 + i,
+                                 volume: 1_000_000 + i))
       end
     end
 
-    it 'converts to hash format' do
+    it "converts to hash format" do
       hash = series.to_hash
 
-      expect(hash).to have_key('timestamp')
-      expect(hash).to have_key('open')
-      expect(hash).to have_key('high')
-      expect(hash).to have_key('low')
-      expect(hash).to have_key('close')
-      expect(hash).to have_key('volume')
-      expect(hash['timestamp'].size).to eq(3)
-      expect(hash['open'].size).to eq(3)
+      expect(hash).to have_key("timestamp")
+      expect(hash).to have_key("open")
+      expect(hash).to have_key("high")
+      expect(hash).to have_key("low")
+      expect(hash).to have_key("close")
+      expect(hash).to have_key("volume")
+      expect(hash["timestamp"].size).to eq(3)
+      expect(hash["open"].size).to eq(3)
     end
   end
 
-  describe '#hlc' do
+  describe "#hlc" do
     before do
       3.times do |i|
         series.add_candle(create(:candle,
-          timestamp: i.days.ago,
-          open: 100.0 + i,
-          high: 105.0 + i,
-          low: 99.0 + i,
-          close: 103.0 + i,
-          volume: 1_000_000 + i))
+                                 timestamp: i.days.ago,
+                                 open: 100.0 + i,
+                                 high: 105.0 + i,
+                                 low: 99.0 + i,
+                                 close: 103.0 + i,
+                                 volume: 1_000_000 + i))
       end
     end
 
-    it 'returns high, low, close array' do
+    it "returns high, low, close array" do
       hlc = series.hlc
 
       expect(hlc).to be_an(Array)
@@ -281,7 +280,7 @@ RSpec.describe CandleSeries, type: :model do
       expect(hlc.first).to have_key(:close)
     end
 
-    it 'handles nil timestamp' do
+    it "handles nil timestamp" do
       candle = create(:candle, timestamp: nil)
       series.add_candle(candle)
 
@@ -290,4 +289,3 @@ RSpec.describe CandleSeries, type: :model do
     end
   end
 end
-

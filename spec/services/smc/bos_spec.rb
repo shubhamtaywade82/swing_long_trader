@@ -1,27 +1,27 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-require_relative '../../../app/services/smc/bos'
+require "rails_helper"
+require_relative "../../../app/services/smc/bos"
 
 RSpec.describe Smc::Bos do
-  describe '.detect' do
-    context 'with insufficient candles' do
-      it 'returns nil for nil input' do
+  describe ".detect" do
+    context "with insufficient candles" do
+      it "returns nil for nil input" do
         expect(described_class.detect(nil)).to be_nil
       end
 
-      it 'returns nil for empty array' do
+      it "returns nil for empty array" do
         expect(described_class.detect([])).to be_nil
       end
 
-      it 'returns nil for insufficient candles' do
+      it "returns nil for insufficient candles" do
         candles = Array.new(10) { |i| Candle.new(timestamp: i.days.ago, open: 100, high: 105, low: 99, close: 103, volume: 1000) }
         expect(described_class.detect(candles, lookback: 20)).to be_nil
       end
     end
 
-    context 'with bullish BOS' do
-      it 'detects bullish break of structure' do
+    context "with bullish BOS" do
+      it "detects bullish break of structure" do
         candles = []
         base_price = 100.0
         lookback = 10
@@ -30,7 +30,7 @@ RSpec.describe Smc::Bos do
         # Search range is (lookback...candles.size - lookback)
         # Need at least lookback + 5 candles, and swing high should be in middle range
         total_candles = 50
-        swing_high_index = 25  # Place swing high in middle of search range
+        swing_high_index = 25 # Place swing high in middle of search range
 
         # Create uptrend candles before swing high
         swing_high_index.times do |i|
@@ -41,31 +41,31 @@ RSpec.describe Smc::Bos do
             high: price + 2.0,
             low: price - 1.0,
             close: price + 1.0,
-            volume: 1000
+            volume: 1000,
           )
         end
 
         # Create swing high (must be highest in surrounding lookback candles)
-        swing_high_price = base_price + (swing_high_index * 0.5) + 5.0  # Higher than surrounding
+        swing_high_price = base_price + (swing_high_index * 0.5) + 5.0 # Higher than surrounding
         candles << Candle.new(
           timestamp: 0.days.ago,
           open: swing_high_price - 1.0,
           high: swing_high_price,
           low: swing_high_price - 2.0,
           close: swing_high_price - 0.5,
-          volume: 1000
+          volume: 1000,
         )
 
         # Create candles after swing high (lower highs to make it a swing high)
         (total_candles - swing_high_index - 1).times do |i|
-          price = swing_high_price - 2.0 - (i * 0.3)  # Lower than swing high
+          price = swing_high_price - 2.0 - (i * 0.3) # Lower than swing high
           candles << Candle.new(
             timestamp: (i + 1).days.from_now,
             open: price,
-            high: price + 1.5,  # Lower high than swing high
+            high: price + 1.5, # Lower high than swing high
             low: price - 1.0,
             close: price + 0.5,
-            volume: 1000
+            volume: 1000,
           )
         end
 
@@ -76,7 +76,7 @@ RSpec.describe Smc::Bos do
           high: swing_high_price + 1.5,
           low: swing_high_price,
           close: swing_high_price + 1.0,
-          volume: 1000
+          volume: 1000,
         )
         candles << break_candle
 
@@ -89,15 +89,15 @@ RSpec.describe Smc::Bos do
       end
     end
 
-    context 'with bearish BOS' do
-      it 'detects bearish break of structure' do
+    context "with bearish BOS" do
+      it "detects bearish break of structure" do
         candles = []
         base_price = 120.0
         lookback = 10
 
         # Create enough candles so swing low falls within search range
         total_candles = 50
-        swing_low_index = 25  # Place swing low in middle of search range
+        swing_low_index = 25 # Place swing low in middle of search range
 
         # Create downtrend candles before swing low
         swing_low_index.times do |i|
@@ -108,31 +108,31 @@ RSpec.describe Smc::Bos do
             high: price + 1.0,
             low: price - 2.0,
             close: price - 1.0,
-            volume: 1000
+            volume: 1000,
           )
         end
 
         # Create swing low (must be lowest in surrounding lookback candles)
-        swing_low_price = base_price - (swing_low_index * 0.5) - 5.0  # Lower than surrounding
+        swing_low_price = base_price - (swing_low_index * 0.5) - 5.0 # Lower than surrounding
         candles << Candle.new(
           timestamp: 0.days.ago,
           open: swing_low_price + 1.0,
           high: swing_low_price + 2.0,
           low: swing_low_price,
           close: swing_low_price + 0.5,
-          volume: 1000
+          volume: 1000,
         )
 
         # Create candles after swing low (higher lows to make it a swing low)
         (total_candles - swing_low_index - 1).times do |i|
-          price = swing_low_price + 2.0 + (i * 0.3)  # Higher than swing low
+          price = swing_low_price + 2.0 + (i * 0.3) # Higher than swing low
           candles << Candle.new(
             timestamp: (i + 1).days.from_now,
             open: price,
             high: price + 1.0,
-            low: price - 1.5,  # Higher low than swing low
+            low: price - 1.5, # Higher low than swing low
             close: price - 0.5,
-            volume: 1000
+            volume: 1000,
           )
         end
 
@@ -143,7 +143,7 @@ RSpec.describe Smc::Bos do
           high: swing_low_price,
           low: swing_low_price - 1.5,
           close: swing_low_price - 1.0,
-          volume: 1000
+          volume: 1000,
         )
         candles << break_candle
 
@@ -156,8 +156,8 @@ RSpec.describe Smc::Bos do
       end
     end
 
-    context 'with no BOS' do
-      it 'returns nil when no structure break occurs' do
+    context "with no BOS" do
+      it "returns nil when no structure break occurs" do
         candles = []
         base_price = 100.0
 
@@ -170,7 +170,7 @@ RSpec.describe Smc::Bos do
             high: price + 1.0,
             low: price - 1.0,
             close: price + 0.5,
-            volume: 1000
+            volume: 1000,
           )
         end
 
@@ -179,8 +179,8 @@ RSpec.describe Smc::Bos do
       end
     end
 
-    context 'with edge cases' do
-      it 'handles no swing highs' do
+    context "with edge cases" do
+      it "handles no swing highs" do
         candles = []
         30.times do |i|
           price = 100.0 + (i * 0.1)
@@ -190,7 +190,7 @@ RSpec.describe Smc::Bos do
             high: price + 0.5,
             low: price - 0.5,
             close: price + 0.2,
-            volume: 1000
+            volume: 1000,
           )
         end
 
@@ -198,7 +198,7 @@ RSpec.describe Smc::Bos do
         expect(result).to be_nil
       end
 
-      it 'handles no swing lows' do
+      it "handles no swing lows" do
         candles = []
         30.times do |i|
           price = 100.0 + (i * 0.1)
@@ -208,7 +208,7 @@ RSpec.describe Smc::Bos do
             high: price + 0.5,
             low: price - 0.5,
             close: price + 0.2,
-            volume: 1000
+            volume: 1000,
           )
         end
 
@@ -216,7 +216,7 @@ RSpec.describe Smc::Bos do
         expect(result).to be_nil
       end
 
-      it 'handles unconfirmed bullish BOS' do
+      it "handles unconfirmed bullish BOS" do
         candles = []
         swing_high_price = 110.0
 
@@ -229,7 +229,7 @@ RSpec.describe Smc::Bos do
             high: price + 1.0,
             low: price - 0.5,
             close: price + 0.5,
-            volume: 1000
+            volume: 1000,
           )
         end
 
@@ -240,7 +240,7 @@ RSpec.describe Smc::Bos do
           high: swing_high_price,
           low: swing_high_price - 2.0,
           close: swing_high_price - 0.5,
-          volume: 1000
+          volume: 1000,
         )
 
         # Break above but close below (unconfirmed)
@@ -250,7 +250,7 @@ RSpec.describe Smc::Bos do
           high: swing_high_price + 1.0,
           low: swing_high_price - 0.5,
           close: swing_high_price - 0.1, # Close below break level
-          volume: 1000
+          volume: 1000,
         )
 
         result = described_class.detect(candles, lookback: 10)
@@ -258,7 +258,7 @@ RSpec.describe Smc::Bos do
         expect(result[:confirmation]).to be false
       end
 
-      it 'handles unconfirmed bearish BOS' do
+      it "handles unconfirmed bearish BOS" do
         candles = []
         swing_low_price = 90.0
 
@@ -271,7 +271,7 @@ RSpec.describe Smc::Bos do
             high: price + 0.5,
             low: price - 1.0,
             close: price - 0.5,
-            volume: 1000
+            volume: 1000,
           )
         end
 
@@ -282,7 +282,7 @@ RSpec.describe Smc::Bos do
           high: swing_low_price + 2.0,
           low: swing_low_price,
           close: swing_low_price + 0.5,
-          volume: 1000
+          volume: 1000,
         )
 
         # Break below but close above (unconfirmed)
@@ -292,7 +292,7 @@ RSpec.describe Smc::Bos do
           high: swing_low_price + 0.1, # High above break level
           low: swing_low_price - 1.0,
           close: swing_low_price + 0.1, # Close above break level
-          volume: 1000
+          volume: 1000,
         )
 
         result = described_class.detect(candles, lookback: 10)
@@ -301,9 +301,9 @@ RSpec.describe Smc::Bos do
       end
     end
 
-    context 'with private methods' do
-      describe '.find_swing_highs' do
-        it 'finds swing highs correctly' do
+    context "with private methods" do
+      describe ".find_swing_highs" do
+        it "finds swing highs correctly" do
           candles = []
           30.times do |i|
             price = 100.0 + (i * 0.1)
@@ -313,7 +313,7 @@ RSpec.describe Smc::Bos do
               high: price + 1.0,
               low: price - 0.5,
               close: price + 0.5,
-              volume: 1000
+              volume: 1000,
             )
           end
 
@@ -326,7 +326,7 @@ RSpec.describe Smc::Bos do
           expect(swing_highs.any? { |sh| sh[:index] == 15 }).to be true
         end
 
-        it 'handles no swing highs' do
+        it "handles no swing highs" do
           candles = []
           30.times do |i|
             price = 100.0 + (i * 0.1)
@@ -336,7 +336,7 @@ RSpec.describe Smc::Bos do
               high: price + 0.5,
               low: price - 0.5,
               close: price + 0.2,
-              volume: 1000
+              volume: 1000,
             )
           end
 
@@ -346,8 +346,8 @@ RSpec.describe Smc::Bos do
         end
       end
 
-      describe '.find_swing_lows' do
-        it 'finds swing lows correctly' do
+      describe ".find_swing_lows" do
+        it "finds swing lows correctly" do
           candles = []
           30.times do |i|
             price = 100.0 + (i * 0.1)
@@ -357,7 +357,7 @@ RSpec.describe Smc::Bos do
               high: price + 0.5,
               low: price - 1.0,
               close: price - 0.5,
-              volume: 1000
+              volume: 1000,
             )
           end
 
@@ -371,8 +371,8 @@ RSpec.describe Smc::Bos do
         end
       end
 
-      describe '.detect_bullish_bos' do
-        it 'detects bullish BOS when high breaks swing high' do
+      describe ".detect_bullish_bos" do
+        it "detects bullish BOS when high breaks swing high" do
           candles = []
           swing_high_price = 110.0
 
@@ -385,7 +385,7 @@ RSpec.describe Smc::Bos do
               high: price + 1.0,
               low: price - 0.5,
               close: price + 0.5,
-              volume: 1000
+              volume: 1000,
             )
           end
 
@@ -396,7 +396,7 @@ RSpec.describe Smc::Bos do
             high: swing_high_price,
             low: swing_high_price - 2.0,
             close: swing_high_price - 0.5,
-            volume: 1000
+            volume: 1000,
           )
 
           # Break above
@@ -406,7 +406,7 @@ RSpec.describe Smc::Bos do
             high: swing_high_price + 1.0,
             low: swing_high_price,
             close: swing_high_price + 0.5,
-            volume: 1000
+            volume: 1000,
           )
 
           swing_highs = [{ index: 25, price: swing_high_price }]
@@ -416,7 +416,7 @@ RSpec.describe Smc::Bos do
           expect(result[:type]).to eq(:bullish)
         end
 
-        it 'returns nil when no swing highs' do
+        it "returns nil when no swing highs" do
           candles = Array.new(30) { |i| Candle.new(timestamp: i.days.ago, open: 100, high: 105, low: 99, close: 103, volume: 1000) }
 
           result = described_class.send(:detect_bullish_bos, candles, [], 10)
@@ -425,8 +425,8 @@ RSpec.describe Smc::Bos do
         end
       end
 
-      describe '.detect_bearish_bos' do
-        it 'detects bearish BOS when low breaks swing low' do
+      describe ".detect_bearish_bos" do
+        it "detects bearish BOS when low breaks swing low" do
           candles = []
           swing_low_price = 90.0
 
@@ -439,7 +439,7 @@ RSpec.describe Smc::Bos do
               high: price + 0.5,
               low: price - 1.0,
               close: price - 0.5,
-              volume: 1000
+              volume: 1000,
             )
           end
 
@@ -450,7 +450,7 @@ RSpec.describe Smc::Bos do
             high: swing_low_price + 2.0,
             low: swing_low_price,
             close: swing_low_price + 0.5,
-            volume: 1000
+            volume: 1000,
           )
 
           # Break below
@@ -460,7 +460,7 @@ RSpec.describe Smc::Bos do
             high: swing_low_price,
             low: swing_low_price - 1.0,
             close: swing_low_price - 0.5,
-            volume: 1000
+            volume: 1000,
           )
 
           swing_lows = [{ index: 25, price: swing_low_price }]
@@ -473,4 +473,3 @@ RSpec.describe Smc::Bos do
     end
   end
 end
-

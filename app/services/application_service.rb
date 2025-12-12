@@ -28,7 +28,7 @@ class ApplicationService
   def typing_ping
     return unless TelegramNotifier.enabled?
 
-    TelegramNotifier.send_chat_action(action: 'typing')
+    TelegramNotifier.send_chat_action(action: "typing")
   rescue StandardError => e
     Rails.logger.error("[ApplicationService] Typing ping failed: #{e.class} - #{e.message}")
   end

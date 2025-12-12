@@ -1,27 +1,27 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-require_relative '../../../app/services/smc/choch'
+require "rails_helper"
+require_relative "../../../app/services/smc/choch"
 
 RSpec.describe Smc::Choch do
-  describe '.detect' do
-    context 'with insufficient candles' do
-      it 'returns nil for nil input' do
+  describe ".detect" do
+    context "with insufficient candles" do
+      it "returns nil for nil input" do
         expect(described_class.detect(nil)).to be_nil
       end
 
-      it 'returns nil for empty array' do
+      it "returns nil for empty array" do
         expect(described_class.detect([])).to be_nil
       end
 
-      it 'returns nil for insufficient candles' do
+      it "returns nil for insufficient candles" do
         candles = Array.new(10) { |i| Candle.new(timestamp: i.days.ago, open: 100, high: 105, low: 99, close: 103, volume: 1000) }
         expect(described_class.detect(candles, lookback: 20)).to be_nil
       end
     end
 
-    context 'with bullish to bearish CHOCH' do
-      it 'detects change from bullish to bearish structure', skip: 'CHOCH detection logic needs review - previous structure analysis overlaps with transition' do
+    context "with bullish to bearish CHOCH" do
+      it "detects change from bullish to bearish structure", skip: "CHOCH detection logic needs review - previous structure analysis overlaps with transition" do
         candles = []
         base_price = 100.0
         lookback = 20
@@ -39,10 +39,10 @@ RSpec.describe Smc::Choch do
           candles << Candle.new(
             timestamp: (bullish_count - i - 1).days.ago,
             open: price,
-            high: price + 2.0,  # Consistently higher highs
+            high: price + 2.0, # Consistently higher highs
             low: price - 0.5,
-            close: price + 1.5,  # Consistently higher closes
-            volume: 1000
+            close: price + 1.5, # Consistently higher closes
+            volume: 1000,
           )
         end
 
@@ -54,10 +54,10 @@ RSpec.describe Smc::Choch do
           candles << Candle.new(
             timestamp: (i + 1).days.from_now,
             open: price,
-            high: price + 0.5,  # Lower highs
+            high: price + 0.5, # Lower highs
             low: price - 2.0,
-            close: price - 1.5,  # Lower closes
-            volume: 1000
+            close: price - 1.5, # Lower closes
+            volume: 1000,
           )
         end
 
@@ -70,39 +70,39 @@ RSpec.describe Smc::Choch do
       end
     end
 
-    context 'with bearish to bullish CHOCH' do
-      it 'detects change from bearish to bullish structure', skip: 'CHOCH detection logic needs review - previous structure analysis overlaps with transition' do
+    context "with bearish to bullish CHOCH" do
+      it "detects change from bearish to bullish structure", skip: "CHOCH detection logic needs review - previous structure analysis overlaps with transition" do
         candles = []
         base_price = 120.0
         lookback = 20
 
         # Create enough bearish candles so that when we analyze previous structure
         # (candles[0..-2].last(lookback)), we get clearly bearish candles
-        bearish_count = lookback + 10  # 30 bearish candles to ensure previous structure is bearish
+        bearish_count = lookback + 10 # 30 bearish candles to ensure previous structure is bearish
         bearish_count.times do |i|
           price = base_price - (i * 1.0)
           candles << Candle.new(
             timestamp: (bearish_count - i - 1).days.ago,
             open: price,
-            high: price + 0.5,  # Lower high than previous
+            high: price + 0.5, # Lower high than previous
             low: price - 2.0,
-            close: price - 1.5,  # Lower close than previous
-            volume: 1000
+            close: price - 1.5, # Lower close than previous
+            volume: 1000,
           )
         end
 
         # Create bullish structure (higher highs, higher lows) - exactly lookback candles
-        bullish_count = lookback  # 20 bullish candles
+        bullish_count = lookback # 20 bullish candles
         bullish_start_price = base_price - (bearish_count * 1.0)
         bullish_count.times do |i|
           price = bullish_start_price + (i * 1.0)
           candles << Candle.new(
             timestamp: (i + 1).days.from_now,
             open: price,
-            high: price + 2.0,  # Higher high than previous
+            high: price + 2.0, # Higher high than previous
             low: price - 0.5,
-            close: price + 1.5,  # Higher close than previous
-            volume: 1000
+            close: price + 1.5, # Higher close than previous
+            volume: 1000,
           )
         end
 
@@ -115,8 +115,8 @@ RSpec.describe Smc::Choch do
       end
     end
 
-    context 'with no CHOCH' do
-      it 'returns nil when structure remains the same' do
+    context "with no CHOCH" do
+      it "returns nil when structure remains the same" do
         candles = []
         base_price = 100.0
 
@@ -129,7 +129,7 @@ RSpec.describe Smc::Choch do
             high: price + 2.0,
             low: price - 0.5,
             close: price + 1.5,
-            volume: 1000
+            volume: 1000,
           )
         end
 
@@ -138,8 +138,8 @@ RSpec.describe Smc::Choch do
       end
     end
 
-    context 'with edge cases' do
-      it 'handles sideways/indecisive structure' do
+    context "with edge cases" do
+      it "handles sideways/indecisive structure" do
         candles = []
         base_price = 100.0
 
@@ -152,7 +152,7 @@ RSpec.describe Smc::Choch do
             high: price + 0.5,
             low: price - 0.5,
             close: price + (i.even? ? 0.3 : -0.3), # Alternating
-            volume: 1000
+            volume: 1000,
           )
         end
 
@@ -161,7 +161,7 @@ RSpec.describe Smc::Choch do
         expect(result).to be_nil.or be_a(Hash)
       end
 
-      it 'handles insufficient candles for structure determination' do
+      it "handles insufficient candles for structure determination" do
         candles = []
         15.times do |i|
           price = 100.0 + (i * 0.5)
@@ -171,7 +171,7 @@ RSpec.describe Smc::Choch do
             high: price + 1.0,
             low: price - 0.5,
             close: price + 0.5,
-            volume: 1000
+            volume: 1000,
           )
         end
 
@@ -180,9 +180,9 @@ RSpec.describe Smc::Choch do
       end
     end
 
-    context 'with private methods' do
-      describe '.determine_structure' do
-        it 'determines bullish structure' do
+    context "with private methods" do
+      describe ".determine_structure" do
+        it "determines bullish structure" do
           candles = []
           30.times do |i|
             price = 100.0 + (i * 0.5)
@@ -192,7 +192,7 @@ RSpec.describe Smc::Choch do
               high: price + 2.0, # Higher highs
               low: price - 0.5,
               close: price + 1.5, # Higher closes
-              volume: 1000
+              volume: 1000,
             )
           end
 
@@ -201,7 +201,7 @@ RSpec.describe Smc::Choch do
           expect(structure).to eq(:bullish)
         end
 
-        it 'determines bearish structure' do
+        it "determines bearish structure" do
           candles = []
           30.times do |i|
             price = 120.0 - (i * 0.5)
@@ -211,7 +211,7 @@ RSpec.describe Smc::Choch do
               high: price + 0.5,
               low: price - 2.0, # Lower lows
               close: price - 1.5, # Lower closes
-              volume: 1000
+              volume: 1000,
             )
           end
 
@@ -220,7 +220,7 @@ RSpec.describe Smc::Choch do
           expect(structure).to eq(:bearish)
         end
 
-        it 'returns nil for sideways structure' do
+        it "returns nil for sideways structure" do
           candles = []
           30.times do |i|
             price = 100.0 + (Math.sin(i * 0.2) * 1.0)
@@ -230,7 +230,7 @@ RSpec.describe Smc::Choch do
               high: price + 0.5,
               low: price - 0.5,
               close: price,
-              volume: 1000
+              volume: 1000,
             )
           end
 
@@ -239,7 +239,7 @@ RSpec.describe Smc::Choch do
           expect(structure).to be_nil
         end
 
-        it 'returns nil for insufficient candles' do
+        it "returns nil for insufficient candles" do
           candles = Array.new(10) { |i| Candle.new(timestamp: i.days.ago, open: 100, high: 105, low: 99, close: 103, volume: 1000) }
 
           structure = described_class.send(:determine_structure, candles, 20)
@@ -247,7 +247,7 @@ RSpec.describe Smc::Choch do
           expect(structure).to be_nil
         end
 
-        it 'handles equal bullish and bearish signals' do
+        it "handles equal bullish and bearish signals" do
           candles = []
           30.times do |i|
             price = 100.0
@@ -257,7 +257,7 @@ RSpec.describe Smc::Choch do
               high: price + (i.even? ? 1.0 : 0.5), # Alternating
               low: price - (i.even? ? 0.5 : 1.0), # Alternating
               close: price,
-              volume: 1000
+              volume: 1000,
             )
           end
 
@@ -270,4 +270,3 @@ RSpec.describe Smc::Choch do
     end
   end
 end
-

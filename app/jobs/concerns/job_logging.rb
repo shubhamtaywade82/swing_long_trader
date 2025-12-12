@@ -38,11 +38,9 @@ module JobLogging
     # Send alert to Telegram
     Telegram::Notifier.send_error_alert(
       "Job failed: #{job_name}\n\n#{error.message}",
-      context: job_name
+      context: job_name,
     )
 
     raise error
   end
 end
-
-
