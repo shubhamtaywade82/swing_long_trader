@@ -300,6 +300,177 @@ RSpec.describe Smc::Bos do
         expect(result[:confirmation]).to be false
       end
     end
+
+    context 'with private methods' do
+      describe '.find_swing_highs' do
+        it 'finds swing highs correctly' do
+          candles = []
+          30.times do |i|
+            price = 100.0 + (i * 0.1)
+            candles << Candle.new(
+              timestamp: (29 - i).days.ago,
+              open: price,
+              high: price + 1.0,
+              low: price - 0.5,
+              close: price + 0.5,
+              volume: 1000
+            )
+          end
+
+          # Create a clear swing high in the middle
+          candles[15].high = 120.0 # Much higher than surrounding
+
+          swing_highs = described_class.send(:find_swing_highs, candles, 5)
+
+          expect(swing_highs).to be_an(Array)
+          expect(swing_highs.any? { |sh| sh[:index] == 15 }).to be true
+        end
+
+        it 'handles no swing highs' do
+          candles = []
+          30.times do |i|
+            price = 100.0 + (i * 0.1)
+            candles << Candle.new(
+              timestamp: (29 - i).days.ago,
+              open: price,
+              high: price + 0.5,
+              low: price - 0.5,
+              close: price + 0.2,
+              volume: 1000
+            )
+          end
+
+          swing_highs = described_class.send(:find_swing_highs, candles, 10)
+
+          expect(swing_highs).to be_an(Array)
+        end
+      end
+
+      describe '.find_swing_lows' do
+        it 'finds swing lows correctly' do
+          candles = []
+          30.times do |i|
+            price = 100.0 + (i * 0.1)
+            candles << Candle.new(
+              timestamp: (29 - i).days.ago,
+              open: price,
+              high: price + 0.5,
+              low: price - 1.0,
+              close: price - 0.5,
+              volume: 1000
+            )
+          end
+
+          # Create a clear swing low in the middle
+          candles[15].low = 80.0 # Much lower than surrounding
+
+          swing_lows = described_class.send(:find_swing_lows, candles, 5)
+
+          expect(swing_lows).to be_an(Array)
+          expect(swing_lows.any? { |sl| sl[:index] == 15 }).to be true
+        end
+      end
+
+      describe '.detect_bullish_bos' do
+        it 'detects bullish BOS when high breaks swing high' do
+          candles = []
+          swing_high_price = 110.0
+
+          # Create candles with swing high
+          25.times do |i|
+            price = 100.0 + (i * 0.3)
+            candles << Candle.new(
+              timestamp: (24 - i).days.ago,
+              open: price,
+              high: price + 1.0,
+              low: price - 0.5,
+              close: price + 0.5,
+              volume: 1000
+            )
+          end
+
+          # Create swing high
+          candles << Candle.new(
+            timestamp: 0.days.ago,
+            open: swing_high_price - 1.0,
+            high: swing_high_price,
+            low: swing_high_price - 2.0,
+            close: swing_high_price - 0.5,
+            volume: 1000
+          )
+
+          # Break above
+          candles << Candle.new(
+            timestamp: 1.day.from_now,
+            open: swing_high_price + 0.5,
+            high: swing_high_price + 1.0,
+            low: swing_high_price,
+            close: swing_high_price + 0.5,
+            volume: 1000
+          )
+
+          swing_highs = [{ index: 25, price: swing_high_price }]
+          result = described_class.send(:detect_bullish_bos, candles, swing_highs, 10)
+
+          expect(result).not_to be_nil
+          expect(result[:type]).to eq(:bullish)
+        end
+
+        it 'returns nil when no swing highs' do
+          candles = Array.new(30) { |i| Candle.new(timestamp: i.days.ago, open: 100, high: 105, low: 99, close: 103, volume: 1000) }
+
+          result = described_class.send(:detect_bullish_bos, candles, [], 10)
+
+          expect(result).to be_nil
+        end
+      end
+
+      describe '.detect_bearish_bos' do
+        it 'detects bearish BOS when low breaks swing low' do
+          candles = []
+          swing_low_price = 90.0
+
+          # Create candles with swing low
+          25.times do |i|
+            price = 100.0 - (i * 0.3)
+            candles << Candle.new(
+              timestamp: (24 - i).days.ago,
+              open: price,
+              high: price + 0.5,
+              low: price - 1.0,
+              close: price - 0.5,
+              volume: 1000
+            )
+          end
+
+          # Create swing low
+          candles << Candle.new(
+            timestamp: 0.days.ago,
+            open: swing_low_price + 1.0,
+            high: swing_low_price + 2.0,
+            low: swing_low_price,
+            close: swing_low_price + 0.5,
+            volume: 1000
+          )
+
+          # Break below
+          candles << Candle.new(
+            timestamp: 1.day.from_now,
+            open: swing_low_price - 0.5,
+            high: swing_low_price,
+            low: swing_low_price - 1.0,
+            close: swing_low_price - 0.5,
+            volume: 1000
+          )
+
+          swing_lows = [{ index: 25, price: swing_low_price }]
+          result = described_class.send(:detect_bearish_bos, candles, swing_lows, 10)
+
+          expect(result).not_to be_nil
+          expect(result[:type]).to eq(:bearish)
+        end
+      end
+    end
   end
 end
 

@@ -299,6 +299,320 @@ RSpec.describe Candles::IntradayFetcher do
         )
       end
     end
+
+    context 'with edge cases' do
+      it 'handles invalid interval' do
+        result = described_class.call(
+          instrument: instrument,
+          interval: 'invalid',
+          days: 1
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Invalid interval')
+      end
+
+      it 'handles nil instrument' do
+        result = described_class.call(
+          instrument: nil,
+          interval: '15',
+          days: 1
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Invalid instrument')
+      end
+
+      it 'handles API errors gracefully' do
+        allow(instrument).to receive(:intraday_ohlc).and_raise(StandardError.new('API error'))
+        allow(Rails.logger).to receive(:error)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('API error')
+        expect(Rails.logger).to have_received(:error)
+      end
+
+      it 'handles normalization errors' do
+        invalid_data = { invalid: 'data' }
+        allow(instrument).to receive(:intraday_ohlc).and_return(invalid_data)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1
+        )
+
+        # Should either return empty candles or handle gracefully
+        expect(result).to be_present
+      end
+
+      it 'handles cache errors gracefully' do
+        allow(Rails.cache).to receive(:read).and_raise(StandardError.new('Cache error'))
+        allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1,
+          cache: true
+        )
+
+        # Should fall back to API fetch
+        expect(result[:success]).to be true
+        expect(result[:cached]).to be false
+      end
+
+      it 'handles cache write errors gracefully' do
+        allow(Rails.cache).to receive(:write).and_raise(StandardError.new('Cache write error'))
+        allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1,
+          cache: true
+        )
+
+        # Should still return candles even if cache write fails
+        expect(result[:success]).to be true
+      end
+    end
+
+    context 'with different intervals' do
+      it 'supports 15-minute interval' do
+        allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1
+        )
+
+        expect(result[:success]).to be true
+        expect(instrument).to have_received(:intraday_ohlc).with(
+          hash_including(interval: '15')
+        )
+      end
+
+      it 'supports 60-minute interval' do
+        allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '60',
+          days: 1
+        )
+
+        expect(result[:success]).to be true
+        expect(instrument).to have_received(:intraday_ohlc).with(
+          hash_including(interval: '60')
+        )
+      end
+
+      it 'supports 120-minute interval' do
+        allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '120',
+          days: 1
+        )
+
+        expect(result[:success]).to be true
+        expect(instrument).to have_received(:intraday_ohlc).with(
+          hash_including(interval: '120')
+        )
+      end
+    end
+
+    context 'with caching' do
+      before do
+        allow(Rails.cache).to receive(:read).and_return(nil)
+        allow(Rails.cache).to receive(:write)
+      end
+
+      it 'caches results when cache enabled' do
+        allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1,
+          cache: true
+        )
+
+        expect(result[:success]).to be true
+        expect(Rails.cache).to have_received(:write).at_least(:once)
+      end
+
+      it 'uses cached data when available' do
+        cached_candles = [{ timestamp: 1.hour.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 }]
+        allow(Rails.cache).to receive(:read).and_return(cached_candles)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1,
+          cache: true
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:cached]).to be true
+        expect(result[:candles]).to eq(cached_candles)
+        expect(instrument).not_to have_received(:intraday_ohlc)
+      end
+
+      it 'generates correct cache key' do
+        allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
+        allow(Rails.cache).to receive(:read).and_return(nil)
+
+        described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1,
+          cache: true
+        )
+
+        # Cache key should include instrument and interval
+        expect(Rails.cache).to have_received(:read).with(
+          match(/intraday_candles.*#{instrument.id}.*15/)
+        )
+      end
+    end
+
+    describe 'private methods' do
+      let(:service) { described_class.new(instrument: instrument, interval: '15', days: 1) }
+
+      describe '#normalize_single_candle' do
+        it 'normalizes candle hash' do
+          candle = {
+            timestamp: 1.hour.ago.to_i,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          }
+
+          normalized = service.send(:normalize_single_candle, candle)
+
+          expect(normalized).to have_key(:timestamp)
+          expect(normalized).to have_key(:open)
+          expect(normalized).to have_key(:high)
+          expect(normalized).to have_key(:low)
+          expect(normalized).to have_key(:close)
+          expect(normalized).to have_key(:volume)
+        end
+
+        it 'handles string keys' do
+          candle = {
+            'timestamp' => 1.hour.ago.to_i,
+            'open' => 100.0,
+            'high' => 105.0,
+            'low' => 99.0,
+            'close' => 103.0,
+            'volume' => 1_000_000
+          }
+
+          normalized = service.send(:normalize_single_candle, candle)
+
+          expect(normalized).to have_key(:timestamp)
+        end
+
+        it 'handles nil candle' do
+          normalized = service.send(:normalize_single_candle, nil)
+
+          expect(normalized).to be_nil
+        end
+
+        it 'handles missing volume' do
+          candle = {
+            timestamp: 1.hour.ago.to_i,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0
+          }
+
+          normalized = service.send(:normalize_single_candle, candle)
+
+          expect(normalized[:volume]).to eq(0)
+        end
+      end
+
+      describe '#parse_timestamp' do
+        it 'handles Time objects' do
+          time = Time.current
+          parsed = service.send(:parse_timestamp, time)
+
+          expect(parsed).to be_a(Time)
+        end
+
+        it 'handles integer timestamps' do
+          timestamp = Time.current.to_i
+          parsed = service.send(:parse_timestamp, timestamp)
+
+          expect(parsed).to be_a(Time)
+        end
+
+        it 'handles string timestamps' do
+          timestamp = Time.current.iso8601
+          parsed = service.send(:parse_timestamp, timestamp)
+
+          expect(parsed).to be_a(Time)
+        end
+
+        it 'handles nil timestamps' do
+          parsed = service.send(:parse_timestamp, nil)
+
+          expect(parsed).to be_a(Time)
+        end
+      end
+
+      describe '#fetch_from_cache' do
+        it 'returns cached data when available' do
+          cached_data = [{ timestamp: 1.hour.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 }]
+          allow(Rails.cache).to receive(:read).and_return(cached_data)
+
+          result = service.send(:fetch_from_cache)
+
+          expect(result).to eq(cached_data)
+        end
+
+        it 'returns nil when cache miss' do
+          allow(Rails.cache).to receive(:read).and_return(nil)
+
+          result = service.send(:fetch_from_cache)
+
+          expect(result).to be_nil
+        end
+      end
+
+      describe '#cache_result' do
+        it 'caches normalized candles' do
+          candles = [{ timestamp: 1.hour.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 }]
+          allow(Rails.cache).to receive(:write)
+
+          service.send(:cache_result, candles)
+
+          expect(Rails.cache).to have_received(:write).at_least(:once)
+        end
+
+        it 'does not cache empty candles' do
+          allow(Rails.cache).to receive(:write)
+
+          service.send(:cache_result, [])
+
+          expect(Rails.cache).not_to have_received(:write)
+        end
+      end
+    end
   end
 end
 

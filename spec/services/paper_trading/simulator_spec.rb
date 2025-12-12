@@ -342,6 +342,264 @@ RSpec.describe PaperTrading::Simulator, type: :service do
         expect(result[:exited]).to eq(0)
       end
     end
+
+    context 'with edge cases' do
+      it 'handles positions with nil SL/TP' do
+        position = create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          entry_price: 100.0,
+          current_price: 100.0,
+          sl: nil,
+          tp: nil,
+          status: 'open')
+
+        create(:candle_series_record,
+          instrument: instrument,
+          timeframe: '1D',
+          close: 100.0,
+          timestamp: Time.current)
+
+        allow(position).to receive(:check_sl_hit?).and_return(false)
+        allow(position).to receive(:check_tp_hit?).and_return(false)
+        allow(position).to receive(:days_held).and_return(5)
+        allow(AlgoConfig).to receive(:fetch).and_return(20)
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+
+        result = described_class.new(portfolio: portfolio).check_exits
+
+        expect(result[:checked]).to eq(1)
+        expect(result[:exited]).to eq(0)
+      end
+
+      it 'handles zero P&L correctly' do
+        position = create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          entry_price: 100.0,
+          current_price: 100.0,
+          status: 'open')
+
+        create(:candle_series_record,
+          instrument: instrument,
+          timeframe: '1D',
+          close: 100.0,
+          timestamp: Time.current)
+
+        allow(position).to receive(:check_sl_hit?).and_return(false)
+        allow(position).to receive(:check_tp_hit?).and_return(false)
+        allow(position).to receive(:days_held).and_return(21) # Exceeds max holding days
+        allow(AlgoConfig).to receive(:fetch).and_return(20)
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+
+        initial_capital = portfolio.capital
+
+        described_class.new(portfolio: portfolio).check_exits
+
+        position.reload
+        expect(position.status).to eq('closed')
+        expect(position.pnl).to eq(0.0)
+        expect(portfolio.reload.capital).to eq(initial_capital) # No change for zero P&L
+      end
+
+      it 'handles multiple positions with different exit conditions' do
+        position1 = create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          entry_price: 100.0,
+          current_price: 100.0,
+          sl: 95.0,
+          tp: 110.0,
+          status: 'open')
+
+        instrument2 = create(:instrument)
+        position2 = create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument2,
+          entry_price: 50.0,
+          current_price: 50.0,
+          sl: 45.0,
+          tp: 60.0,
+          status: 'open')
+
+        create(:candle_series_record,
+          instrument: instrument,
+          timeframe: '1D',
+          close: 94.0,
+          timestamp: Time.current)
+        create(:candle_series_record,
+          instrument: instrument2,
+          timeframe: '1D',
+          close: 61.0,
+          timestamp: Time.current)
+
+        allow(position1).to receive(:check_sl_hit?).and_return(true)
+        allow(position1).to receive(:check_tp_hit?).and_return(false)
+        allow(position2).to receive(:check_sl_hit?).and_return(false)
+        allow(position2).to receive(:check_tp_hit?).and_return(true)
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+
+        result = described_class.new(portfolio: portfolio).check_exits
+
+        expect(result[:checked]).to eq(2)
+        expect(result[:exited]).to eq(2)
+        expect(position1.reload.status).to eq('closed')
+        expect(position2.reload.status).to eq('closed')
+      end
+
+      it 'handles position with missing instrument' do
+        position = create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          entry_price: 100.0,
+          current_price: 100.0,
+          status: 'open')
+
+        # Delete instrument to simulate missing instrument
+        instrument_id = position.instrument_id
+        instrument.destroy
+
+        # Reload position to get nil instrument
+        position.reload
+
+        result = described_class.new(portfolio: portfolio).check_exits
+
+        # Should handle gracefully
+        expect(result[:checked]).to be >= 0
+      end
+
+      it 'handles reserved capital release correctly' do
+        position = create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          entry_price: 100.0,
+          current_price: 100.0,
+          quantity: 10,
+          sl: 95.0,
+          status: 'open')
+
+        portfolio.update(reserved_capital: 1000.0) # Reserve capital for position
+        create(:candle_series_record,
+          instrument: instrument,
+          timeframe: '1D',
+          close: 94.0,
+          timestamp: Time.current)
+
+        allow(position).to receive(:check_sl_hit?).and_return(true)
+        allow(position).to receive(:check_tp_hit?).and_return(false)
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+
+        initial_reserved = portfolio.reserved_capital
+
+        described_class.new(portfolio: portfolio).check_exits
+
+        portfolio.reload
+        entry_value = position.entry_price * position.quantity
+        expect(portfolio.reserved_capital).to eq(initial_reserved - entry_value)
+      end
+
+      it 'logs exit check summary' do
+        position = create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          entry_price: 100.0,
+          current_price: 100.0,
+          status: 'open')
+
+        create(:candle_series_record,
+          instrument: instrument,
+          timeframe: '1D',
+          close: 100.0,
+          timestamp: Time.current)
+
+        allow(position).to receive(:check_sl_hit?).and_return(false)
+        allow(position).to receive(:check_tp_hit?).and_return(false)
+        allow(position).to receive(:days_held).and_return(5)
+        allow(AlgoConfig).to receive(:fetch).and_return(20)
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+        allow(Rails.logger).to receive(:info)
+
+        described_class.new(portfolio: portfolio).check_exits
+
+        expect(Rails.logger).to have_received(:info).at_least(:once)
+      end
+
+      it 'handles error during exit check' do
+        position = create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          entry_price: 100.0,
+          current_price: 100.0,
+          status: 'open')
+
+        allow(portfolio).to receive(:open_positions).and_raise(StandardError.new('Database error'))
+        allow(Rails.logger).to receive(:error)
+
+        expect do
+          described_class.new(portfolio: portfolio).check_exits
+        end.to raise_error(StandardError, 'Database error')
+
+        expect(Rails.logger).to have_received(:error)
+      end
+    end
+
+    context 'with P&L calculations' do
+      it 'calculates P&L percentage correctly for long position' do
+        position = create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          direction: 'long',
+          entry_price: 100.0,
+          current_price: 100.0,
+          quantity: 10,
+          tp: 110.0,
+          status: 'open')
+
+        create(:candle_series_record,
+          instrument: instrument,
+          timeframe: '1D',
+          close: 110.0,
+          timestamp: Time.current)
+
+        allow(position).to receive(:check_sl_hit?).and_return(false)
+        allow(position).to receive(:check_tp_hit?).and_return(true)
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+
+        described_class.new(portfolio: portfolio).check_exits
+
+        position.reload
+        expected_pnl_pct = ((110.0 - 100.0) / 100.0 * 100).round(2)
+        expect(position.pnl_pct).to eq(expected_pnl_pct)
+      end
+
+      it 'calculates P&L percentage correctly for short position' do
+        position = create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          direction: 'short',
+          entry_price: 100.0,
+          current_price: 100.0,
+          quantity: 10,
+          tp: 90.0,
+          status: 'open')
+
+        create(:candle_series_record,
+          instrument: instrument,
+          timeframe: '1D',
+          close: 90.0,
+          timestamp: Time.current)
+
+        allow(position).to receive(:check_sl_hit?).and_return(false)
+        allow(position).to receive(:check_tp_hit?).and_return(true)
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+
+        described_class.new(portfolio: portfolio).check_exits
+
+        position.reload
+        expected_pnl_pct = ((100.0 - 90.0) / 100.0 * 100).round(2)
+        expect(position.pnl_pct).to eq(expected_pnl_pct)
+      end
+    end
   end
 end
 

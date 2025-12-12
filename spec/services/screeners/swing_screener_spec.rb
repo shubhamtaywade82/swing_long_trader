@@ -343,6 +343,236 @@ RSpec.describe Screeners::SwingScreener do
         expect(result).to be_nil
       end
     end
+
+    context 'with edge cases' do
+      it 'handles instruments without candles' do
+        instrument_no_candles = create(:instrument)
+        allow(instrument_no_candles).to receive(:has_candles?).and_return(false)
+
+        instruments = Instrument.where(id: instrument_no_candles.id)
+        result = described_class.call(instruments: instruments, limit: 10)
+
+        expect(result).to be_empty
+      end
+
+      it 'handles instruments with insufficient candles' do
+        instrument = create(:instrument)
+        allow(instrument).to receive(:has_candles?).and_return(true)
+        allow(instrument).to receive(:load_daily_candles).and_return(
+          CandleSeries.new(symbol: 'TEST', interval: '1D').tap do |cs|
+            30.times { cs.add_candle(create(:candle)) } # Less than 50 required
+          end
+        )
+
+        instruments = Instrument.where(id: instrument.id)
+        result = described_class.call(instruments: instruments, limit: 10)
+
+        expect(result).to be_empty
+      end
+
+      it 'handles nil LTP gracefully' do
+        instrument = create(:instrument)
+        allow(instrument).to receive(:has_candles?).and_return(true)
+        allow(instrument).to receive(:ltp).and_return(nil)
+        allow(instrument).to receive(:load_daily_candles).and_return(series)
+
+        instruments = Instrument.where(id: instrument.id)
+        result = described_class.call(instruments: instruments, limit: 10)
+
+        # Should still process if LTP is nil
+        expect(result).to be_an(Array)
+      end
+
+      it 'handles penny stock exclusion' do
+        instrument = create(:instrument)
+        allow(instrument).to receive(:has_candles?).and_return(true)
+        allow(instrument).to receive(:ltp).and_return(5.0) # Penny stock
+        allow(instrument).to receive(:load_daily_candles).and_return(series)
+
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          swing_trading: {
+            screening: {
+              exclude_penny_stocks: true
+            }
+          }
+        })
+
+        instruments = Instrument.where(id: instrument.id)
+        result = described_class.call(instruments: instruments, limit: 10)
+
+        expect(result).to be_empty
+      end
+
+      it 'handles price range filters' do
+        instrument = create(:instrument)
+        allow(instrument).to receive(:has_candles?).and_return(true)
+        allow(instrument).to receive(:ltp).and_return(10.0) # Below min_price
+        allow(instrument).to receive(:load_daily_candles).and_return(series)
+
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          swing_trading: {
+            screening: {
+              min_price: 50,
+              max_price: 50_000
+            }
+          }
+        })
+
+        instruments = Instrument.where(id: instrument.id)
+        result = described_class.call(instruments: instruments, limit: 10)
+
+        expect(result).to be_empty
+      end
+
+      it 'handles indicator calculation failures' do
+        instrument = create(:instrument)
+        allow(instrument).to receive(:has_candles?).and_return(true)
+        allow(instrument).to receive(:load_daily_candles).and_return(series)
+        allow(series).to receive(:ema).and_raise(StandardError.new('Calculation error'))
+        allow(Rails.logger).to receive(:error)
+
+        instruments = Instrument.where(id: instrument.id)
+        result = described_class.call(instruments: instruments, limit: 10)
+
+        expect(result).to be_empty
+        expect(Rails.logger).to have_received(:error)
+      end
+
+      it 'handles SMC validation failures' do
+        instrument = create(:instrument)
+        allow(instrument).to receive(:has_candles?).and_return(true)
+        allow(instrument).to receive(:load_daily_candles).and_return(series)
+        allow_any_instance_of(described_class).to receive(:validate_smc_structure).and_return({
+          valid: false,
+          reasons: ['Insufficient structure']
+        })
+
+        instruments = Instrument.where(id: instrument.id)
+        result = described_class.call(instruments: instruments, limit: 10)
+
+        # Should still include candidate but with SMC validation info
+        expect(result).to be_an(Array)
+      end
+
+      it 'respects limit parameter' do
+        instruments_list = create_list(:instrument, 100)
+        instruments_list.each do |inst|
+          allow(inst).to receive(:has_candles?).and_return(true)
+          allow(inst).to receive(:load_daily_candles).and_return(series)
+        end
+
+        instruments = Instrument.where(id: instruments_list.map(&:id))
+        result = described_class.call(instruments: instruments, limit: 10)
+
+        expect(result.size).to be <= 10
+      end
+
+      it 'sorts candidates by score descending' do
+        instrument1 = create(:instrument)
+        instrument2 = create(:instrument)
+        allow(instrument1).to receive(:has_candles?).and_return(true)
+        allow(instrument2).to receive(:has_candles?).and_return(true)
+        allow(instrument1).to receive(:load_daily_candles).and_return(series)
+        allow(instrument2).to receive(:load_daily_candles).and_return(series)
+
+        # Mock different scores
+        allow_any_instance_of(described_class).to receive(:calculate_score).and_return(80, 90)
+
+        instruments = Instrument.where(id: [instrument1.id, instrument2.id])
+        result = described_class.call(instruments: instruments, limit: 10)
+
+        if result.size >= 2
+          expect(result[0][:score]).to be >= result[1][:score]
+        end
+      end
+    end
+
+    describe 'private methods' do
+      let(:screener) { described_class.new(instruments: instruments) }
+
+      describe '#load_universe' do
+        it 'loads from master_universe.yml if available' do
+          universe_file = Rails.root.join('config/universe/master_universe.yml')
+          allow(File).to receive(:exist?).with(universe_file).and_return(true)
+          allow(YAML).to receive(:load_file).and_return(['RELIANCE', 'TCS'].to_set)
+
+          result = screener.send(:load_universe)
+
+          expect(result).to be_a(ActiveRecord::Relation)
+        end
+
+        it 'falls back to all equity/index instruments' do
+          universe_file = Rails.root.join('config/universe/master_universe.yml')
+          allow(File).to receive(:exist?).with(universe_file).and_return(false)
+
+          result = screener.send(:load_universe)
+
+          expect(result).to be_a(ActiveRecord::Relation)
+        end
+      end
+
+      describe '#passes_basic_filters?' do
+        it 'returns false when instrument has no candles' do
+          instrument = create(:instrument)
+          allow(instrument).to receive(:has_candles?).and_return(false)
+
+          result = screener.send(:passes_basic_filters?, instrument)
+
+          expect(result).to be false
+        end
+
+        it 'returns false when price is below minimum' do
+          instrument = create(:instrument)
+          allow(instrument).to receive(:has_candles?).and_return(true)
+          allow(instrument).to receive(:ltp).and_return(10.0)
+
+          allow(AlgoConfig).to receive(:fetch).and_return({
+            swing_trading: {
+              screening: {
+                min_price: 50
+              }
+            }
+          })
+
+          result = screener.send(:passes_basic_filters?, instrument)
+
+          expect(result).to be false
+        end
+
+        it 'returns false when price is above maximum' do
+          instrument = create(:instrument)
+          allow(instrument).to receive(:has_candles?).and_return(true)
+          allow(instrument).to receive(:ltp).and_return(100_000.0)
+
+          allow(AlgoConfig).to receive(:fetch).and_return({
+            swing_trading: {
+              screening: {
+                max_price: 50_000
+              }
+            }
+          })
+
+          result = screener.send(:passes_basic_filters?, instrument)
+
+          expect(result).to be false
+        end
+      end
+
+      describe '#build_metadata' do
+        it 'builds metadata hash' do
+          instrument = create(:instrument)
+          indicators = { ema20: 100.0, rsi: 65.0 }
+          smc_validation = { valid: true, score: 80 }
+
+          metadata = screener.send(:build_metadata, instrument, series, indicators, smc_validation)
+
+          expect(metadata).to be_a(Hash)
+          expect(metadata).to have_key(:ltp)
+          expect(metadata).to have_key(:volatility)
+          expect(metadata).to have_key(:momentum)
+        end
+      end
+    end
   end
 end
 

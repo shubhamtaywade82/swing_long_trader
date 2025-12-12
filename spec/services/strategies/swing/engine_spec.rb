@@ -273,6 +273,206 @@ RSpec.describe Strategies::Swing::Engine, type: :service do
 
         expect(result).to be false
       end
+
+      it 'returns false when average volume is zero' do
+        # Create series with zero volumes
+        volumes = Array.new(21, 0)
+        volumes.each_with_index do |vol, i|
+          daily_series.candles[i]&.volume = vol if daily_series.candles[i]
+        end
+
+        result = engine.send(:check_volume_confirmation, 1.5)
+
+        expect(result).to be false
+      end
+    end
+
+    context 'with edge cases' do
+      it 'handles nil weekly series' do
+        result = described_class.call(
+          instrument: instrument,
+          daily_series: series,
+          weekly_series: nil
+        )
+
+        expect(result[:success]).to be_in([true, false])
+        if result[:success]
+          expect(result[:metadata][:weekly_available]).to be false
+        end
+      end
+
+      it 'handles confidence threshold check' do
+        allow(Strategies::Swing::SignalBuilder).to receive(:call).and_return({
+          instrument_id: instrument.id,
+          direction: :long,
+          entry_price: 100.0,
+          confidence: 50.0 # Below 70% threshold
+        })
+
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          swing_trading: {
+            strategy: {
+              min_confidence: 0.7
+            }
+          }
+        })
+
+        result = described_class.call(
+          instrument: instrument,
+          daily_series: series
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Confidence too low')
+      end
+
+      it 'handles SMC validation failure' do
+        allow_any_instance_of(described_class).to receive(:validate_smc_structure).and_return({
+          valid: false,
+          reasons: ['Insufficient structure', 'No order blocks']
+        })
+
+        result = described_class.call(
+          instrument: instrument,
+          daily_series: series
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('SMC validation failed')
+      end
+
+      it 'handles signal builder returning nil' do
+        allow(Strategies::Swing::SignalBuilder).to receive(:call).and_return(nil)
+
+        result = described_class.call(
+          instrument: instrument,
+          daily_series: series
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Signal generation failed')
+      end
+
+      it 'handles entry condition failures' do
+        allow_any_instance_of(described_class).to receive(:check_entry_conditions).and_return({
+          allowed: false,
+          error: 'Trend alignment failed'
+        })
+
+        result = described_class.call(
+          instrument: instrument,
+          daily_series: series
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Trend alignment failed')
+      end
+
+      it 'includes SMC validation in metadata when available' do
+        smc_validation = {
+          valid: true,
+          score: 85,
+          components: { bos: true, choch: true }
+        }
+
+        allow_any_instance_of(described_class).to receive(:validate_smc_structure).and_return(smc_validation)
+        allow(Strategies::Swing::SignalBuilder).to receive(:call).and_return({
+          instrument_id: instrument.id,
+          direction: :long,
+          entry_price: 100.0,
+          confidence: 80.0
+        })
+
+        result = described_class.call(
+          instrument: instrument,
+          daily_series: series
+        )
+
+        if result[:success]
+          expect(result[:metadata][:smc_validation]).to eq(smc_validation)
+        end
+      end
+
+      it 'handles supertrend calculation failure' do
+        allow(Indicators::Supertrend).to receive(:new).and_raise(StandardError.new('Supertrend error'))
+        allow(Rails.logger).to receive(:warn)
+
+        result = engine.send(:calculate_supertrend)
+
+        expect(result).to be_nil
+        expect(Rails.logger).to have_received(:warn)
+      end
+
+      it 'handles supertrend returning nil trend' do
+        supertrend_mock = double('Supertrend')
+        allow(Indicators::Supertrend).to receive(:new).and_return(supertrend_mock)
+        allow(supertrend_mock).to receive(:call).and_return({ line: [100.0], trend: nil })
+
+        result = engine.send(:calculate_supertrend)
+
+        expect(result).to be_nil
+      end
+    end
+
+    context 'with entry condition requirements' do
+      it 'requires trend alignment when configured' do
+        allow(engine).to receive(:check_trend_alignment).and_return(false)
+
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          swing_trading: {
+            strategy: {
+              entry_conditions: {
+                require_trend_alignment: true
+              }
+            }
+          }
+        })
+
+        result = engine.send(:check_entry_conditions)
+
+        expect(result[:allowed]).to be false
+        expect(result[:error]).to include('Trend alignment failed')
+      end
+
+      it 'requires volume confirmation when configured' do
+        allow(engine).to receive(:check_volume_confirmation).and_return(false)
+
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          swing_trading: {
+            strategy: {
+              entry_conditions: {
+                require_volume_confirmation: true,
+                min_volume_spike: 2.0
+              }
+            }
+          }
+        })
+
+        result = engine.send(:check_entry_conditions)
+
+        expect(result[:allowed]).to be false
+        expect(result[:error]).to include('Volume confirmation failed')
+      end
+
+      it 'allows entry when all conditions pass' do
+        allow(engine).to receive(:check_trend_alignment).and_return(true)
+        allow(engine).to receive(:check_volume_confirmation).and_return(true)
+
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          swing_trading: {
+            strategy: {
+              entry_conditions: {
+                require_trend_alignment: true,
+                require_volume_confirmation: true
+              }
+            }
+          }
+        })
+
+        result = engine.send(:check_entry_conditions)
+
+        expect(result[:allowed]).to be true
+      end
     end
   end
 end

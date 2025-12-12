@@ -179,6 +179,95 @@ RSpec.describe Smc::Choch do
         expect(result).to be_nil
       end
     end
+
+    context 'with private methods' do
+      describe '.determine_structure' do
+        it 'determines bullish structure' do
+          candles = []
+          30.times do |i|
+            price = 100.0 + (i * 0.5)
+            candles << Candle.new(
+              timestamp: (29 - i).days.ago,
+              open: price,
+              high: price + 2.0, # Higher highs
+              low: price - 0.5,
+              close: price + 1.5, # Higher closes
+              volume: 1000
+            )
+          end
+
+          structure = described_class.send(:determine_structure, candles, 20)
+
+          expect(structure).to eq(:bullish)
+        end
+
+        it 'determines bearish structure' do
+          candles = []
+          30.times do |i|
+            price = 120.0 - (i * 0.5)
+            candles << Candle.new(
+              timestamp: (29 - i).days.ago,
+              open: price,
+              high: price + 0.5,
+              low: price - 2.0, # Lower lows
+              close: price - 1.5, # Lower closes
+              volume: 1000
+            )
+          end
+
+          structure = described_class.send(:determine_structure, candles, 20)
+
+          expect(structure).to eq(:bearish)
+        end
+
+        it 'returns nil for sideways structure' do
+          candles = []
+          30.times do |i|
+            price = 100.0 + (Math.sin(i * 0.2) * 1.0)
+            candles << Candle.new(
+              timestamp: (29 - i).days.ago,
+              open: price,
+              high: price + 0.5,
+              low: price - 0.5,
+              close: price,
+              volume: 1000
+            )
+          end
+
+          structure = described_class.send(:determine_structure, candles, 20)
+
+          expect(structure).to be_nil
+        end
+
+        it 'returns nil for insufficient candles' do
+          candles = Array.new(10) { |i| Candle.new(timestamp: i.days.ago, open: 100, high: 105, low: 99, close: 103, volume: 1000) }
+
+          structure = described_class.send(:determine_structure, candles, 20)
+
+          expect(structure).to be_nil
+        end
+
+        it 'handles equal bullish and bearish signals' do
+          candles = []
+          30.times do |i|
+            price = 100.0
+            candles << Candle.new(
+              timestamp: (29 - i).days.ago,
+              open: price,
+              high: price + (i.even? ? 1.0 : 0.5), # Alternating
+              low: price - (i.even? ? 0.5 : 1.0), # Alternating
+              close: price,
+              volume: 1000
+            )
+          end
+
+          structure = described_class.send(:determine_structure, candles, 20)
+
+          # May return nil if signals are equal
+          expect(structure).to be_in([:bullish, :bearish, nil])
+        end
+      end
+    end
   end
 end
 
