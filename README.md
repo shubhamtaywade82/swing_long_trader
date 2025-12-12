@@ -365,6 +365,7 @@ rails console
 ## Documentation
 
 - **[Quick Start](docs/QUICK_START.md)** - Get running in 5 minutes
+- **[How It Works](docs/HOW_IT_WORKS.md)** - Understanding automated screening and trading flow
 - **[Local Development Guide](docs/LOCAL_DEVELOPMENT_GUIDE.md)** - Complete guide to run locally on your machine
 - **[Getting Started](docs/GETTING_STARTED.md)** - Detailed step-by-step setup guide for new users
 - **[System Overview](docs/SYSTEM_OVERVIEW.md)** - Complete system guide, quick reference, and troubleshooting
