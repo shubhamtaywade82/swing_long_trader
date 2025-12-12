@@ -372,6 +372,7 @@ rails console
 - **[Environment Variables](docs/ENVIRONMENT_VARIABLES.md)** - Complete list of environment variables
 - **[Production Checklist](docs/PRODUCTION_CHECKLIST.md)** - Pre-deployment checklist
 - **[Deployment Quickstart](docs/DEPLOYMENT_QUICKSTART.md)** - Step-by-step deployment guide
+- **[Kamal Deployment Guide](docs/KAMAL_DEPLOYMENT_GUIDE.md)** - Complete Kamal deployment instructions
 - **[Backtesting Guide](docs/BACKTESTING.md)** - Comprehensive backtesting documentation
 - **[Migration Guide](docs/SWING_LONG_TRADER_MIGRATION_GUIDE.md)** - Migration from AlgoScalperAPI
 - **[Implementation TODO](docs/IMPLEMENTATION_TODO.md)** - Development progress tracker
