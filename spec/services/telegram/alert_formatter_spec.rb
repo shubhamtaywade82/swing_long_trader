@@ -171,7 +171,7 @@ RSpec.describe Telegram::AlertFormatter, type: :service do
     end
   end
 
-  describe ".format_daily_candidates" do
+  describe ".format_daily_candidates with edge cases" do
     it "handles more than 10 candidates" do
       candidates = (1..15).map { |i| { symbol: "STOCK#{i}", score: 80.0 } }
       message = described_class.format_daily_candidates(candidates)
@@ -202,7 +202,7 @@ RSpec.describe Telegram::AlertFormatter, type: :service do
     end
   end
 
-  describe ".format_signal_alert" do
+  describe ".format_signal_alert with edge cases" do
     it "handles short direction" do
       signal = {
         symbol: "RELIANCE",
@@ -244,7 +244,7 @@ RSpec.describe Telegram::AlertFormatter, type: :service do
     end
   end
 
-  describe ".format_exit_alert" do
+  describe ".format_exit_alert with edge cases" do
     it "handles positive P&L" do
       signal = { symbol: "RELIANCE", entry_price: 100.0, qty: 10 }
       message = described_class.format_exit_alert(
@@ -293,7 +293,7 @@ RSpec.describe Telegram::AlertFormatter, type: :service do
     end
   end
 
-  describe ".format_error_alert" do
+  describe ".format_error_alert with edge cases" do
     it "handles error without context" do
       message = described_class.format_error_alert("Test error")
       expect(message).to include("Error Alert")

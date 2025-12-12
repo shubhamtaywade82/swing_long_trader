@@ -17,6 +17,7 @@ module Backtesting
     end
 
     def initialize(positions:, initial_capital:, simulations: DEFAULT_SIMULATIONS, confidence_levels: CONFIDENCE_LEVELS)
+      super()
       @positions = positions.dup # Work with copy to avoid modifying original
       @initial_capital = initial_capital.to_f
       @simulations = simulations

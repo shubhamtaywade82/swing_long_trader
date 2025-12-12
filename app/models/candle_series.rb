@@ -350,7 +350,7 @@ class CandleSeries
     Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
     nil
   rescue StandardError => e
-    # OBV.calculate might have different signature - try alternative approach
+    # Catch any other StandardError (but not NoMethodError which is raised above)
     Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
     nil
   end

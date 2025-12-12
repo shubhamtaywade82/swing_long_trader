@@ -4,7 +4,8 @@ module Backtesting
   # Long-term trading backtester with rebalancing
   class LongTermBacktester < ApplicationService
     def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0,
-                  rebalance_frequency: :weekly, max_positions: 10, min_holding_days: 30, commission_rate: 0.0, slippage_pct: 0.0)
+                  rebalance_frequency: :weekly, max_positions: 10, min_holding_days: 30, commission_rate: 0.0,
+                  slippage_pct: 0.0)
       new(
         instruments: instruments,
         from_date: from_date,
@@ -20,7 +21,9 @@ module Backtesting
     end
 
     def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, risk_per_trade: 2.0,
-                   rebalance_frequency: :weekly, max_positions: 10, min_holding_days: 30, commission_rate: 0.0, slippage_pct: 0.0)
+                   rebalance_frequency: :weekly, max_positions: 10, min_holding_days: 30, commission_rate: 0.0,
+                   slippage_pct: 0.0)
+      super()
       @instruments = instruments
       @from_date = from_date
       @to_date = to_date

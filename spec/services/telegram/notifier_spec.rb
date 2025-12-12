@@ -20,11 +20,13 @@ RSpec.describe Telegram::Notifier, type: :service do
 
   describe ".send_signal_alert" do
     it "delegates to instance method" do
-      allow_any_instance_of(described_class).to receive(:send_signal_alert).and_return(true)
+      instance = described_class.new
+      allow(instance).to receive(:send_signal_alert).and_return(true)
+      allow(described_class).to receive(:new).and_return(instance)
 
       described_class.send_signal_alert(signal)
 
-      expect_any_instance_of(described_class).to have_received(:send_signal_alert)
+      expect(instance).to have_received(:send_signal_alert)
     end
   end
 

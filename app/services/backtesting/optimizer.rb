@@ -5,7 +5,8 @@ module Backtesting
   # Uses walk-forward analysis to avoid overfitting
   class Optimizer < ApplicationService
     def self.call(instruments:, from_date:, to_date:, initial_capital: 100_000, parameter_ranges: {},
-                  optimization_metric: :sharpe_ratio, use_walk_forward: true, backtester_class: SwingBacktester, save_to_db: false)
+                  optimization_metric: :sharpe_ratio, use_walk_forward: true, backtester_class: SwingBacktester,
+                  save_to_db: false)
       new(
         instruments: instruments,
         from_date: from_date,
@@ -20,6 +21,7 @@ module Backtesting
 
     def initialize(instruments:, from_date:, to_date:, initial_capital: 100_000, parameter_ranges: {},
                    optimization_metric: :sharpe_ratio, use_walk_forward: true, backtester_class: SwingBacktester)
+      super()
       @instruments = instruments
       @from_date = from_date
       @to_date = to_date

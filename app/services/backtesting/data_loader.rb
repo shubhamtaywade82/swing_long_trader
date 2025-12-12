@@ -13,7 +13,7 @@ module Backtesting
       )
     end
 
-    def load_for_instruments(instruments:, timeframe:, from_date:, to_date:, interpolate_missing: false)
+    def load_for_instruments(instruments:, timeframe:, from_date:, to_date:, _interpolate_missing: false)
       data = {}
 
       instruments.find_each do |instrument|
