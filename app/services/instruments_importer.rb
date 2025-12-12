@@ -9,7 +9,7 @@ class InstrumentsImporter
   CSV_URL         = "https://images.dhan.co/api-data/api-scrip-master-detailed.csv"
   CACHE_PATH      = Rails.root.join("tmp/dhan_scrip_master.csv")
   CACHE_MAX_AGE   = 24.hours
-  VALID_EXCHANGES = %w[NSE BSE].freeze
+  VALID_EXCHANGES = %w[NSE].freeze # Only NSE - universe is built from NSE index constituents
   BATCH_SIZE      = 1_000
   UNIVERSE_FILE   = Rails.root.join("config/universe/master_universe.yml")
 
