@@ -238,7 +238,7 @@ RSpec.describe Candles::WeeklyIngestor do
         allow(Rails.logger).to receive(:info)
         allow(Rails.logger).to receive(:warn)
 
-        result = described_class.call(instruments: instruments, weeks_back: 1)
+        described_class.call(instruments: instruments, weeks_back: 1)
 
         expect(Rails.logger).to have_received(:info).at_least(:once)
       end

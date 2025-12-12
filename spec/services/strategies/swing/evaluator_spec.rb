@@ -78,6 +78,76 @@ RSpec.describe Strategies::Swing::Evaluator, type: :service do
         expect(result[:error]).to eq('Failed to load daily candles')
       end
     end
+
+    context 'with edge cases' do
+      it 'handles empty daily candles array' do
+        empty_series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+        allow(instrument).to receive(:load_daily_candles).and_return(empty_series)
+
+        result = described_class.new(candidate: candidate).call
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to eq('Failed to load daily candles')
+      end
+
+      it 'handles nil weekly series gracefully' do
+        daily_series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+        daily_series.add_candle(create(:candle))
+        allow(instrument).to receive(:load_daily_candles).and_return(daily_series)
+        allow(instrument).to receive(:load_weekly_candles).and_return(nil)
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          { success: true, signal: { direction: 'long' } }
+        )
+
+        result = described_class.new(candidate: candidate).call
+
+        expect(result[:success]).to be true
+        expect(Strategies::Swing::Engine).to have_received(:call).with(
+          hash_including(weekly_series: nil)
+        )
+      end
+
+      it 'handles engine returning error' do
+        daily_series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+        daily_series.add_candle(create(:candle))
+        allow(instrument).to receive(:load_daily_candles).and_return(daily_series)
+        allow(instrument).to receive(:load_weekly_candles).and_return(nil)
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          { success: false, error: 'Insufficient candles' }
+        )
+
+        result = described_class.new(candidate: candidate).call
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to eq('Insufficient candles')
+      end
+
+      it 'handles candidate with missing instrument_id' do
+        invalid_candidate = { symbol: 'INVALID' }
+
+        result = described_class.new(candidate: invalid_candidate).call
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to eq('Instrument not found')
+      end
+
+      it 'handles candidate with string instrument_id' do
+        candidate_with_string_id = candidate.merge(instrument_id: instrument.id.to_s)
+
+        daily_series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+        daily_series.add_candle(create(:candle))
+        allow(instrument).to receive(:load_daily_candles).and_return(daily_series)
+        allow(instrument).to receive(:load_weekly_candles).and_return(nil)
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          { success: true, signal: { direction: 'long' } }
+        )
+
+        result = described_class.new(candidate: candidate_with_string_id).call
+
+        # Should still work if Instrument.find_by can handle string ID
+        expect(result).to be_present
+      end
+    end
   end
 end
 

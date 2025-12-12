@@ -498,6 +498,248 @@ RSpec.describe Dhan::Orders, type: :service do
         expect(Rails.logger).to have_received(:error)
       end
     end
+
+    context 'with private methods' do
+      let(:service) do
+        described_class.new(
+          instrument: instrument,
+          order_type: 'MARKET',
+          transaction_type: 'BUY',
+          quantity: 100
+        )
+      end
+
+      describe '#generate_client_order_id' do
+        it 'generates unique client order ID' do
+          id1 = service.send(:generate_client_order_id)
+          id2 = service.send(:generate_client_order_id)
+
+          expect(id1).not_to eq(id2)
+          expect(id1).to include(instrument.security_id)
+        end
+      end
+
+      describe '#build_order_payload' do
+        it 'builds payload for market order' do
+          service = described_class.new(
+            instrument: instrument,
+            order_type: 'MARKET',
+            transaction_type: 'BUY',
+            quantity: 100
+          )
+
+          payload = service.send(:build_order_payload)
+
+          expect(payload).to have_key(:security_id)
+          expect(payload).to have_key(:transaction_type)
+          expect(payload).to have_key(:quantity)
+          expect(payload[:order_type]).to eq('MARKET')
+        end
+
+        it 'builds payload for limit order' do
+          service = described_class.new(
+            instrument: instrument,
+            order_type: 'LIMIT',
+            transaction_type: 'BUY',
+            quantity: 100,
+            price: 100.0
+          )
+
+          payload = service.send(:build_order_payload)
+
+          expect(payload[:order_type]).to eq('LIMIT')
+          expect(payload[:price]).to eq(100.0)
+        end
+
+        it 'builds payload for SL order' do
+          service = described_class.new(
+            instrument: instrument,
+            order_type: 'SL',
+            transaction_type: 'SELL',
+            quantity: 100,
+            trigger_price: 95.0
+          )
+
+          payload = service.send(:build_order_payload)
+
+          expect(payload[:order_type]).to eq('SL')
+          expect(payload[:trigger_price]).to eq(95.0)
+        end
+      end
+
+      describe '#update_order_from_response' do
+        let(:order) { create(:order, instrument: instrument) }
+
+        it 'updates order with successful response' do
+          response = {
+            'status' => 'success',
+            'orderId' => 'DHAN_123456',
+            'exchangeOrderId' => 'EXCH_789'
+          }
+
+          service.send(:update_order_from_response, order, response)
+
+          order.reload
+          expect(order.dhan_order_id).to eq('DHAN_123456')
+          expect(order.exchange_order_id).to eq('EXCH_789')
+          expect(order.status).to eq('placed')
+        end
+
+        it 'handles response without exchangeOrderId' do
+          response = {
+            'status' => 'success',
+            'orderId' => 'DHAN_123456'
+          }
+
+          service.send(:update_order_from_response, order, response)
+
+          order.reload
+          expect(order.dhan_order_id).to eq('DHAN_123456')
+        end
+      end
+
+      describe '#log_order_request' do
+        it 'logs order request' do
+          order = create(:order, instrument: instrument)
+          payload = { security_id: instrument.security_id, quantity: 100 }
+          allow(Rails.logger).to receive(:info)
+
+          service.send(:log_order_request, order, payload)
+
+          expect(Rails.logger).to have_received(:info)
+        end
+      end
+
+      describe '#log_order_response' do
+        it 'logs order response' do
+          order = create(:order, instrument: instrument)
+          response = { 'status' => 'success', 'orderId' => 'DHAN_123456' }
+          allow(Rails.logger).to receive(:info)
+
+          service.send(:log_order_response, order, response)
+
+          expect(Rails.logger).to have_received(:info)
+        end
+      end
+
+      describe '#send_order_failure_alert' do
+        it 'sends alert for order failure' do
+          order = create(:order, instrument: instrument, status: 'rejected')
+          allow(Telegram::Notifier).to receive(:send_error_alert)
+          allow(AlgoConfig).to receive(:fetch).and_return(true)
+
+          service.send(:send_order_failure_alert, order, 'Order rejected')
+
+          expect(Telegram::Notifier).to have_received(:send_error_alert)
+        end
+
+        it 'handles notification failure gracefully' do
+          order = create(:order, instrument: instrument, status: 'rejected')
+          allow(Telegram::Notifier).to receive(:send_error_alert).and_raise(StandardError, 'Notification failed')
+          allow(Rails.logger).to receive(:error)
+          allow(AlgoConfig).to receive(:fetch).and_return(true)
+
+          service.send(:send_order_failure_alert, order, 'Order rejected')
+
+          expect(Rails.logger).to have_received(:error)
+        end
+      end
+
+      describe '#handle_order_error' do
+        it 'handles order errors' do
+          order = create(:order, instrument: instrument)
+          error = StandardError.new('Test error')
+          allow(Rails.logger).to receive(:error)
+          allow(Telegram::Notifier).to receive(:send_error_alert)
+          allow(AlgoConfig).to receive(:fetch).and_return(true)
+
+          result = service.send(:handle_order_error, order, error)
+
+          expect(result[:success]).to be false
+          expect(result[:error]).to include('Test error')
+          expect(Rails.logger).to have_received(:error)
+        end
+
+        it 'handles errors without order' do
+          error = StandardError.new('Test error')
+          allow(Rails.logger).to receive(:error)
+
+          result = service.send(:handle_order_error, nil, error)
+
+          expect(result[:success]).to be false
+          expect(Rails.logger).to have_received(:error)
+        end
+      end
+
+      describe '#get_dhan_client' do
+        it 'returns DhanHQ client when available' do
+          dhan_client = double('DhanHQ::Client')
+          allow(DhanHQ::Client).to receive(:new).with(api_type: :order_api).and_return(dhan_client)
+
+          client = service.send(:get_dhan_client)
+
+          expect(client).to eq(dhan_client)
+        end
+
+        it 'returns nil when client unavailable' do
+          allow(DhanHQ::Client).to receive(:new).and_raise(StandardError, 'Client unavailable')
+
+          client = service.send(:get_dhan_client)
+
+          expect(client).to be_nil
+        end
+      end
+    end
+
+    context 'with edge cases' do
+      it 'handles string order types' do
+        result = described_class.place_order(
+          instrument: instrument,
+          order_type: 'market', # lowercase
+          transaction_type: 'buy', # lowercase
+          quantity: 100
+        )
+
+        # Should normalize to uppercase
+        expect(result[:order].order_type).to eq('MARKET')
+        expect(result[:order].transaction_type).to eq('BUY')
+      end
+
+      it 'handles symbol order types' do
+        result = described_class.place_order(
+          instrument: instrument,
+          order_type: :market, # symbol
+          transaction_type: :buy, # symbol
+          quantity: 100
+        )
+
+        expect(result[:order].order_type).to eq('MARKET')
+        expect(result[:order].transaction_type).to eq('BUY')
+      end
+
+      it 'handles string quantity' do
+        result = described_class.place_order(
+          instrument: instrument,
+          order_type: 'MARKET',
+          transaction_type: 'BUY',
+          quantity: '100' # string
+        )
+
+        expect(result[:order].quantity).to eq(100)
+      end
+
+      it 'handles string price' do
+        result = described_class.place_order(
+          instrument: instrument,
+          order_type: 'LIMIT',
+          transaction_type: 'BUY',
+          quantity: 100,
+          price: '100.5' # string
+        )
+
+        expect(result[:order].price).to eq(100.5)
+      end
+    end
   end
 end
 

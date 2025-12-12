@@ -172,7 +172,7 @@ RSpec.describe PaperTrading::Portfolio, type: :service do
       end
 
       it 'creates ledger entry with correct description' do
-        portfolio = described_class.create(name: 'test_ledger', initial_capital: 10_000)
+        described_class.create(name: 'test_ledger', initial_capital: 10_000)
 
         ledger = PaperLedger.last
         expect(ledger.description).to include('Initial capital allocation')

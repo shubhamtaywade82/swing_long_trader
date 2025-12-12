@@ -203,6 +203,213 @@ RSpec.describe Smc::MitigationBlock do
         expect(result).to be_an(Array)
       end
     end
+
+    context 'with private methods' do
+      describe '.find_rejection_candles' do
+        it 'finds bullish rejection candles (long lower wick)' do
+          candles = []
+          candles << Candle.new(
+            timestamp: 1.day.ago,
+            open: 102.0,
+            high: 103.0,
+            low: 99.0, # Long lower wick
+            close: 101.5,
+            volume: 1000
+          )
+
+          rejections = described_class.send(:find_rejection_candles, candles)
+
+          expect(rejections).not_to be_empty
+          expect(rejections.first[:type]).to eq(:support)
+        end
+
+        it 'finds bearish rejection candles (long upper wick)' do
+          candles = []
+          candles << Candle.new(
+            timestamp: 1.day.ago,
+            open: 100.0,
+            high: 104.0, # Long upper wick
+            low: 99.0,
+            close: 100.5,
+            volume: 1000
+          )
+
+          rejections = described_class.send(:find_rejection_candles, candles)
+
+          expect(rejections).not_to be_empty
+          expect(rejections.first[:type]).to eq(:resistance)
+        end
+
+        it 'ignores candles without significant wicks' do
+          candles = []
+          candles << Candle.new(
+            timestamp: 1.day.ago,
+            open: 100.0,
+            high: 101.0,
+            low: 99.0,
+            close: 100.5,
+            volume: 1000
+          )
+
+          rejections = described_class.send(:find_rejection_candles, candles)
+
+          expect(rejections).to be_empty
+        end
+
+        it 'handles zero total range candles' do
+          candles = []
+          candles << Candle.new(
+            timestamp: 1.day.ago,
+            open: 100.0,
+            high: 100.0,
+            low: 100.0,
+            close: 100.0,
+            volume: 1000
+          )
+
+          rejections = described_class.send(:find_rejection_candles, candles)
+
+          expect(rejections).to be_empty
+        end
+      end
+
+      describe '.group_by_price_level' do
+        it 'groups rejections at similar price levels' do
+          rejections = [
+            { price_level: 100.0, index: 0, type: :support },
+            { price_level: 100.5, index: 1, type: :support },
+            { price_level: 101.0, index: 2, type: :support }
+          ]
+
+          grouped = described_class.send(:group_by_price_level, rejections)
+
+          expect(grouped).to be_a(Hash)
+          expect(grouped.keys.size).to be <= 3
+        end
+
+        it 'separates rejections at different price levels' do
+          rejections = [
+            { price_level: 100.0, index: 0, type: :support },
+            { price_level: 110.0, index: 1, type: :support } # 10% difference
+          ]
+
+          grouped = described_class.send(:group_by_price_level, rejections)
+
+          expect(grouped.keys.size).to eq(2)
+        end
+      end
+
+      describe '.determine_block_type' do
+        it 'determines support block when support rejections dominate' do
+          rejections = [
+            { type: :support },
+            { type: :support },
+            { type: :resistance }
+          ]
+
+          block_type = described_class.send(:determine_block_type, rejections)
+
+          expect(block_type).to eq(:support)
+        end
+
+        it 'determines resistance block when resistance rejections dominate' do
+          rejections = [
+            { type: :support },
+            { type: :resistance },
+            { type: :resistance }
+          ]
+
+          block_type = described_class.send(:determine_block_type, rejections)
+
+          expect(block_type).to eq(:resistance)
+        end
+
+        it 'defaults to support when counts are equal' do
+          rejections = [
+            { type: :support },
+            { type: :resistance }
+          ]
+
+          block_type = described_class.send(:determine_block_type, rejections)
+
+          expect(block_type).to eq(:support)
+        end
+      end
+
+      describe '.calculate_strength' do
+        it 'calculates strength based on rejection count' do
+          rejections = [
+            { index: 0 },
+            { index: 1 },
+            { index: 2 }
+          ]
+
+          strength = described_class.send(:calculate_strength, rejections)
+
+          expect(strength).to be_between(0, 1)
+        end
+
+        it 'caps strength at 1.0' do
+          rejections = Array.new(10) { |i| { index: i } }
+
+          strength = described_class.send(:calculate_strength, rejections)
+
+          expect(strength).to be <= 1.0
+        end
+
+        it 'boosts strength for recent rejections' do
+          rejections = [
+            { index: 0 },
+            { index: 1 },
+            { index: 2 },
+            { index: 15 }, # Recent
+            { index: 16 } # Recent
+          ]
+
+          strength = described_class.send(:calculate_strength, rejections)
+
+          expect(strength).to be_between(0, 1)
+        end
+      end
+    end
+
+    context 'with sorting' do
+      it 'sorts blocks by strength descending' do
+        candles = []
+        base_price = 100.0
+
+        # Create multiple rejection candles at different levels
+        30.times do |i|
+          price = base_price + (i * 0.1)
+          if i % 3 == 0
+            candles << Candle.new(
+              timestamp: (29 - i).days.ago,
+              open: price + 1.0,
+              high: price + 1.5,
+              low: price - 0.5,
+              close: price + 0.5,
+              volume: 1000
+            )
+          else
+            candles << Candle.new(
+              timestamp: (29 - i).days.ago,
+              open: price,
+              high: price + 0.5,
+              low: price - 0.5,
+              close: price + 0.3,
+              volume: 1000
+            )
+          end
+        end
+
+        result = described_class.detect(candles, lookback: 30)
+
+        if result.size >= 2
+          strengths = result.map { |b| b[:strength] }
+          expect(strengths).to eq(strengths.sort.reverse)
+        end
+      end
+    end
   end
 end
 

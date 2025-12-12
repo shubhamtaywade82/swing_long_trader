@@ -315,7 +315,7 @@ RSpec.describe Strategies::Swing::SignalBuilder, type: :service do
       end
 
       it 'handles error gracefully' do
-        result = described_class.call(
+        _result = described_class.call(
           instrument: instrument,
           daily_series: series
         )

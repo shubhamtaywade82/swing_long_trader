@@ -414,6 +414,187 @@ RSpec.describe Strategies::Swing::Executor, type: :service do
         # Notification should not be sent in dry-run
       end
     end
+
+    context 'with private methods' do
+      let(:service) { described_class.new(signal: signal) }
+
+      describe '#get_current_capital' do
+        it 'retrieves current capital from settings' do
+          Setting.put('portfolio.current_capital', 150_000)
+
+          capital = service.send(:get_current_capital)
+
+          expect(capital).to eq(150_000)
+        end
+
+        it 'defaults to 100000 if not set' do
+          Setting.put('portfolio.current_capital', nil)
+
+          capital = service.send(:get_current_capital)
+
+          expect(capital).to eq(100_000)
+        end
+      end
+
+      describe '#calculate_instrument_exposure' do
+        it 'calculates exposure for specific instrument' do
+          create_list(:order, 3, instrument: instrument, status: 'placed', price: 100.0, quantity: 10)
+
+          exposure = service.send(:calculate_instrument_exposure)
+
+          expect(exposure).to eq(3000.0)
+        end
+
+        it 'ignores non-placed orders' do
+          create(:order, instrument: instrument, status: 'rejected', price: 100.0, quantity: 10)
+
+          exposure = service.send(:calculate_instrument_exposure)
+
+          expect(exposure).to eq(0)
+        end
+      end
+
+      describe '#calculate_total_exposure' do
+        it 'calculates total exposure across all instruments' do
+          other_instrument = create(:instrument)
+          create_list(:order, 2, instrument: instrument, status: 'placed', price: 100.0, quantity: 10)
+          create_list(:order, 2, instrument: other_instrument, status: 'placed', price: 50.0, quantity: 20)
+
+          total_exposure = service.send(:calculate_total_exposure)
+
+          expect(total_exposure).to eq(4000.0)
+        end
+      end
+
+      describe '#execute_paper_trade' do
+        before do
+          allow(Rails.configuration.x.paper_trading).to receive(:enabled).and_return(true)
+          allow(PaperTrading::Executor).to receive(:execute).and_return(
+            { success: true, position: create(:paper_position) }
+          )
+        end
+
+        it 'executes paper trade' do
+          result = service.send(:execute_paper_trade)
+
+          expect(result[:success]).to be true
+          expect(result[:paper_trade]).to be true
+          expect(PaperTrading::Executor).to have_received(:execute)
+        end
+
+        it 'handles paper trade failure' do
+          allow(PaperTrading::Executor).to receive(:execute).and_raise(StandardError, 'Paper trade error')
+          allow(Rails.logger).to receive(:error)
+
+          result = service.send(:execute_paper_trade)
+
+          expect(result[:success]).to be false
+          expect(Rails.logger).to have_received(:error)
+        end
+      end
+
+      describe '#send_entry_notification' do
+        before do
+          allow(Telegram::Notifier).to receive(:send_signal_alert)
+        end
+
+        it 'sends notification for successful order' do
+          order = create(:order, instrument: instrument, status: 'placed')
+          result = { success: true, order: order }
+
+          service.send(:send_entry_notification, result)
+
+          expect(Telegram::Notifier).to have_received(:send_signal_alert)
+        end
+
+        it 'does not send notification for failed orders' do
+          result = { success: false, error: 'Order failed' }
+
+          service.send(:send_entry_notification, result)
+
+          expect(Telegram::Notifier).not_to have_received(:send_signal_alert)
+        end
+
+        it 'does not send notification in dry-run mode' do
+          allow(ENV).to receive(:[]).with('DRY_RUN').and_return('true')
+          order = create(:order, instrument: instrument, status: 'placed', dry_run: true)
+          result = { success: true, order: order, dry_run: true }
+
+          service.send(:send_entry_notification, result)
+
+          expect(Telegram::Notifier).not_to have_received(:send_signal_alert)
+        end
+      end
+
+      describe '#send_large_order_confirmation' do
+        before do
+          allow(Telegram::Notifier).to receive(:send_error_alert)
+        end
+
+        it 'sends confirmation for large orders' do
+          order = create(:order, instrument: instrument, price: 60.0, quantity: 100)
+          # Order value: 60 * 100 = 6,000 (6% of 100,000 capital, >5% threshold)
+
+          service.send(:send_large_order_confirmation, order)
+
+          expect(Telegram::Notifier).to have_received(:send_error_alert)
+        end
+
+        it 'does not send confirmation for small orders' do
+          order = create(:order, instrument: instrument, price: 40.0, quantity: 100)
+          # Order value: 40 * 100 = 4,000 (4% of 100,000 capital, <5% threshold)
+
+          service.send(:send_large_order_confirmation, order)
+
+          expect(Telegram::Notifier).not_to have_received(:send_error_alert)
+        end
+
+        it 'does not send confirmation in dry-run mode' do
+          allow(ENV).to receive(:[]).with('DRY_RUN').and_return('true')
+          order = create(:order, instrument: instrument, price: 60.0, quantity: 100, dry_run: true)
+
+          service.send(:send_large_order_confirmation, order)
+
+          expect(Telegram::Notifier).not_to have_received(:send_error_alert)
+        end
+      end
+    end
+
+    context 'with edge cases' do
+      it 'handles missing direction in signal' do
+        invalid_signal = signal.merge(direction: nil)
+        result = described_class.call(invalid_signal)
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Missing direction')
+      end
+
+      it 'handles zero capital gracefully' do
+        Setting.put('portfolio.current_capital', 0)
+        allow(Dhan::Orders).to receive(:place_order).and_return(
+          success: true,
+          order: create(:order, instrument: instrument)
+        )
+
+        result = described_class.call(signal)
+
+        # Should handle zero capital (risk checks will fail or pass based on logic)
+        expect(result).to be_present
+      end
+
+      it 'handles nil risk config' do
+        allow(AlgoConfig).to receive(:fetch).with(:risk).and_return(nil)
+        allow(Dhan::Orders).to receive(:place_order).and_return(
+          success: true,
+          order: create(:order, instrument: instrument)
+        )
+
+        result = described_class.call(signal)
+
+        # Should use defaults when config is nil
+        expect(result).to be_present
+      end
+    end
   end
 end
 

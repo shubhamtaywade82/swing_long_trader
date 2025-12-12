@@ -200,7 +200,7 @@ RSpec.describe Candles::DailyIngestor do
         ])
         allow(Rails.logger).to receive(:info)
 
-        result = described_class.call(instruments: instruments, days_back: 2)
+        described_class.call(instruments: instruments, days_back: 2)
 
         expect(Rails.logger).to have_received(:info).at_least(:once)
       end

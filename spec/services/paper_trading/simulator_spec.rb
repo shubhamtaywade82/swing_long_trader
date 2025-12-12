@@ -296,7 +296,7 @@ RSpec.describe PaperTrading::Simulator, type: :service do
 
       it 'decrements capital on loss' do
         initial_capital = portfolio.capital
-        entry_value = losing_position.entry_price * losing_position.quantity
+        _entry_value = losing_position.entry_price * losing_position.quantity
         expected_loss = (95.0 - 100.0) * losing_position.quantity
 
         described_class.new(portfolio: portfolio).check_exits
@@ -456,7 +456,7 @@ RSpec.describe PaperTrading::Simulator, type: :service do
           status: 'open')
 
         # Delete instrument to simulate missing instrument
-        instrument_id = position.instrument_id
+        _instrument_id = position.instrument_id
         instrument.destroy
 
         # Reload position to get nil instrument
@@ -525,7 +525,7 @@ RSpec.describe PaperTrading::Simulator, type: :service do
       end
 
       it 'handles error during exit check' do
-        position = create(:paper_position,
+        _position = create(:paper_position,
           paper_portfolio: portfolio,
           instrument: instrument,
           entry_price: 100.0,

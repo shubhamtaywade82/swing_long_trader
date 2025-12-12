@@ -254,5 +254,63 @@ RSpec.describe Order, type: :model do
       expect(order.dhan_response_hash).to eq({})
     end
   end
+
+  describe 'edge cases' do
+    it 'handles metadata with invalid JSON gracefully' do
+      order.update(metadata: 'invalid json')
+      expect(order.metadata_hash).to eq({})
+    end
+
+    it 'handles empty string metadata' do
+      order.update(metadata: '')
+      expect(order.metadata_hash).to eq({})
+    end
+
+    it 'handles dhan_response with empty string' do
+      order.update(dhan_response: '')
+      expect(order.dhan_response_hash).to eq({})
+    end
+
+    it 'handles total_value with zero quantity' do
+      order.price = 100.0
+      order.quantity = 0
+      expect(order.total_value).to eq(0)
+    end
+
+    it 'handles filled_value with zero filled_quantity' do
+      order.average_price = 105.0
+      order.filled_quantity = 0
+      expect(order.filled_value).to eq(0)
+    end
+
+    it 'handles requires_approval? when requires_approval is false' do
+      order.requires_approval = false
+      expect(order.requires_approval?).to be false
+    end
+
+    it 'handles approved? when approved_at is nil' do
+      order.approved_at = nil
+      expect(order.approved?).to be false
+    end
+
+    it 'handles rejected? when rejected_at is nil' do
+      order.rejected_at = nil
+      expect(order.rejected?).to be false
+    end
+
+    it 'handles approval_pending? when already approved' do
+      order.requires_approval = true
+      order.approved_at = Time.current
+      order.rejected_at = nil
+      expect(order.approval_pending?).to be false
+    end
+
+    it 'handles approval_pending? when already rejected' do
+      order.requires_approval = true
+      order.approved_at = nil
+      order.rejected_at = Time.current
+      expect(order.approval_pending?).to be false
+    end
+  end
 end
 

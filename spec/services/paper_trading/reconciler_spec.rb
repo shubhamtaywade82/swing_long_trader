@@ -193,7 +193,7 @@ RSpec.describe PaperTrading::Reconciler, type: :service do
       end
 
       it 'handles positions without candles' do
-        position = create(:paper_position,
+        _position = create(:paper_position,
           paper_portfolio: portfolio,
           instrument: instrument,
           entry_price: 100.0,
@@ -208,7 +208,7 @@ RSpec.describe PaperTrading::Reconciler, type: :service do
       end
 
       it 'handles positions with missing instruments' do
-        position = create(:paper_position,
+        _position = create(:paper_position,
           paper_portfolio: portfolio,
           instrument: instrument,
           entry_price: 100.0,
@@ -225,7 +225,7 @@ RSpec.describe PaperTrading::Reconciler, type: :service do
       end
 
       it 'calculates total P&L correctly' do
-        position = create(:paper_position,
+        _position = create(:paper_position,
           paper_portfolio: portfolio,
           instrument: instrument,
           entry_price: 100.0,
@@ -247,7 +247,7 @@ RSpec.describe PaperTrading::Reconciler, type: :service do
       end
 
       it 'handles negative unrealized P&L' do
-        position = create(:paper_position,
+        _position = create(:paper_position,
           paper_portfolio: portfolio,
           instrument: instrument,
           entry_price: 100.0,

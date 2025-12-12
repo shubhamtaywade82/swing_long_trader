@@ -232,6 +232,217 @@ RSpec.describe Screeners::FinalSelector do
         expect(result[:summary][:timestamp]).to be_a(Time)
       end
     end
+
+    context 'with edge cases' do
+      it 'handles zero limit' do
+        result = described_class.call(
+          swing_candidates: swing_candidates,
+          swing_limit: 0
+        )
+
+        expect(result[:swing]).to be_empty
+      end
+
+      it 'handles limit larger than candidates' do
+        result = described_class.call(
+          swing_candidates: swing_candidates,
+          swing_limit: 100
+        )
+
+        expect(result[:swing].size).to eq(3)
+      end
+
+      it 'handles negative scores' do
+        candidates_with_negative = [
+          { symbol: 'STOCK1', score: -10.0, ai_score: -5.0 }
+        ]
+
+        result = described_class.call(
+          swing_candidates: candidates_with_negative,
+          swing_limit: 1
+        )
+
+        expect(result[:swing].first[:combined_score]).to be < 0
+      end
+
+      it 'handles very large scores' do
+        candidates_with_large = [
+          { symbol: 'STOCK1', score: 1000.0, ai_score: 900.0 }
+        ]
+
+        result = described_class.call(
+          swing_candidates: candidates_with_large,
+          swing_limit: 1
+        )
+
+        expect(result[:swing].first[:combined_score]).to be > 0
+      end
+
+      it 'handles candidates with same combined score' do
+        candidates_same_score = [
+          { symbol: 'STOCK1', score: 85.0, ai_score: 80.0 },
+          { symbol: 'STOCK2', score: 85.0, ai_score: 80.0 }
+        ]
+
+        result = described_class.call(
+          swing_candidates: candidates_same_score,
+          swing_limit: 2
+        )
+
+        expect(result[:swing].size).to eq(2)
+        expect(result[:swing].first[:combined_score]).to eq(result[:swing].last[:combined_score])
+      end
+
+      it 'handles empty longterm candidates' do
+        result = described_class.call(
+          swing_candidates: swing_candidates,
+          longterm_candidates: []
+        )
+
+        expect(result[:longterm]).to be_empty
+        expect(result[:summary][:longterm_count]).to eq(0)
+        expect(result[:summary][:longterm_selected]).to eq(0)
+      end
+
+      it 'handles empty swing candidates' do
+        result = described_class.call(
+          swing_candidates: [],
+          longterm_candidates: longterm_candidates
+        )
+
+        expect(result[:swing]).to be_empty
+        expect(result[:summary][:swing_count]).to eq(0)
+        expect(result[:summary][:swing_selected]).to eq(0)
+      end
+
+      it 'handles candidates with zero AI score' do
+        candidates_zero_ai = [
+          { symbol: 'STOCK1', score: 85.0, ai_score: 0.0 }
+        ]
+
+        result = described_class.call(
+          swing_candidates: candidates_zero_ai,
+          swing_limit: 1
+        )
+
+        candidate = result[:swing].first
+        expected_score = (85.0 * 0.6) + (0.0 * 0.4)
+        expect(candidate[:combined_score]).to eq(expected_score.round(2))
+      end
+
+      it 'handles longterm candidates with zero AI score' do
+        longterm_zero_ai = [
+          { symbol: 'STOCK4', score: 90.0, ai_score: 0.0 }
+        ]
+
+        result = described_class.call(
+          longterm_candidates: longterm_zero_ai,
+          longterm_limit: 1
+        )
+
+        # Should use only screener score when AI score is 0
+        expect(result[:longterm].first[:combined_score]).to eq(90.0)
+      end
+    end
+
+    describe 'private methods' do
+      let(:selector) { described_class.new(swing_candidates: swing_candidates) }
+
+      describe '#select_swing_candidates' do
+        it 'combines scores with 60% screener and 40% AI' do
+          candidates = [
+            { symbol: 'STOCK1', score: 100.0, ai_score: 80.0 }
+          ]
+
+          selector = described_class.new(swing_candidates: candidates, swing_limit: 1)
+          selected = selector.send(:select_swing_candidates)
+
+          expected = (100.0 * 0.6) + (80.0 * 0.4)
+          expect(selected.first[:combined_score]).to eq(expected.round(2))
+        end
+
+        it 'handles candidates without score field' do
+          candidates = [
+            { symbol: 'STOCK1', ai_score: 80.0 }
+          ]
+
+          selector = described_class.new(swing_candidates: candidates, swing_limit: 1)
+          selected = selector.send(:select_swing_candidates)
+
+          expected = (0.0 * 0.6) + (80.0 * 0.4)
+          expect(selected.first[:combined_score]).to eq(expected.round(2))
+        end
+      end
+
+      describe '#select_longterm_candidates' do
+        it 'uses 70% screener and 30% AI when AI score available' do
+          candidates = [
+            { symbol: 'STOCK4', score: 100.0, ai_score: 80.0 }
+          ]
+
+          selector = described_class.new(longterm_candidates: candidates, longterm_limit: 1)
+          selected = selector.send(:select_longterm_candidates)
+
+          expected = (100.0 * 0.7) + (80.0 * 0.3)
+          expect(selected.first[:combined_score]).to eq(expected.round(2))
+        end
+
+        it 'uses only screener score when AI score is zero' do
+          candidates = [
+            { symbol: 'STOCK4', score: 100.0, ai_score: 0.0 }
+          ]
+
+          selector = described_class.new(longterm_candidates: candidates, longterm_limit: 1)
+          selected = selector.send(:select_longterm_candidates)
+
+          expect(selected.first[:combined_score]).to eq(100.0)
+        end
+
+        it 'uses only screener score when AI score is missing' do
+          candidates = [
+            { symbol: 'STOCK4', score: 100.0 }
+          ]
+
+          selector = described_class.new(longterm_candidates: candidates, longterm_limit: 1)
+          selected = selector.send(:select_longterm_candidates)
+
+          expect(selected.first[:combined_score]).to eq(100.0)
+        end
+      end
+
+      describe '#build_summary' do
+        it 'builds summary with correct counts' do
+          selector = described_class.new(
+            swing_candidates: swing_candidates,
+            longterm_candidates: longterm_candidates,
+            swing_limit: 2,
+            longterm_limit: 1
+          )
+
+          summary = selector.send(:build_summary)
+
+          expect(summary[:swing_count]).to eq(3)
+          expect(summary[:swing_selected]).to eq(2)
+          expect(summary[:longterm_count]).to eq(2)
+          expect(summary[:longterm_selected]).to eq(1)
+          expect(summary[:timestamp]).to be_a(Time)
+        end
+
+        it 'handles empty candidates in summary' do
+          selector = described_class.new(
+            swing_candidates: [],
+            longterm_candidates: []
+          )
+
+          summary = selector.send(:build_summary)
+
+          expect(summary[:swing_count]).to eq(0)
+          expect(summary[:swing_selected]).to eq(0)
+          expect(summary[:longterm_count]).to eq(0)
+          expect(summary[:longterm_selected]).to eq(0)
+        end
+      end
+    end
   end
 end
 

@@ -180,7 +180,7 @@ RSpec.describe Screeners::SwingScreener do
         allow(Indicators::Supertrend).to receive(:new).and_raise(StandardError, 'Supertrend error')
         allow(Rails.logger).to receive(:warn)
 
-        result = screener.send(:analyze_instrument, instrument)
+        _result = screener.send(:analyze_instrument, instrument)
         # Should still return result even if supertrend fails
         expect(Rails.logger).to have_received(:warn)
       end

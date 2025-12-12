@@ -698,6 +698,330 @@ RSpec.describe Backtesting::SwingBacktester, type: :service do
         expect(result[:success]).to be true
       end
     end
+
+    describe 'private methods' do
+      let(:instrument) { create(:instrument) }
+      let(:from_date) { 100.days.ago.to_date }
+      let(:to_date) { Date.today }
+      let(:backtester) do
+        described_class.new(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: from_date,
+          to_date: to_date
+        )
+      end
+
+      before do
+        create_list(:candle_series_record, 100,
+          instrument: instrument,
+          timeframe: '1D',
+          timestamp: (99.days.ago..Time.current).step(1.day).to_a)
+      end
+
+      describe '#process_date' do
+        it 'processes date and checks for entry signals' do
+          data = {
+            instrument.id => CandleSeries.new(symbol: instrument.symbol_name, interval: '1D').tap do |cs|
+              100.times { |i| cs.add_candle(create(:candle, timestamp: i.days.ago)) }
+            end
+          }
+
+          allow(Strategies::Swing::Engine).to receive(:call).and_return(
+            {
+              success: true,
+              signal: {
+                instrument_id: instrument.id,
+                direction: :long,
+                entry_price: 100.0,
+                sl: 95.0,
+                tp: 110.0,
+                qty: 100
+              }
+            }
+          )
+
+          backtester.send(:process_date, Date.today, data)
+
+          expect(Strategies::Swing::Engine).to have_received(:call)
+        end
+
+        it 'skips instruments with existing positions' do
+          data = {
+            instrument.id => CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+          }
+          backtester.instance_variable_set(:@portfolio, double('Portfolio', positions: { instrument.id => double('Position') }))
+
+          backtester.send(:process_date, Date.today, data)
+
+          expect(Strategies::Swing::Engine).not_to have_received(:call)
+        end
+
+        it 'skips instruments with insufficient candles' do
+          data = {
+            instrument.id => CandleSeries.new(symbol: instrument.symbol_name, interval: '1D').tap do |cs|
+              30.times { |i| cs.add_candle(create(:candle, timestamp: i.days.ago)) }
+            end
+          }
+
+          backtester.send(:process_date, Date.today, data)
+
+          expect(Strategies::Swing::Engine).not_to have_received(:call)
+        end
+      end
+
+      describe '#check_entry_signal' do
+        it 'returns signal when engine succeeds' do
+          series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+          series.add_candle(create(:candle, timestamp: Date.today))
+
+          allow(Strategies::Swing::Engine).to receive(:call).and_return(
+            {
+              success: true,
+              signal: {
+                instrument_id: instrument.id,
+                direction: :long,
+                entry_price: 100.0,
+                qty: 100
+              }
+            }
+          )
+
+          signal = backtester.send(:check_entry_signal, instrument, series, Date.today)
+
+          expect(signal).to be_present
+        end
+
+        it 'returns nil when engine fails' do
+          series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+          series.add_candle(create(:candle, timestamp: Date.today))
+
+          allow(Strategies::Swing::Engine).to receive(:call).and_return(
+            { success: false, error: 'No signal' }
+          )
+
+          signal = backtester.send(:check_entry_signal, instrument, series, Date.today)
+
+          expect(signal).to be_nil
+        end
+
+        it 'returns nil when signal date mismatch' do
+          series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+          series.add_candle(create(:candle, timestamp: 1.day.ago)) # Different date
+
+          allow(Strategies::Swing::Engine).to receive(:call).and_return(
+            {
+              success: true,
+              signal: {
+                instrument_id: instrument.id,
+                direction: :long,
+                entry_price: 100.0,
+                qty: 100
+              }
+            }
+          )
+
+          signal = backtester.send(:check_entry_signal, instrument, series, Date.today)
+
+          expect(signal).to be_nil
+        end
+
+        it 'handles nil latest candle' do
+          series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+
+          signal = backtester.send(:check_entry_signal, instrument, series, Date.today)
+
+          expect(signal).to be_nil
+        end
+      end
+
+      describe '#open_position' do
+        it 'opens position successfully' do
+          signal = {
+            entry_price: 100.0,
+            qty: 100,
+            direction: :long,
+            sl: 95.0,
+            tp: 110.0
+          }
+
+          portfolio = double('Portfolio')
+          position = double('Position')
+          allow(portfolio).to receive(:open_position).and_return(true)
+          allow(portfolio).to receive(:positions).and_return({ instrument.id => position })
+          backtester.instance_variable_set(:@portfolio, portfolio)
+          backtester.instance_variable_set(:@positions, [])
+
+          backtester.send(:open_position, instrument, signal, Date.today)
+
+          expect(portfolio).to have_received(:open_position)
+        end
+
+        it 'skips adding position when open fails' do
+          signal = {
+            entry_price: 100.0,
+            qty: 100,
+            direction: :long,
+            sl: 95.0,
+            tp: 110.0
+          }
+
+          portfolio = double('Portfolio')
+          allow(portfolio).to receive(:open_position).and_return(false)
+          backtester.instance_variable_set(:@portfolio, portfolio)
+          backtester.instance_variable_set(:@positions, [])
+
+          backtester.send(:open_position, instrument, signal, Date.today)
+
+          expect(backtester.instance_variable_get(:@positions)).to be_empty
+        end
+      end
+
+      describe '#check_exits' do
+        it 'checks exits for open positions' do
+          position = double('Position', closed?: false)
+          position_data = { exit_price: 110.0, exit_reason: 'tp_hit' }
+          allow(position).to receive(:check_exit).and_return(position_data)
+
+          series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+          series.add_candle(create(:candle, timestamp: Date.today, close: 110.0))
+
+          data = { instrument.id => series }
+          portfolio = double('Portfolio', positions: { instrument.id => position })
+          allow(portfolio).to receive(:close_position)
+          backtester.instance_variable_set(:@portfolio, portfolio)
+
+          backtester.send(:check_exits, Date.today, data)
+
+          expect(portfolio).to have_received(:close_position)
+        end
+
+        it 'skips closed positions' do
+          position = double('Position', closed?: true)
+
+          data = { instrument.id => CandleSeries.new(symbol: instrument.symbol_name, interval: '1D') }
+          portfolio = double('Portfolio', positions: { instrument.id => position })
+          backtester.instance_variable_set(:@portfolio, portfolio)
+
+          backtester.send(:check_exits, Date.today, data)
+
+          expect(position).not_to have_received(:check_exit)
+        end
+
+        it 'skips positions without series data' do
+          position = double('Position', closed?: false)
+
+          data = {}
+          portfolio = double('Portfolio', positions: { instrument.id => position })
+          backtester.instance_variable_set(:@portfolio, portfolio)
+
+          backtester.send(:check_exits, Date.today, data)
+
+          expect(position).not_to have_received(:check_exit)
+        end
+
+        it 'skips positions without candle for date' do
+          position = double('Position', closed?: false)
+
+          series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+          # No candle for today
+
+          data = { instrument.id => series }
+          portfolio = double('Portfolio', positions: { instrument.id => position })
+          backtester.instance_variable_set(:@portfolio, portfolio)
+
+          backtester.send(:check_exits, Date.today, data)
+
+          expect(position).not_to have_received(:check_exit)
+        end
+
+        it 'skips positions when exit check returns nil' do
+          position = double('Position', closed?: false)
+          allow(position).to receive(:check_exit).and_return(nil)
+
+          series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+          series.add_candle(create(:candle, timestamp: Date.today, close: 100.0))
+
+          data = { instrument.id => series }
+          portfolio = double('Portfolio', positions: { instrument.id => position })
+          backtester.instance_variable_set(:@portfolio, portfolio)
+
+          backtester.send(:check_exits, Date.today, data)
+
+          expect(portfolio).not_to have_received(:close_position)
+        end
+      end
+
+      describe '#close_all_positions' do
+        it 'closes all open positions' do
+          position = double('Position', closed?: false, entry_price: 100.0)
+
+          series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+          series.add_candle(create(:candle, timestamp: Date.today, close: 105.0))
+
+          data = { instrument.id => series }
+          portfolio = double('Portfolio', positions: { instrument.id => position })
+          allow(portfolio).to receive(:close_position)
+          backtester.instance_variable_set(:@portfolio, portfolio)
+
+          backtester.send(:close_all_positions, Date.today, data)
+
+          expect(portfolio).to have_received(:close_position).with(
+            instrument_id: instrument.id,
+            exit_date: Date.today,
+            exit_price: 105.0,
+            exit_reason: 'end_of_backtest'
+          )
+        end
+
+        it 'uses entry price when no series data' do
+          position = double('Position', closed?: false, entry_price: 100.0)
+
+          data = {}
+          portfolio = double('Portfolio', positions: { instrument.id => position })
+          allow(portfolio).to receive(:close_position)
+          backtester.instance_variable_set(:@portfolio, portfolio)
+
+          backtester.send(:close_all_positions, Date.today, data)
+
+          expect(portfolio).to have_received(:close_position).with(
+            instrument_id: instrument.id,
+            exit_date: Date.today,
+            exit_price: 100.0,
+            exit_reason: 'end_of_backtest'
+          )
+        end
+
+        it 'skips closed positions' do
+          position = double('Position', closed?: true)
+
+          data = { instrument.id => CandleSeries.new(symbol: instrument.symbol_name, interval: '1D') }
+          portfolio = double('Portfolio', positions: { instrument.id => position })
+          backtester.instance_variable_set(:@portfolio, portfolio)
+
+          backtester.send(:close_all_positions, Date.today, data)
+
+          expect(portfolio).not_to have_received(:close_position)
+        end
+
+        it 'handles nil series' do
+          position = double('Position', closed?: false, entry_price: 100.0)
+
+          data = { instrument.id => nil }
+          portfolio = double('Portfolio', positions: { instrument.id => position })
+          allow(portfolio).to receive(:close_position)
+          backtester.instance_variable_set(:@portfolio, portfolio)
+
+          backtester.send(:close_all_positions, Date.today, data)
+
+          expect(portfolio).to have_received(:close_position).with(
+            instrument_id: instrument.id,
+            exit_date: Date.today,
+            exit_price: 100.0,
+            exit_reason: 'end_of_backtest'
+          )
+        end
+      end
+    end
   end
 end
 

@@ -250,7 +250,7 @@ RSpec.describe PaperTrading::Position, type: :service do
     end
 
     it 'creates ledger with correct meta information' do
-      position = described_class.create(
+      described_class.create(
         portfolio: portfolio,
         instrument: instrument,
         signal: signal
