@@ -73,10 +73,53 @@ RSpec.describe NotifierJob, type: :job do
 
     it 'handles exceptions without raising' do
       allow(Telegram::Notifier).to receive(:send_daily_candidates).and_raise(StandardError.new('API error'))
+      allow(Rails.logger).to receive(:error)
 
       expect do
         described_class.new.perform(:daily_candidates, { candidates: [] })
       end.not_to raise_error
+
+      expect(Rails.logger).to have_received(:error).with(/Failed: API error/)
+    end
+
+    it 'handles exit_alert with correct parameters' do
+      payload = {
+        exit_info: {
+          signal: { symbol: 'RELIANCE' },
+          exit_reason: 'tp_hit',
+          exit_price: 110.0,
+          pnl: 1000.0
+        }
+      }
+      allow(Telegram::Notifier).to receive(:send_exit_alert)
+
+      described_class.new.perform(:exit_alert, payload)
+
+      expect(Telegram::Notifier).to have_received(:send_exit_alert)
+    end
+
+    it 'handles message notification type' do
+      allow_any_instance_of(Telegram::Notifier).to receive(:send_message)
+
+      described_class.new.perform(:message, { message: 'Test message' })
+
+      expect_any_instance_of(Telegram::Notifier).to have_received(:send_message).with('Test message')
+    end
+
+    it 'handles missing message in payload' do
+      allow_any_instance_of(Telegram::Notifier).to receive(:send_message)
+
+      described_class.new.perform(:message, {})
+
+      expect_any_instance_of(Telegram::Notifier).to have_received(:send_message).with('')
+    end
+
+    it 'logs warning for unknown notification type' do
+      allow(Rails.logger).to receive(:warn)
+
+      described_class.new.perform(:unknown_type, {})
+
+      expect(Rails.logger).to have_received(:warn).with(/Unknown notification type: unknown_type/)
     end
   end
 end

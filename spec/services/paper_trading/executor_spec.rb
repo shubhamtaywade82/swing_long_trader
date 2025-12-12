@@ -190,6 +190,105 @@ RSpec.describe PaperTrading::Executor, type: :service do
         expect(result[:error]).to eq('Database error')
       end
     end
+
+    context 'when notification sending fails' do
+      before do
+        allow(PaperTrading::RiskManager).to receive(:check_limits).and_return({ success: true })
+        allow(PaperTrading::Position).to receive(:create).and_return(
+          create(:paper_position, paper_portfolio: portfolio, instrument: instrument)
+        )
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(true)
+        allow(Telegram::Notifier).to receive(:send_error_alert).and_raise(StandardError, 'Telegram error')
+      end
+
+      it 'still returns success' do
+        result = described_class.new(signal: signal, portfolio: portfolio).execute
+
+        expect(result[:success]).to be true
+        expect(result[:position]).to be_present
+      end
+    end
+
+    context 'when signal has optional fields' do
+      let(:signal_with_optional) do
+        {
+          instrument_id: instrument.id,
+          direction: 'long',
+          entry_price: 100.0,
+          qty: 10,
+          sl: 95.0,
+          tp: 110.0,
+          metadata: { test: 'value' }
+        }
+      end
+
+      before do
+        allow(PaperTrading::RiskManager).to receive(:check_limits).and_return({ success: true })
+        allow(PaperTrading::Position).to receive(:create).and_return(
+          create(:paper_position, paper_portfolio: portfolio, instrument: instrument)
+        )
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+      end
+
+      it 'handles signal with optional fields' do
+        result = described_class.new(signal: signal_with_optional, portfolio: portfolio).execute
+
+        expect(result[:success]).to be true
+      end
+    end
+  end
+
+  describe '#send_entry_notification' do
+    let(:position) { create(:paper_position, paper_portfolio: portfolio, instrument: instrument) }
+
+    context 'when Telegram is enabled' do
+      before do
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(true)
+        allow(Telegram::Notifier).to receive(:send_error_alert)
+      end
+
+      it 'sends notification with all signal details' do
+        executor = described_class.new(signal: signal, portfolio: portfolio)
+        executor.send(:send_entry_notification, position)
+
+        expect(Telegram::Notifier).to have_received(:send_error_alert).with(
+          a_string_including(instrument.symbol_name),
+          context: 'Paper Trade Entry'
+        )
+      end
+
+      it 'handles signal without SL' do
+        signal_no_sl = signal.dup
+        signal_no_sl.delete(:sl)
+        executor = described_class.new(signal: signal_no_sl, portfolio: portfolio)
+        executor.send(:send_entry_notification, position)
+
+        expect(Telegram::Notifier).to have_received(:send_error_alert)
+      end
+
+      it 'handles signal without TP' do
+        signal_no_tp = signal.dup
+        signal_no_tp.delete(:tp)
+        executor = described_class.new(signal: signal_no_tp, portfolio: portfolio)
+        executor.send(:send_entry_notification, position)
+
+        expect(Telegram::Notifier).to have_received(:send_error_alert)
+      end
+    end
+
+    context 'when Telegram is disabled' do
+      before do
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+        allow(Telegram::Notifier).to receive(:send_error_alert)
+      end
+
+      it 'does not send notification' do
+        executor = described_class.new(signal: signal, portfolio: portfolio)
+        executor.send(:send_entry_notification, position)
+
+        expect(Telegram::Notifier).not_to have_received(:send_error_alert)
+      end
+    end
   end
 end
 

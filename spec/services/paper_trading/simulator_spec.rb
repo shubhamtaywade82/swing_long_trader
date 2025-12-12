@@ -211,6 +211,137 @@ RSpec.describe PaperTrading::Simulator, type: :service do
         end.to raise_error(StandardError, 'Database error')
       end
     end
+
+    context 'with short positions' do
+      let(:short_position) do
+        create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          direction: 'short',
+          entry_price: 100.0,
+          current_price: 100.0,
+          sl: 105.0,
+          tp: 95.0,
+          status: 'open')
+      end
+
+      before do
+        short_position
+        allow(short_position).to receive(:update_current_price!)
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+      end
+
+      it 'exits short position when SL hit (price goes up)' do
+        short_position.update(current_price: 106.0)
+        allow(short_position).to receive(:check_sl_hit?).and_return(true)
+        allow(short_position).to receive(:check_tp_hit?).and_return(false)
+
+        described_class.new(portfolio: portfolio).check_exits
+
+        short_position.reload
+        expect(short_position.status).to eq('closed')
+        expect(short_position.exit_reason).to eq('sl_hit')
+        expect(short_position.pnl).to be < 0 # Loss on short when price goes up
+      end
+
+      it 'exits short position when TP hit (price goes down)' do
+        short_position.update(current_price: 94.0)
+        allow(short_position).to receive(:check_sl_hit?).and_return(false)
+        allow(short_position).to receive(:check_tp_hit?).and_return(true)
+
+        described_class.new(portfolio: portfolio).check_exits
+
+        short_position.reload
+        expect(short_position.status).to eq('closed')
+        expect(short_position.exit_reason).to eq('tp_hit')
+        expect(short_position.pnl).to be > 0 # Profit on short when price goes down
+      end
+
+      it 'calculates loss correctly for short position' do
+        short_position.update(current_price: 106.0)
+        allow(short_position).to receive(:check_sl_hit?).and_return(true)
+        allow(short_position).to receive(:check_tp_hit?).and_return(false)
+
+        described_class.new(portfolio: portfolio).check_exits
+
+        short_position.reload
+        expected_pnl = (100.0 - 105.0) * short_position.quantity # Entry - Exit for short
+        expect(short_position.pnl).to eq(expected_pnl)
+        expect(short_position.pnl_pct).to be < 0
+      end
+    end
+
+    context 'with loss scenarios' do
+      let(:losing_position) do
+        create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          entry_price: 100.0,
+          current_price: 100.0,
+          sl: 95.0,
+          status: 'open')
+      end
+
+      before do
+        losing_position
+        create(:candle_series_record,
+          instrument: instrument,
+          timeframe: '1D',
+          close: 94.0,
+          timestamp: Time.current)
+        allow(losing_position).to receive(:check_sl_hit?).and_return(true)
+        allow(losing_position).to receive(:update_current_price!)
+        allow(Telegram::Notifier).to receive(:enabled?).and_return(false)
+      end
+
+      it 'decrements capital on loss' do
+        initial_capital = portfolio.capital
+        entry_value = losing_position.entry_price * losing_position.quantity
+        expected_loss = (95.0 - 100.0) * losing_position.quantity
+
+        described_class.new(portfolio: portfolio).check_exits
+
+        portfolio.reload
+        expect(portfolio.capital).to eq(initial_capital - expected_loss.abs)
+      end
+
+      it 'creates debit ledger entry for loss' do
+        expect do
+          described_class.new(portfolio: portfolio).check_exits
+        end.to change(PaperLedger, :count).by(1)
+
+        ledger = PaperLedger.last
+        expect(ledger.transaction_type).to eq('debit')
+        expect(ledger.reason).to eq('loss')
+      end
+    end
+
+    context 'when no candle available for price update' do
+      let(:position) do
+        create(:paper_position,
+          paper_portfolio: portfolio,
+          instrument: instrument,
+          entry_price: 100.0,
+          current_price: 100.0,
+          status: 'open')
+      end
+
+      before do
+        position
+        # No candles created
+        allow(position).to receive(:check_sl_hit?).and_return(false)
+        allow(position).to receive(:check_tp_hit?).and_return(false)
+        allow(position).to receive(:days_held).and_return(5)
+        allow(AlgoConfig).to receive(:fetch).and_return(20)
+      end
+
+      it 'skips price update but still checks exit conditions' do
+        result = described_class.new(portfolio: portfolio).check_exits
+
+        expect(result[:checked]).to eq(1)
+        expect(result[:exited]).to eq(0)
+      end
+    end
   end
 end
 

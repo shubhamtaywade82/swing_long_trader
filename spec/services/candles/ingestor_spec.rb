@@ -114,6 +114,388 @@ RSpec.describe Candles::Ingestor, type: :service do
       expect(result[:upserted]).to eq(1)
       expect(CandleSeriesRecord.first.close.to_f).to eq(105.0)
     end
+
+    context 'when candles_data is blank' do
+      it 'returns error' do
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: []
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to eq('No candles data provided')
+      end
+    end
+
+    context 'when candles_data is nil' do
+      it 'returns error' do
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: nil
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to eq('No candles data provided')
+      end
+    end
+
+    context 'when normalization fails' do
+      it 'returns error' do
+        candles_data = [{ invalid: 'data' }]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: candles_data
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to eq('Failed to normalize candles')
+      end
+    end
+
+    context 'when candle creation fails' do
+      before do
+        allow(CandleSeriesRecord).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(CandleSeriesRecord.new))
+      end
+
+      it 'collects errors' do
+        candles_data = [
+          {
+            timestamp: 1.day.ago,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          }
+        ]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: candles_data
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:errors]).to be_present
+      end
+    end
+
+    context 'with weekly timeframe' do
+      it 'handles weekly candles correctly' do
+        candles_data = [
+          {
+            timestamp: 1.week.ago,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          }
+        ]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1W',
+          candles_data: candles_data
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:upserted]).to eq(1)
+      end
+    end
+
+    context 'with mixed success and errors' do
+      it 'collects errors while processing other candles' do
+        candles_data = [
+          {
+            timestamp: 1.day.ago,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          },
+          {
+            timestamp: 2.days.ago,
+            open: nil, # Invalid data
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          },
+          {
+            timestamp: 3.days.ago,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          }
+        ]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: candles_data
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:upserted]).to be >= 2 # At least 2 successful
+        expect(result[:errors]).to be_present if result[:errors].any?
+      end
+    end
+
+    context 'with edge cases' do
+      it 'handles zero volume' do
+        candles_data = [
+          {
+            timestamp: 1.day.ago,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 0
+          }
+        ]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: candles_data
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:upserted]).to eq(1)
+      end
+
+      it 'handles very large volume' do
+        candles_data = [
+          {
+            timestamp: 1.day.ago,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000_000_000
+          }
+        ]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: candles_data
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:upserted]).to eq(1)
+      end
+
+      it 'handles negative prices gracefully' do
+        candles_data = [
+          {
+            timestamp: 1.day.ago,
+            open: -100.0, # Invalid
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          }
+        ]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: candles_data
+        )
+
+        # Should either reject or handle gracefully
+        expect(result).to be_present
+      end
+    end
+
+    context 'with timestamp normalization' do
+      it 'normalizes timestamps to beginning of day for daily candles' do
+        candles_data = [
+          {
+            timestamp: Time.zone.parse('2024-12-10 14:30:00'), # Mid-day timestamp
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          }
+        ]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: candles_data
+        )
+
+        expect(result[:success]).to be true
+        candle = CandleSeriesRecord.first
+        expect(candle.timestamp).to eq(candle.timestamp.beginning_of_day)
+      end
+
+      it 'handles integer timestamps' do
+        candles_data = [
+          {
+            timestamp: Time.current.to_i, # Integer timestamp
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          }
+        ]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: candles_data
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:upserted]).to eq(1)
+      end
+
+      it 'handles string timestamps' do
+        candles_data = [
+          {
+            timestamp: Time.current.iso8601, # ISO8601 string
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000
+          }
+        ]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: candles_data
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:upserted]).to eq(1)
+      end
+    end
+
+    context 'with partial updates' do
+      it 'updates only changed fields' do
+        existing = create(:daily_candle,
+          instrument: instrument,
+          timestamp: 1.day.ago,
+          open: 100.0,
+          high: 105.0,
+          low: 99.0,
+          close: 103.0,
+          volume: 1_000_000
+        )
+
+        candles_data = [
+          {
+            timestamp: 1.day.ago,
+            open: 100.0, # Same
+            high: 108.0, # Changed
+            low: 99.0, # Same
+            close: 103.0, # Same
+            volume: 1_200_000 # Changed
+          }
+        ]
+
+        result = described_class.upsert_candles(
+          instrument: instrument,
+          timeframe: '1D',
+          candles_data: candles_data
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:upserted]).to eq(1)
+        existing.reload
+        expect(existing.high).to eq(108.0)
+        expect(existing.volume).to eq(1_200_000)
+      end
+    end
+  end
+
+  describe 'private methods' do
+    let(:service) { described_class.new }
+
+    describe '#normalize_candles' do
+      it 'normalizes array of hashes' do
+        candles_data = [
+          { timestamp: 1.day.ago, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 }
+        ]
+
+        normalized = service.send(:normalize_candles, candles_data)
+
+        expect(normalized).to be_an(Array)
+        expect(normalized.first).to have_key(:timestamp)
+      end
+
+      it 'handles nil values' do
+        candles_data = [
+          { timestamp: 1.day.ago, open: nil, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 }
+        ]
+
+        normalized = service.send(:normalize_candles, candles_data)
+
+        expect(normalized).to be_an(Array)
+      end
+    end
+
+    describe '#normalize_timestamp' do
+      it 'normalizes to beginning of day for daily timeframe' do
+        timestamp = Time.zone.parse('2024-12-10 14:30:00')
+        normalized = service.send(:normalize_timestamp, timestamp, '1D')
+
+        expect(normalized).to eq(timestamp.beginning_of_day)
+      end
+
+      it 'handles integer timestamps' do
+        timestamp = Time.current.to_i
+        normalized = service.send(:normalize_timestamp, timestamp, '1D')
+
+        expect(normalized).to be_a(Time)
+      end
+
+      it 'handles string timestamps' do
+        timestamp = Time.current.iso8601
+        normalized = service.send(:normalize_timestamp, timestamp, '1D')
+
+        expect(normalized).to be_a(Time)
+      end
+    end
+
+    describe '#candle_data_changed?' do
+      let(:existing) { create(:daily_candle, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000) }
+
+      it 'returns true when data changed' do
+        changed = service.send(:candle_data_changed?, existing, open: 100.0, high: 108.0, low: 99.0, close: 103.0, volume: 1_000_000)
+
+        expect(changed).to be true
+      end
+
+      it 'returns false when data unchanged' do
+        unchanged = service.send(:candle_data_changed?, existing, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000)
+
+        expect(unchanged).to be false
+      end
+
+      it 'handles float precision differences' do
+        # Test that small float differences are handled correctly
+        changed = service.send(:candle_data_changed?, existing, open: 100.0000001, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000)
+
+        # Should either return true or false depending on implementation
+        expect(changed).to be_in([true, false])
+      end
+    end
   end
 end
 

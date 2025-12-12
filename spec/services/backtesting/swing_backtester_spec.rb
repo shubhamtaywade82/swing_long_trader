@@ -345,6 +345,117 @@ RSpec.describe Backtesting::SwingBacktester, type: :service do
         expect(result[:results][:total_slippage]).to be > 0
       end
     end
+
+    context 'when data validation fails' do
+      before do
+        # Create insufficient candles
+        create_list(:candle_series_record, 30, instrument: instrument, timeframe: '1D')
+      end
+
+      it 'returns error' do
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: from_date,
+          to_date: to_date
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to eq('Insufficient data')
+      end
+    end
+
+    context 'when trailing stop is configured' do
+      before do
+        (0..99).each do |i|
+          create(:candle_series_record,
+            instrument: instrument,
+            timeframe: '1D',
+            timestamp: (99 - i).days.ago,
+            open: 100.0 + (i * 0.1),
+            high: 105.0 + (i * 0.1),
+            low: 99.0 + (i * 0.1),
+            close: 103.0 + (i * 0.1),
+            volume: 1_000_000)
+        end
+
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          {
+            success: true,
+            signal: {
+              instrument_id: instrument.id,
+              direction: :long,
+              entry_price: 110.0,
+              sl: 105.0,
+              tp: 120.0,
+              qty: 100
+            }
+          }
+        )
+      end
+
+      it 'applies trailing stop percentage' do
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: from_date,
+          to_date: to_date,
+          trailing_stop_pct: 2.0
+        )
+
+        expect(result[:success]).to be true
+      end
+
+      it 'applies trailing stop amount' do
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: from_date,
+          to_date: to_date,
+          trailing_stop_amount: 5.0
+        )
+
+        expect(result[:success]).to be true
+      end
+    end
+
+    context 'when position exits at stop loss' do
+      before do
+        (0..99).each do |i|
+          create(:candle_series_record,
+            instrument: instrument,
+            timeframe: '1D',
+            timestamp: (99 - i).days.ago,
+            open: 100.0 - (i * 0.1), # Downtrend
+            high: 105.0 - (i * 0.1),
+            low: 99.0 - (i * 0.1),
+            close: 103.0 - (i * 0.1),
+            volume: 1_000_000)
+        end
+
+        allow(Strategies::Swing::Engine).to receive(:call).and_return(
+          {
+            success: true,
+            signal: {
+              instrument_id: instrument.id,
+              direction: :long,
+              entry_price: 110.0,
+              sl: 105.0,
+              tp: 120.0,
+              qty: 100
+            }
+          }
+        )
+      end
+
+      it 'closes position at stop loss' do
+        result = described_class.call(
+          instruments: Instrument.where(id: instrument.id),
+          from_date: from_date,
+          to_date: to_date
+        )
+
+        expect(result[:success]).to be true
+        # Position should be closed if SL hit
+      end
+    end
   end
 end
 

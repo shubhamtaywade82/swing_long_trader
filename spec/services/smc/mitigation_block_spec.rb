@@ -119,6 +119,90 @@ RSpec.describe Smc::MitigationBlock do
         expect(result).to be_an(Array)
       end
     end
+
+    context 'with edge cases' do
+      it 'handles single rejection (insufficient for block)' do
+        candles = []
+        base_price = 100.0
+
+        # Create one rejection candle
+        candles << Candle.new(
+          timestamp: 1.day.ago,
+          open: base_price + 1.0,
+          high: base_price + 1.5,
+          low: base_price - 0.5, # Long lower wick
+          close: base_price + 0.5,
+          volume: 1000
+        )
+
+        # Add more normal candles
+        9.times do |i|
+          price = base_price + (i * 0.1)
+          candles << Candle.new(
+            timestamp: (10 - i).days.ago,
+            open: price,
+            high: price + 0.5,
+            low: price - 0.5,
+            close: price + 0.3,
+            volume: 1000
+          )
+        end
+
+        result = described_class.detect(candles, lookback: 20)
+        # Should not create block with single rejection
+        expect(result).to be_an(Array)
+      end
+
+      it 'handles zero total range candles' do
+        candles = []
+        10.times do |i|
+          price = 100.0
+          candles << Candle.new(
+            timestamp: (9 - i).days.ago,
+            open: price,
+            high: price,
+            low: price,
+            close: price,
+            volume: 1000
+          )
+        end
+
+        result = described_class.detect(candles, lookback: 20)
+        expect(result).to be_an(Array)
+      end
+
+      it 'handles rejections at different price levels' do
+        candles = []
+        base_price = 100.0
+
+        # Create rejections at different levels (not grouped)
+        20.times do |i|
+          price = base_price + (i * 2.0) # Large price differences
+          if i % 5 == 0
+            candles << Candle.new(
+              timestamp: (19 - i).days.ago,
+              open: price + 1.0,
+              high: price + 1.5,
+              low: price - 0.5, # Long lower wick
+              close: price + 0.5,
+              volume: 1000
+            )
+          else
+            candles << Candle.new(
+              timestamp: (19 - i).days.ago,
+              open: price,
+              high: price + 0.5,
+              low: price - 0.5,
+              close: price + 0.3,
+              volume: 1000
+            )
+          end
+        end
+
+        result = described_class.detect(candles, lookback: 20)
+        expect(result).to be_an(Array)
+      end
+    end
   end
 end
 

@@ -152,5 +152,221 @@ RSpec.describe PaperPosition, type: :model do
       expect(position.pnl).to eq(100) # (110 - 100) * 10
     end
   end
+
+  describe '#metadata_hash' do
+    it 'returns parsed JSON metadata' do
+      position.update(metadata: '{"key": "value"}')
+      expect(position.metadata_hash).to eq({ 'key' => 'value' })
+    end
+
+    it 'returns empty hash for blank metadata' do
+      expect(position.metadata_hash).to eq({})
+    end
+
+    it 'returns empty hash for invalid JSON' do
+      position.update(metadata: 'invalid json')
+      expect(position.metadata_hash).to eq({})
+    end
+  end
+
+  describe 'status methods' do
+    it 'checks open status' do
+      position.status = 'open'
+      expect(position.open?).to be true
+      expect(position.closed?).to be false
+    end
+
+    it 'checks closed status' do
+      position.status = 'closed'
+      expect(position.open?).to be false
+      expect(position.closed?).to be true
+    end
+  end
+
+  describe 'direction methods' do
+    it 'checks long direction' do
+      position.direction = 'long'
+      expect(position.long?).to be true
+      expect(position.short?).to be false
+    end
+
+    it 'checks short direction' do
+      position.direction = 'short'
+      expect(position.long?).to be false
+      expect(position.short?).to be true
+    end
+  end
+
+  describe '#entry_value' do
+    it 'calculates entry value' do
+      expect(position.entry_value).to eq(1000.0) # 100 * 10
+    end
+  end
+
+  describe '#current_value' do
+    it 'calculates current value' do
+      expect(position.current_value).to eq(1050.0) # 105 * 10
+    end
+  end
+
+  describe '#unrealized_pnl_pct' do
+    it 'calculates unrealized P&L percentage for long position' do
+      position = create(:paper_position,
+        direction: 'long',
+        entry_price: 100,
+        current_price: 110,
+        quantity: 10)
+      expect(position.unrealized_pnl_pct).to eq(10.0) # (110 - 100) / 100 * 100
+    end
+
+    it 'calculates unrealized P&L percentage for short position' do
+      position = create(:paper_position,
+        direction: 'short',
+        entry_price: 100,
+        current_price: 90,
+        quantity: 10)
+      expect(position.unrealized_pnl_pct).to eq(10.0) # (100 - 90) / 100 * 100
+    end
+
+    it 'handles very small entry_price' do
+      position = create(:paper_position,
+        direction: 'long',
+        entry_price: 0.01,
+        current_price: 0.02,
+        quantity: 10)
+      expect(position.unrealized_pnl_pct).to eq(100.0) # (0.02 - 0.01) / 0.01 * 100
+    end
+  end
+
+  describe '#realized_pnl_pct' do
+    it 'calculates realized P&L percentage for closed long position' do
+      position = create(:paper_position,
+        direction: 'long',
+        entry_price: 100,
+        exit_price: 110,
+        quantity: 10,
+        status: 'closed')
+      expect(position.realized_pnl_pct).to eq(10.0) # (110 - 100) / 100 * 100
+    end
+
+    it 'calculates realized P&L percentage for closed short position' do
+      position = create(:paper_position,
+        direction: 'short',
+        entry_price: 100,
+        exit_price: 90,
+        quantity: 10,
+        status: 'closed')
+      expect(position.realized_pnl_pct).to eq(10.0) # (100 - 90) / 100 * 100
+    end
+
+    it 'returns 0 for open position' do
+      expect(position.realized_pnl_pct).to eq(0)
+    end
+
+    it 'returns 0 if exit_price is nil' do
+      position.status = 'closed'
+      position.exit_price = nil
+      expect(position.realized_pnl_pct).to eq(0)
+    end
+  end
+
+  describe '#update_unrealized_pnl!' do
+    it 'updates P&L for open position' do
+      position.current_price = 110.0
+      position.update_unrealized_pnl!
+
+      expect(position.pnl).to eq(100) # (110 - 100) * 10
+      expect(position.pnl_pct).to eq(10.0) # (110 - 100) / 100 * 100
+    end
+
+    it 'does nothing for closed position' do
+      position.status = 'closed'
+      position.pnl = 50
+      position.pnl_pct = 5.0
+      position.current_price = 110.0
+
+      position.update_unrealized_pnl!
+
+      expect(position.pnl).to eq(50) # Should remain unchanged
+      expect(position.pnl_pct).to eq(5.0)
+    end
+  end
+
+  describe '#check_sl_hit?' do
+    context 'for short positions' do
+      it 'returns true when stop loss is hit' do
+        position = create(:paper_position,
+          direction: 'short',
+          entry_price: 100,
+          current_price: 106,
+          sl: 105)
+        expect(position.check_sl_hit?).to be true
+      end
+
+      it 'returns false when stop loss is not hit' do
+        position = create(:paper_position,
+          direction: 'short',
+          entry_price: 100,
+          current_price: 103,
+          sl: 105)
+        expect(position.check_sl_hit?).to be false
+      end
+    end
+
+    it 'returns false if sl is nil' do
+      position.sl = nil
+      expect(position.check_sl_hit?).to be false
+    end
+  end
+
+  describe '#check_tp_hit?' do
+    context 'for short positions' do
+      it 'returns true when take profit is hit' do
+        position = create(:paper_position,
+          direction: 'short',
+          entry_price: 100,
+          current_price: 89,
+          tp: 90)
+        expect(position.check_tp_hit?).to be true
+      end
+
+      it 'returns false when take profit is not hit' do
+        position = create(:paper_position,
+          direction: 'short',
+          entry_price: 100,
+          current_price: 92,
+          tp: 90)
+        expect(position.check_tp_hit?).to be false
+      end
+    end
+
+    it 'returns false if tp is nil' do
+      position.tp = nil
+      expect(position.check_tp_hit?).to be false
+    end
+  end
+
+  describe '#days_held' do
+    it 'calculates days held from opened_at' do
+      position.opened_at = 5.days.ago
+      expect(position.days_held).to eq(5)
+    end
+
+    it 'returns 0 if opened_at is nil' do
+      position.opened_at = nil
+      expect(position.days_held).to eq(0)
+    end
+  end
+
+  describe 'scopes' do
+    it 'filters recent positions' do
+      old_pos = create(:paper_position, paper_portfolio: portfolio, opened_at: 10.days.ago)
+      new_pos = create(:paper_position, paper_portfolio: portfolio, opened_at: 1.day.ago)
+
+      recent = PaperPosition.recent.limit(1)
+      expect(recent).to include(new_pos)
+      expect(recent).not_to include(old_pos)
+    end
+  end
 end
 

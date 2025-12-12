@@ -137,6 +137,62 @@ RSpec.describe PaperPortfolio, type: :model do
       portfolio.update(capital: 0)
       expect(portfolio.utilization_pct).to eq(0)
     end
+
+    it 'returns 0 if no open positions' do
+      portfolio.update(capital: 100_000)
+      expect(portfolio.utilization_pct).to eq(0)
+    end
+  end
+
+  describe 'scopes' do
+    it 'filters active portfolios' do
+      active = create(:paper_portfolio, name: 'Active')
+      expect(PaperPortfolio.active).to include(active)
+    end
+  end
+
+  describe '#update_drawdown!' do
+    context 'when peak_equity increases' do
+      it 'updates peak_equity to new high' do
+        portfolio.update(peak_equity: 100_000, total_equity: 110_000)
+        portfolio.update_drawdown!
+
+        expect(portfolio.peak_equity).to eq(110_000)
+        expect(portfolio.max_drawdown).to eq(0)
+      end
+    end
+
+    context 'when equity decreases from peak' do
+      it 'calculates drawdown percentage' do
+        portfolio.update(peak_equity: 110_000, total_equity: 100_000, max_drawdown: 0)
+        portfolio.update_drawdown!
+
+        expect(portfolio.max_drawdown).to be_within(0.01).of(9.09) # (110_000 - 100_000) / 110_000 * 100
+        expect(portfolio.peak_equity).to eq(110_000)
+      end
+    end
+
+    context 'when equity equals peak' do
+      it 'does not change max_drawdown' do
+        portfolio.update(peak_equity: 100_000, total_equity: 100_000, max_drawdown: 5.0)
+        portfolio.update_drawdown!
+
+        expect(portfolio.max_drawdown).to eq(5.0)
+        expect(portfolio.peak_equity).to eq(100_000)
+      end
+    end
+  end
+
+  describe '#total_exposure' do
+    it 'returns 0 if no open positions' do
+      expect(portfolio.total_exposure).to eq(0)
+    end
+
+    it 'calculates exposure correctly with multiple positions' do
+      create(:paper_position, paper_portfolio: portfolio, status: 'open', current_price: 100, quantity: 10)
+      create(:paper_position, paper_portfolio: portfolio, status: 'open', current_price: 50, quantity: 20)
+      expect(portfolio.total_exposure).to eq(2000) # (100 * 10) + (50 * 20)
+    end
   end
 end
 

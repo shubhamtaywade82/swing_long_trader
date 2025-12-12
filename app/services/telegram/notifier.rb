@@ -22,6 +22,10 @@ module Telegram
       new.send_error_alert(error_message, context: context)
     end
 
+    def self.enabled?
+      ::TelegramNotifier.enabled?
+    end
+
     def send_daily_candidates(candidates)
       return unless enabled?
 

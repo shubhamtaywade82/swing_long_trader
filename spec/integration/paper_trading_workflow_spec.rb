@@ -54,7 +54,9 @@ RSpec.describe 'Paper Trading Complete Workflow', type: :integration do
         position.update(current_price: 110.0)
         allow(position).to receive(:check_tp_hit?).and_return(true)
         allow(position).to receive(:check_sl_hit?).and_return(false)
-        allow(position).to receive(:days_held).and_return(5)
+        # days_held is a method on PaperPosition model, not a stub
+        # Update opened_at to make days_held return desired value
+        position.update(opened_at: 5.days.ago)
 
         simulator_result = PaperTrading::Simulator.check_exits(portfolio: portfolio)
         expect(simulator_result[:exited]).to eq(1)
@@ -98,10 +100,9 @@ RSpec.describe 'Paper Trading Complete Workflow', type: :integration do
         position = execution[:position]
 
         # Update price to trigger SL
-        position.update(current_price: 94.0)
+        position.update(current_price: 94.0, opened_at: 2.days.ago)
         allow(position).to receive(:check_sl_hit?).and_return(true)
         allow(position).to receive(:check_tp_hit?).and_return(false)
-        allow(position).to receive(:days_held).and_return(2)
 
         # Check exits
         simulator_result = PaperTrading::Simulator.check_exits(portfolio: portfolio)

@@ -153,6 +153,127 @@ RSpec.describe Strategies::Swing::Engine, type: :service do
         expect(result[:error]).to include('Confidence too low')
       end
     end
+
+    context '#check_entry_conditions' do
+      let(:engine) { described_class.new(instrument: instrument, daily_series: daily_series) }
+
+      it 'allows entry when no conditions required' do
+        result = engine.send(:check_entry_conditions)
+
+        expect(result[:allowed]).to be true
+      end
+
+      it 'requires trend alignment when configured' do
+        allow(engine).to receive(:check_trend_alignment).and_return(false)
+
+        result = engine.send(:check_entry_conditions, config: { entry_conditions: { require_trend_alignment: true } })
+
+        expect(result[:allowed]).to be false
+        expect(result[:error]).to eq('Trend alignment failed')
+      end
+
+      it 'requires volume confirmation when configured' do
+        allow(engine).to receive(:check_volume_confirmation).and_return(false)
+
+        result = engine.send(:check_entry_conditions, config: { entry_conditions: { require_volume_confirmation: true } })
+
+        expect(result[:allowed]).to be false
+        expect(result[:error]).to eq('Volume confirmation failed')
+      end
+    end
+
+    context '#check_trend_alignment' do
+      let(:engine) { described_class.new(instrument: instrument, daily_series: daily_series) }
+
+      before do
+        allow(engine).to receive(:calculate_indicators).and_return({
+          ema20: 100.0,
+          ema50: 95.0,
+          ema200: 90.0,
+          supertrend: { direction: :bullish }
+        })
+      end
+
+      it 'validates EMA alignment' do
+        result = engine.send(:check_trend_alignment, config: {
+          trend_filters: { use_ema20: true, use_ema50: true }
+        })
+
+        expect(result).to be true
+      end
+
+      it 'validates EMA200 alignment' do
+        result = engine.send(:check_trend_alignment, config: {
+          trend_filters: { use_ema200: true }
+        })
+
+        expect(result).to be true
+      end
+
+      it 'returns false when EMA20 < EMA50' do
+        allow(engine).to receive(:calculate_indicators).and_return({
+          ema20: 95.0,
+          ema50: 100.0,
+          supertrend: { direction: :bullish }
+        })
+
+        result = engine.send(:check_trend_alignment, config: {
+          trend_filters: { use_ema20: true, use_ema50: true }
+        })
+
+        expect(result).to be false
+      end
+
+      it 'returns false when supertrend is not bullish' do
+        allow(engine).to receive(:calculate_indicators).and_return({
+          ema20: 100.0,
+          ema50: 95.0,
+          supertrend: { direction: :bearish }
+        })
+
+        result = engine.send(:check_trend_alignment)
+
+        expect(result).to be false
+      end
+    end
+
+    context '#check_volume_confirmation' do
+      let(:engine) { described_class.new(instrument: instrument, daily_series: daily_series) }
+
+      it 'returns true for insufficient candles' do
+        small_series = CandleSeries.new(symbol: 'TEST', interval: '1D')
+        10.times { small_series.add_candle(create(:candle, volume: 1_000_000)) }
+        engine = described_class.new(instrument: instrument, daily_series: small_series)
+
+        result = engine.send(:check_volume_confirmation, 1.5)
+
+        expect(result).to be true
+      end
+
+      it 'validates volume spike' do
+        # Create series with volume spike
+        volumes = Array.new(20, 1_000_000) + [3_000_000] # Latest volume is 3x average
+        volumes.each_with_index do |vol, i|
+          daily_series.candles[i]&.volume = vol if daily_series.candles[i]
+        end
+
+        result = engine.send(:check_volume_confirmation, 1.5)
+
+        expect(result).to be true
+      end
+
+      it 'returns false when volume spike is insufficient' do
+        # Create series with low volume
+        volumes = Array.new(21, 1_000_000) # All same volume, no spike
+        volumes.each_with_index do |vol, i|
+          daily_series.candles[i]&.volume = vol if daily_series.candles[i]
+        end
+
+        result = engine.send(:check_volume_confirmation, 2.0)
+
+        expect(result).to be false
+      end
+    end
   end
 end
 

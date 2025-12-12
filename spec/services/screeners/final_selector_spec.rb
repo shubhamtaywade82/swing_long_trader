@@ -145,6 +145,93 @@ RSpec.describe Screeners::FinalSelector do
         expect(candidate[:combined_score]).to eq(expected_score.round(2))
       end
     end
+
+    context 'with longterm candidates and AI scores' do
+      let(:longterm_with_ai) do
+        [
+          { symbol: 'STOCK4', score: 90.0, ai_score: 85.0 },
+          { symbol: 'STOCK5', score: 88.0, ai_score: 80.0 }
+        ]
+      end
+
+      it 'calculates combined score with 70% screener and 30% AI' do
+        result = described_class.call(
+          longterm_candidates: longterm_with_ai,
+          longterm_limit: 1
+        )
+
+        candidate = result[:longterm].first
+        expected_score = (90.0 * 0.7) + (85.0 * 0.3)
+        expect(candidate[:combined_score]).to eq(expected_score.round(2))
+      end
+    end
+
+    context 'with longterm candidates without AI scores' do
+      it 'uses only screener score when AI score is missing' do
+        result = described_class.call(
+          longterm_candidates: longterm_candidates,
+          longterm_limit: 1
+        )
+
+        candidate = result[:longterm].first
+        expect(candidate[:combined_score]).to eq(90.0)
+      end
+    end
+
+    context 'with more candidates than limit' do
+      let(:many_candidates) do
+        (1..20).map { |i| { symbol: "STOCK#{i}", score: 100.0 - i, ai_score: 90.0 - i } }
+      end
+
+      it 'selects only top candidates up to limit' do
+        result = described_class.call(
+          swing_candidates: many_candidates,
+          swing_limit: 5
+        )
+
+        expect(result[:swing].size).to eq(5)
+        expect(result[:swing].first[:symbol]).to eq('STOCK1')
+        expect(result[:swing].last[:symbol]).to eq('STOCK5')
+      end
+    end
+
+    context 'with candidates having nil scores' do
+      let(:candidates_with_nil) do
+        [
+          { symbol: 'STOCK1', score: nil, ai_score: 80.0 },
+          { symbol: 'STOCK2', score: 85.0, ai_score: nil }
+        ]
+      end
+
+      it 'handles nil scores gracefully' do
+        result = described_class.call(
+          swing_candidates: candidates_with_nil,
+          swing_limit: 2
+        )
+
+        expect(result[:swing].size).to eq(2)
+        result[:swing].each do |candidate|
+          expect(candidate[:combined_score]).to be_a(Numeric)
+        end
+      end
+    end
+
+    describe '#build_summary' do
+      it 'includes correct counts in summary' do
+        result = described_class.call(
+          swing_candidates: swing_candidates,
+          longterm_candidates: longterm_candidates,
+          swing_limit: 2,
+          longterm_limit: 1
+        )
+
+        expect(result[:summary][:swing_count]).to eq(3)
+        expect(result[:summary][:swing_selected]).to eq(2)
+        expect(result[:summary][:longterm_count]).to eq(2)
+        expect(result[:summary][:longterm_selected]).to eq(1)
+        expect(result[:summary][:timestamp]).to be_a(Time)
+      end
+    end
   end
 end
 

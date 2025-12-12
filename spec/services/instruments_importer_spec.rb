@@ -268,6 +268,260 @@ RSpec.describe InstrumentsImporter do
       expect(result).to eq(sample_csv)
       expect(File.read(cache_path)).to eq(sample_csv)
     end
+
+    it 'falls back to cached CSV on network error if cache exists' do
+      # Create cache
+      FileUtils.mkdir_p(cache_path.dirname)
+      File.write(cache_path, sample_csv)
+
+      allow(URI).to receive(:open).and_raise(StandardError.new('Network error'))
+
+      result = InstrumentsImporter.send(:fetch_csv_with_cache)
+
+      expect(result).to eq(sample_csv)
+    end
+
+    it 'raises error if network fails and no cache exists' do
+      FileUtils.rm_f(cache_path) if cache_path.exist?
+
+      allow(URI).to receive(:open).and_raise(StandardError.new('Network error'))
+
+      expect do
+        InstrumentsImporter.send(:fetch_csv_with_cache)
+      end.to raise_error(StandardError, 'Network error')
+    end
+  end
+
+  describe '.build_batches' do
+    it 'filters by exchange' do
+      csv_with_multiple = sample_csv + "\n88888,MCX,M,COMMODITY,GOLD,XX,INE467B01033,,,2025-12-31,,,MCX_COMM"
+      batches = InstrumentsImporter.send(:build_batches, csv_with_multiple)
+
+      # Should only include NSE/BSE instruments
+      expect(batches.size).to eq(3) # RELIANCE, TCS, NIFTY 50
+    end
+
+    it 'filters by segment (skips derivatives)' do
+      csv_with_derivatives = sample_csv + "\n99999,NSE,D,FUTSTK,RELIANCE FUT,XX,INE467B01032,11536,RELIANCE,2025-12-31,,,NSE_FNO"
+      batches = InstrumentsImporter.send(:build_batches, csv_with_derivatives)
+
+      expect(batches.size).to eq(3) # Should not include futures
+    end
+
+    it 'handles symbols with suffixes in universe matching' do
+      universe_file = Rails.root.join('config/universe/master_universe.yml')
+      FileUtils.mkdir_p(universe_file.dirname)
+      File.write(universe_file, YAML.dump(['RELIANCE']))
+
+      csv_with_suffix = sample_csv.gsub('RELIANCE', 'RELIANCE-EQ')
+      batches = InstrumentsImporter.send(:build_batches, csv_with_suffix)
+
+      # Should match RELIANCE-EQ to RELIANCE in universe
+      expect(batches.size).to eq(1)
+      expect(batches.first[:symbol_name]).to eq('RELIANCE-EQ')
+
+      File.delete(universe_file) if File.exist?(universe_file)
+    end
+
+    it 'handles empty CSV' do
+      batches = InstrumentsImporter.send(:build_batches, '')
+      expect(batches).to eq([])
+    end
+
+    it 'handles CSV with only headers' do
+      header_only = "SECURITY_ID,EXCH_ID,SEGMENT,INSTRUMENT_TYPE,SYMBOL_NAME\n"
+      batches = InstrumentsImporter.send(:build_batches, header_only)
+      expect(batches).to eq([])
+    end
+  end
+
+  describe '.build_attrs' do
+    it 'builds correct attributes from CSV row' do
+      row = CSV.parse(sample_csv, headers: true).first
+      attrs = InstrumentsImporter.send(:build_attrs, row)
+
+      expect(attrs[:security_id]).to eq('11536')
+      expect(attrs[:symbol_name]).to eq('RELIANCE')
+      expect(attrs[:instrument_type]).to eq('EQUITY')
+    end
+  end
+
+  describe '.import_instruments!' do
+    it 'upserts instruments in batches' do
+      batches = InstrumentsImporter.send(:build_batches, sample_csv)
+      result = InstrumentsImporter.send(:import_instruments!, batches)
+
+      expect(result).to be_present
+      expect(result.ids.size).to eq(3)
+    end
+
+    it 'handles empty batches' do
+      result = InstrumentsImporter.send(:import_instruments!, [])
+
+      expect(result).to be_nil
+    end
+  end
+
+  describe '.record_success!' do
+    it 'records import statistics' do
+      summary = {
+        instrument_total: 100,
+        instrument_upserts: 50,
+        finished_at: Time.current,
+        duration: 5.5
+      }
+      InstrumentsImporter.send(:record_success!, summary)
+
+      expect(Setting.fetch('instruments.last_imported_at')).to be_present
+      expect(Setting.fetch('instruments.instrument_total')).to eq(100)
+      expect(Setting.fetch('instruments.last_instrument_rows')).to eq(summary[:instrument_rows])
+      expect(Setting.fetch('instruments.last_instrument_upserts')).to eq(50)
+    end
+  end
+
+  describe '.load_universe_symbols' do
+    it 'loads symbols from universe file' do
+      universe_file = Rails.root.join('config/universe/master_universe.yml')
+      FileUtils.mkdir_p(universe_file.dirname)
+      File.write(universe_file, YAML.dump(['RELIANCE', 'TCS', 'INFY']))
+
+      symbols = InstrumentsImporter.send(:load_universe_symbols)
+
+      expect(symbols).to be_a(Set)
+      expect(symbols).to include('RELIANCE', 'TCS', 'INFY')
+
+      File.delete(universe_file) if File.exist?(universe_file)
+    end
+
+    it 'returns empty set if universe file does not exist' do
+      symbols = InstrumentsImporter.send(:load_universe_symbols)
+
+      expect(symbols).to be_a(Set)
+      expect(symbols).to be_empty
+    end
+
+    it 'handles invalid YAML gracefully' do
+      universe_file = Rails.root.join('config/universe/master_universe.yml')
+      FileUtils.mkdir_p(universe_file.dirname)
+      File.write(universe_file, 'invalid: yaml: content: [unclosed')
+
+      allow(Rails.logger).to receive(:warn)
+
+      symbols = InstrumentsImporter.send(:load_universe_symbols)
+
+      expect(symbols).to be_a(Set)
+      expect(symbols).to be_empty
+      expect(Rails.logger).to have_received(:warn).with(/Failed to load universe/)
+
+      File.delete(universe_file) if File.exist?(universe_file)
+    end
+
+    it 'normalizes symbols to uppercase' do
+      universe_file = Rails.root.join('config/universe/master_universe.yml')
+      FileUtils.mkdir_p(universe_file.dirname)
+      File.write(universe_file, YAML.dump(['reliance', 'tcs']))
+
+      symbols = InstrumentsImporter.send(:load_universe_symbols)
+
+      expect(symbols).to include('RELIANCE', 'TCS')
+
+      File.delete(universe_file) if File.exist?(universe_file)
+    end
+  end
+
+  describe '.build_attrs' do
+    it 'builds attributes with all fields' do
+      row = CSV.parse(sample_csv, headers: true).first
+      attrs = InstrumentsImporter.send(:build_attrs, row)
+
+      expect(attrs[:security_id]).to eq('11536')
+      expect(attrs[:symbol_name]).to eq('RELIANCE')
+      expect(attrs[:exchange]).to eq('NSE')
+      expect(attrs[:segment]).to eq('E')
+      expect(attrs[:instrument_type]).to eq('EQUITY')
+      expect(attrs[:isin]).to eq('INE467B01029')
+      expect(attrs[:created_at]).to be_present
+      expect(attrs[:updated_at]).to be_present
+    end
+
+    it 'handles nil values gracefully' do
+      row = CSV.parse(sample_csv, headers: true).first
+      row['LOT_SIZE'] = nil
+      row['STRIKE_PRICE'] = nil
+
+      attrs = InstrumentsImporter.send(:build_attrs, row)
+
+      expect(attrs[:lot_size]).to be_nil
+      expect(attrs[:strike_price]).to be_nil
+    end
+
+    it 'converts numeric fields correctly' do
+      row = CSV.parse(sample_csv, headers: true).first
+      row['LOT_SIZE'] = '50'
+      row['STRIKE_PRICE'] = '2500.50'
+
+      attrs = InstrumentsImporter.send(:build_attrs, row)
+
+      expect(attrs[:lot_size]).to eq(50)
+      expect(attrs[:strike_price]).to eq(2500.50)
+    end
+  end
+
+  describe '.safe_date' do
+    it 'parses valid date strings' do
+      date = InstrumentsImporter.send(:safe_date, '2025-12-31')
+      expect(date).to eq(Date.parse('2025-12-31'))
+    end
+
+    it 'returns nil for invalid date strings' do
+      date = InstrumentsImporter.send(:safe_date, 'invalid-date')
+      expect(date).to be_nil
+    end
+
+    it 'returns nil for nil input' do
+      date = InstrumentsImporter.send(:safe_date, nil)
+      expect(date).to be_nil
+    end
+  end
+
+  describe '.map_segment' do
+    it 'maps segment codes correctly' do
+      expect(InstrumentsImporter.send(:map_segment, 'I')).to eq('index')
+      expect(InstrumentsImporter.send(:map_segment, 'E')).to eq('equity')
+      expect(InstrumentsImporter.send(:map_segment, 'C')).to eq('currency')
+      expect(InstrumentsImporter.send(:map_segment, 'D')).to eq('derivatives')
+      expect(InstrumentsImporter.send(:map_segment, 'M')).to eq('commodity')
+    end
+
+    it 'returns lowercase for unknown codes' do
+      expect(InstrumentsImporter.send(:map_segment, 'X')).to eq('x')
+    end
+  end
+
+  describe '.import_instruments!' do
+    it 'deduplicates rows by composite key' do
+      rows = [
+        { security_id: '11536', exchange: 'NSE', segment: 'E', symbol_name: 'RELIANCE' },
+        { security_id: '11536', exchange: 'NSE', segment: 'E', symbol_name: 'RELIANCE_UPDATED' }
+      ]
+
+      result = InstrumentsImporter.send(:import_instruments!, rows)
+
+      expect(result.ids.size).to eq(1)
+      # Last occurrence should be kept
+      instrument = Instrument.find_by(security_id: '11536')
+      expect(instrument.symbol_name).to eq('RELIANCE_UPDATED')
+    end
+
+    it 'handles large batches' do
+      rows = (1..2000).map do |i|
+        { security_id: i.to_s, exchange: 'NSE', segment: 'E', symbol_name: "STOCK#{i}" }
+      end
+
+      result = InstrumentsImporter.send(:import_instruments!, rows)
+
+      expect(result.ids.size).to eq(2000)
+    end
   end
 end
 

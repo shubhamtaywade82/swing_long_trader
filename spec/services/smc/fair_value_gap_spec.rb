@@ -192,6 +192,63 @@ RSpec.describe Smc::FairValueGap do
         expect(result).to be_an(Array)
       end
     end
+
+    context 'with edge cases' do
+      it 'handles gap at end of array' do
+        candles = []
+        base_price = 100.0
+
+        candles << Candle.new(
+          timestamp: 2.days.ago,
+          open: base_price,
+          high: base_price + 1.0,
+          low: base_price - 0.5,
+          close: base_price + 0.5,
+          volume: 1000
+        )
+
+        candles << Candle.new(
+          timestamp: 1.day.ago,
+          open: base_price + 0.5,
+          high: base_price + 1.5,
+          low: base_price + 0.3,
+          close: base_price + 1.0,
+          volume: 1000
+        )
+
+        candles << Candle.new(
+          timestamp: Time.current,
+          open: base_price + 3.0,
+          high: base_price + 4.0,
+          low: base_price + 2.5, # Gap up
+          close: base_price + 3.5,
+          volume: 1000
+        )
+
+        result = described_class.detect(candles, lookback: 50)
+        expect(result).to be_an(Array)
+      end
+
+      it 'handles overlapping candles (no gap)' do
+        candles = []
+        base_price = 100.0
+
+        3.times do |i|
+          price = base_price + (i * 0.5)
+          candles << Candle.new(
+            timestamp: (2 - i).days.ago,
+            open: price,
+            high: price + 1.0,
+            low: price - 0.5,
+            close: price + 0.5,
+            volume: 1000
+          )
+        end
+
+        result = described_class.detect(candles, lookback: 50)
+        expect(result).to be_an(Array)
+      end
+    end
   end
 end
 

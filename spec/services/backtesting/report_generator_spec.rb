@@ -88,5 +88,60 @@ RSpec.describe Backtesting::ReportGenerator, type: :service do
       expect(data).to have_key(:metrics)
     end
   end
+
+  describe 'edge cases' do
+    context 'when backtest_run has no positions' do
+      let(:empty_backtest_run) { create(:backtest_run) }
+
+      before do
+        allow(empty_backtest_run).to receive(:backtest_positions).and_return(BacktestPosition.none)
+      end
+
+      it 'generates empty CSV' do
+        generator = described_class.new(empty_backtest_run)
+        csv = generator.generate_trades_csv
+
+        expect(csv).to include('Symbol')
+        expect(csv.lines.count).to eq(2) # Header + empty
+      end
+
+      it 'generates empty equity curve' do
+        generator = described_class.new(empty_backtest_run)
+        csv = generator.generate_equity_curve_csv
+
+        expect(csv).to include('Date')
+      end
+    end
+
+    context 'when position has no instrument' do
+      let(:position_no_instrument) do
+        create(:backtest_position, backtest_run: backtest_run, instrument: nil)
+      end
+
+      before do
+        position_no_instrument
+      end
+
+      it 'handles missing instrument gracefully' do
+        generator = described_class.new(backtest_run)
+        csv = generator.generate_trades_csv
+
+        expect(csv).to include('N/A')
+      end
+    end
+
+    context 'when metrics are missing' do
+      before do
+        allow(backtest_run).to receive(:metrics).and_return(nil)
+      end
+
+      it 'handles missing metrics in summary' do
+        generator = described_class.new(backtest_run)
+        summary = generator.generate_summary
+
+        expect(summary).to include('N/A')
+      end
+    end
+  end
 end
 

@@ -167,6 +167,260 @@ RSpec.describe Openai::Service, type: :service do
       expect(cost).to be > 0
       expect(cost).to be < 0.01 # Should be very small for this token count
     end
+
+    it 'calculates cost for different models' do
+      client = described_class.new(prompt: prompt, model: 'gpt-4o')
+      usage = { prompt_tokens: 1000, completion_tokens: 500, total_tokens: 1500 }
+
+      cost = client.send(:calculate_cost, usage, 'gpt-4o')
+
+      expect(cost).to be > 0
+    end
+
+    it 'handles missing usage data' do
+      client = described_class.new(prompt: prompt)
+      usage = {}
+
+      cost = client.send(:calculate_cost, usage, 'gpt-4o-mini')
+
+      expect(cost).to eq(0)
+    end
+  end
+
+  describe '#rate_limit_exceeded?' do
+    it 'checks rate limit correctly' do
+      today = Date.today.to_s
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) do |key|
+        cache_store[key]
+      end
+      allow(Rails.cache).to receive(:write) do |key, value, _options|
+        cache_store[key] = value
+      end
+
+      cache_store["openai_calls:#{today}"] = 49
+      client = described_class.new(prompt: prompt)
+
+      result = client.send(:rate_limit_exceeded?)
+      expect(result).to be false
+
+      cache_store["openai_calls:#{today}"] = 50
+      result = client.send(:rate_limit_exceeded?)
+      expect(result).to be true
+    end
+  end
+
+  describe '#track_api_call' do
+    it 'tracks calls and tokens' do
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) do |key|
+        cache_store[key]
+      end
+      allow(Rails.cache).to receive(:write) do |key, value, _options|
+        cache_store[key] = value
+      end
+
+      client = described_class.new(prompt: prompt)
+      response = {
+        content: 'Test response',
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150
+        }
+      }
+
+      client.send(:track_api_call, response)
+
+      today = Date.today.to_s
+      expect(cache_store["openai_calls:#{today}"]).to eq(1)
+      expect(cache_store["openai_tokens:#{today}"]).to be_present
+    end
+
+    it 'handles missing usage gracefully' do
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) { |key| cache_store[key] }
+      allow(Rails.cache).to receive(:write) { |key, value, _options| cache_store[key] = value }
+
+      client = described_class.new(prompt: prompt)
+      response = { content: 'Test response', usage: nil }
+
+      expect { client.send(:track_api_call, response) }.not_to raise_error
+    end
+  end
+
+  describe '#check_cost_thresholds' do
+    it 'checks daily cost threshold' do
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) { |key| cache_store[key] }
+      allow(Rails.cache).to receive(:write) { |key, value, _options| cache_store[key] = value }
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        openai: {
+          cost_monitoring: {
+            enabled: true,
+            daily_threshold: 10.0
+          }
+        }
+      })
+      allow(TelegramNotifier).to receive(:send_error_alert)
+
+      client = described_class.new(prompt: prompt)
+      client.send(:check_cost_thresholds, 15.0, Date.today.to_s)
+
+      expect(TelegramNotifier).to have_received(:send_error_alert)
+    end
+  end
+
+  describe 'error handling' do
+    it 'handles API exceptions' do
+      allow_any_instance_of(described_class).to receive(:call_api).and_raise(StandardError, 'API error')
+      allow(Rails.logger).to receive(:error)
+
+      result = described_class.call(prompt: prompt)
+
+      expect(result[:success]).to be false
+      expect(result[:error]).to eq('API error')
+      expect(Rails.logger).to have_received(:error)
+    end
+  end
+
+  describe '#fetch_from_cache' do
+    it 'returns cached response if available' do
+      cache_store = {
+        "openai:#{Digest::MD5.hexdigest(prompt)}:gpt-4o-mini" => {
+          content: 'Cached response',
+          usage: { total_tokens: 100 }
+        }
+      }
+      allow(Rails.cache).to receive(:read) { |key| cache_store[key] }
+
+      client = described_class.new(prompt: prompt, cache: true)
+      cached = client.send(:fetch_from_cache)
+
+      expect(cached).to be_present
+      expect(cached[:success]).to be true
+      expect(cached[:content]).to eq('Cached response')
+      expect(cached[:cached]).to be true
+    end
+
+    it 'returns nil if no cache' do
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) { |key| cache_store[key] }
+
+      client = described_class.new(prompt: prompt, cache: true)
+      cached = client.send(:fetch_from_cache)
+
+      expect(cached).to be_nil
+    end
+  end
+
+  describe '#cache_result' do
+    it 'caches response with correct key' do
+      cache_store = {}
+      allow(Rails.cache).to receive(:write) { |key, value, _options| cache_store[key] = value }
+
+      client = described_class.new(prompt: prompt, cache: true)
+      response = { content: 'Test response', usage: { total_tokens: 100 } }
+      client.send(:cache_result, response)
+
+      expected_key = "openai:#{Digest::MD5.hexdigest(prompt)}:gpt-4o-mini"
+      expect(cache_store[expected_key]).to eq(response)
+    end
+  end
+
+  describe '#call_api' do
+    it 'handles API response with missing usage data' do
+      mock_response = double('response',
+        dig: 'Test content',
+        '[]' => {}
+      )
+      allow(mock_response).to receive(:dig).with('choices', 0, 'message', 'content').and_return('Test content')
+      allow(mock_response).to receive(:[]).with('usage').and_return(nil)
+
+      client = described_class.new(prompt: prompt)
+      allow(Ruby::OpenAI::Client).to receive(:new).and_return(double('client', chat: mock_response))
+
+      result = client.send(:call_api)
+
+      expect(result).to be_present
+      expect(result[:content]).to eq('Test content')
+      expect(result[:usage][:total_tokens]).to eq(0)
+    end
+
+    it 'handles API exceptions' do
+      allow(Ruby::OpenAI::Client).to receive(:new).and_raise(StandardError, 'API connection error')
+      allow(Rails.logger).to receive(:error)
+
+      client = described_class.new(prompt: prompt)
+      result = client.send(:call_api)
+
+      expect(result).to be_nil
+      expect(Rails.logger).to have_received(:error).with(/API error/)
+    end
+  end
+
+  describe 'with cache disabled' do
+    it 'does not check cache when cache is false' do
+      cache_store = {}
+      allow(Rails.cache).to receive(:read) { |key| cache_store[key] }
+      allow_any_instance_of(described_class).to receive(:call_api).and_return({
+        content: 'Response',
+        usage: { total_tokens: 100 }
+      })
+
+      result = described_class.call(prompt: prompt, cache: false)
+
+      expect(result[:success]).to be true
+      expect(Rails.cache).not_to have_received(:read)
+    end
+
+    it 'does not cache result when cache is false' do
+      cache_store = {}
+      allow(Rails.cache).to receive(:write) { |key, value, _options| cache_store[key] = value }
+      allow_any_instance_of(described_class).to receive(:call_api).and_return({
+        content: 'Response',
+        usage: { total_tokens: 100 }
+      })
+
+      described_class.call(prompt: prompt, cache: false)
+
+      expect(cache_store).to be_empty
+    end
+  end
+
+  describe 'with custom parameters' do
+    it 'uses custom model' do
+      allow_any_instance_of(described_class).to receive(:call_api).and_return({
+        content: 'Response',
+        usage: { total_tokens: 100 }
+      })
+
+      result = described_class.call(prompt: prompt, model: 'gpt-4o')
+
+      expect(result[:success]).to be true
+    end
+
+    it 'uses custom temperature' do
+      allow_any_instance_of(described_class).to receive(:call_api).and_return({
+        content: 'Response',
+        usage: { total_tokens: 100 }
+      })
+
+      result = described_class.call(prompt: prompt, temperature: 0.5)
+
+      expect(result[:success]).to be true
+    end
+
+    it 'uses custom max_tokens' do
+      allow_any_instance_of(described_class).to receive(:call_api).and_return({
+        content: 'Response',
+        usage: { total_tokens: 100 }
+      })
+
+      result = described_class.call(prompt: prompt, max_tokens: 500)
+
+      expect(result[:success]).to be true
+    end
   end
 end
 

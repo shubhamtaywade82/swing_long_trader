@@ -162,6 +162,86 @@ RSpec.describe Smc::OrderBlock do
         expect(result).to be_an(Array)
       end
     end
+
+    context 'with edge cases' do
+      it 'handles zero total range candles' do
+        candles = []
+        10.times do |i|
+          price = 100.0
+          candles << Candle.new(
+            timestamp: (9 - i).days.ago,
+            open: price,
+            high: price,
+            low: price,
+            close: price,
+            volume: 1000
+          )
+        end
+
+        result = described_class.detect(candles)
+        expect(result).to be_an(Array)
+      end
+
+      it 'handles candles with same direction as move' do
+        candles = []
+        base_price = 100.0
+
+        # Create bullish candles
+        5.times do |i|
+          price = base_price + (i * 0.5)
+          candles << Candle.new(
+            timestamp: (4 - i).days.ago,
+            open: price,
+            high: price + 1.0,
+            low: price - 0.5,
+            close: price + 0.8, # Bullish
+            volume: 1000
+          )
+        end
+
+        # Strong bullish move
+        candles << Candle.new(
+          timestamp: 0.days.ago,
+          open: base_price + 2.5,
+          high: base_price + 4.0,
+          low: base_price + 2.0,
+          close: base_price + 3.5, # Strong bullish
+          volume: 2000
+        )
+
+        result = described_class.detect(candles, lookback: 10)
+        expect(result).to be_an(Array)
+      end
+
+      it 'handles move at index 0' do
+        candles = []
+        # Strong move as first candle
+        candles << Candle.new(
+          timestamp: 0.days.ago,
+          open: 100.0,
+          high: 102.0,
+          low: 99.0,
+          close: 101.5, # Strong bullish
+          volume: 2000
+        )
+
+        # Add more candles
+        10.times do |i|
+          price = 101.5 + (i * 0.1)
+          candles << Candle.new(
+            timestamp: (i + 1).days.from_now,
+            open: price,
+            high: price + 0.5,
+            low: price - 0.5,
+            close: price + 0.3,
+            volume: 1000
+          )
+        end
+
+        result = described_class.detect(candles, lookback: 10)
+        expect(result).to be_an(Array)
+      end
+    end
   end
 end
 

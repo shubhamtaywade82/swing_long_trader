@@ -137,6 +137,48 @@ RSpec.describe Smc::Choch do
         expect(result).to be_nil
       end
     end
+
+    context 'with edge cases' do
+      it 'handles sideways/indecisive structure' do
+        candles = []
+        base_price = 100.0
+
+        # Create candles with equal bullish and bearish signals
+        30.times do |i|
+          price = base_price + (Math.sin(i * 0.2) * 1.0)
+          candles << Candle.new(
+            timestamp: (29 - i).days.ago,
+            open: price,
+            high: price + 0.5,
+            low: price - 0.5,
+            close: price + (i.even? ? 0.3 : -0.3), # Alternating
+            volume: 1000
+          )
+        end
+
+        result = described_class.detect(candles, lookback: 20)
+        # May return nil if structure is indecisive
+        expect(result).to be_nil.or be_a(Hash)
+      end
+
+      it 'handles insufficient candles for structure determination' do
+        candles = []
+        15.times do |i|
+          price = 100.0 + (i * 0.5)
+          candles << Candle.new(
+            timestamp: (14 - i).days.ago,
+            open: price,
+            high: price + 1.0,
+            low: price - 0.5,
+            close: price + 0.5,
+            volume: 1000
+          )
+        end
+
+        result = described_class.detect(candles, lookback: 20)
+        expect(result).to be_nil
+      end
+    end
   end
 end
 

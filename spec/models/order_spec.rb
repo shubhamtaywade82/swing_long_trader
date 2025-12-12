@@ -82,6 +82,20 @@ RSpec.describe Order, type: :model do
       expect(Order.dry_run.count).to eq(1)
       expect(Order.real.count).to eq(6)
     end
+
+    it 'filters recent orders' do
+      # Create orders with explicit timestamps to ensure ordering
+      old_order = create(:order, instrument: instrument, created_at: 10.days.ago)
+      new_order = create(:order, instrument: instrument, created_at: 1.day.ago)
+
+      recent = Order.recent.to_a
+      # Verify scope returns orders ordered by created_at desc
+      expect(recent).to include(new_order)
+      expect(recent).to include(old_order)
+      # Verify ordering: most recent first
+      recent_timestamps = recent.map(&:created_at)
+      expect(recent_timestamps).to eq(recent_timestamps.sort.reverse)
+    end
   end
 
   describe 'helper methods' do
@@ -134,6 +148,110 @@ RSpec.describe Order, type: :model do
       order.average_price = 105.0
       order.filled_quantity = 5
       expect(order.filled_value).to eq(525.0)
+    end
+
+    it 'calculates total value with nil price' do
+      order.price = nil
+      order.quantity = 10
+      expect(order.total_value).to eq(0)
+    end
+
+    it 'calculates filled value with nil average_price' do
+      order.average_price = nil
+      order.filled_quantity = 5
+      expect(order.filled_value).to eq(0)
+    end
+
+    it 'checks cancelled status' do
+      order.status = 'cancelled'
+      expect(order.cancelled?).to be true
+      expect(order.active?).to be false
+    end
+
+    it 'checks failed status' do
+      order.status = 'failed'
+      expect(order.failed?).to be true
+      expect(order.active?).to be false
+    end
+
+    it 'checks requires_approval?' do
+      order.requires_approval = true
+      order.approved_at = nil
+      order.rejected_at = nil
+      expect(order.requires_approval?).to be true
+    end
+
+    it 'returns false for requires_approval? if already approved' do
+      order.requires_approval = true
+      order.approved_at = Time.current
+      order.rejected_at = nil
+      expect(order.requires_approval?).to be false
+    end
+
+    it 'returns false for requires_approval? if already rejected' do
+      order.requires_approval = true
+      order.approved_at = nil
+      order.rejected_at = Time.current
+      expect(order.requires_approval?).to be false
+    end
+
+    it 'checks approved status' do
+      order.approved_at = Time.current
+      expect(order.approved?).to be true
+    end
+
+    it 'checks rejected status' do
+      order.rejected_at = Time.current
+      expect(order.rejected?).to be true
+    end
+
+    it 'checks approval_pending status' do
+      order.requires_approval = true
+      order.approved_at = nil
+      order.rejected_at = nil
+      expect(order.approval_pending?).to be true
+    end
+
+    it 'returns false for approval_pending? if not requires_approval' do
+      order.requires_approval = false
+      expect(order.approval_pending?).to be false
+    end
+  end
+
+  describe 'approval scopes' do
+    before do
+      create(:order, requires_approval: true, approved_at: nil, rejected_at: nil, instrument: instrument)
+      create(:order, requires_approval: true, approved_at: Time.current, rejected_at: nil, instrument: instrument)
+      create(:order, requires_approval: true, approved_at: nil, rejected_at: Time.current, instrument: instrument)
+      create(:order, requires_approval: false, instrument: instrument)
+    end
+
+    it 'filters orders requiring approval' do
+      expect(Order.requires_approval.count).to eq(1)
+    end
+
+    it 'filters approved orders' do
+      expect(Order.approved.count).to eq(1)
+    end
+
+    it 'filters rejected orders' do
+      expect(Order.rejected_for_approval.count).to eq(1)
+    end
+
+    it 'filters pending approval orders' do
+      expect(Order.pending_approval.count).to eq(1)
+    end
+  end
+
+  describe '#dhan_response_hash' do
+    it 'returns empty hash for nil dhan_response' do
+      order.dhan_response = nil
+      expect(order.dhan_response_hash).to eq({})
+    end
+
+    it 'returns empty hash for invalid JSON' do
+      order.dhan_response = 'invalid json'
+      expect(order.dhan_response_hash).to eq({})
     end
   end
 end

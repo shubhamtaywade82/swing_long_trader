@@ -29,7 +29,7 @@ RSpec.describe Candles::IntradayFetcher do
     context 'with valid instrument' do
       before do
         allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
-        
+
         # Call the service once for all tests in this context
         @result = described_class.call(
           instrument: instrument,
@@ -192,6 +192,111 @@ RSpec.describe Candles::IntradayFetcher do
 
         # Should still attempt to fetch (API will handle validation)
         expect(result).to be_a(Hash)
+      end
+    end
+
+    context 'with different data formats' do
+      it 'handles hash format with arrays' do
+        hash_format_data = {
+          'timestamp' => [1.hour.ago.to_i, 2.hours.ago.to_i],
+          'open' => [100.0, 99.5],
+          'high' => [101.0, 100.5],
+          'low' => [99.0, 99.0],
+          'close' => [100.5, 100.0],
+          'volume' => [100_000, 90_000]
+        }
+
+        allow(instrument).to receive(:intraday_ohlc).and_return(hash_format_data)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:candles].size).to eq(2)
+      end
+
+      it 'handles single hash format' do
+        single_hash = {
+          timestamp: 1.hour.ago.to_i,
+          open: 100.0,
+          high: 101.0,
+          low: 99.0,
+          close: 100.5,
+          volume: 100_000
+        }
+
+        allow(instrument).to receive(:intraday_ohlc).and_return(single_hash)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:candles].size).to eq(1)
+      end
+
+      it 'handles empty data' do
+        allow(instrument).to receive(:intraday_ohlc).and_return([])
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('No candles data received')
+      end
+
+      it 'handles nil data' do
+        allow(instrument).to receive(:intraday_ohlc).and_return(nil)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1
+        )
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('No candles data received')
+      end
+    end
+
+    context 'with cache disabled' do
+      it 'skips cache when cache: false' do
+        allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 1,
+          cache: false
+        )
+
+        expect(result[:success]).to be true
+        expect(result[:cached]).to be false
+      end
+    end
+
+    context 'with different days parameter' do
+      it 'fetches candles for specified days' do
+        allow(instrument).to receive(:intraday_ohlc).and_return(mock_intraday_candles)
+
+        result = described_class.call(
+          instrument: instrument,
+          interval: '15',
+          days: 5
+        )
+
+        expect(result[:success]).to be true
+        expect(instrument).to have_received(:intraday_ohlc).with(
+          hash_including(days: 5)
+        )
       end
     end
   end

@@ -199,6 +199,221 @@ RSpec.describe Strategies::Swing::Executor, type: :service do
         # Should not send alert for orders <5% of capital
       end
     end
+
+    context 'with paper trading enabled' do
+      before do
+        allow(Rails.configuration.x.paper_trading).to receive(:enabled).and_return(true)
+        allow(PaperTrading::Executor).to receive(:execute).and_return(
+          { success: true, position: create(:paper_position) }
+        )
+      end
+
+      it 'routes to paper trading executor' do
+        result = described_class.call(signal)
+
+        expect(result[:success]).to be true
+        expect(PaperTrading::Executor).to have_received(:execute)
+      end
+
+      it 'skips risk limit checks' do
+        # Even with large order, should succeed in paper trading
+        large_signal = signal.merge(entry_price: 15_000.0, qty: 100)
+        result = described_class.call(large_signal)
+
+        expect(result[:success]).to be true
+      end
+
+      it 'skips circuit breaker checks' do
+        # Create many failed orders
+        create_list(:order, 10, status: 'failed', created_at: 30.minutes.ago)
+        result = described_class.call(signal)
+
+        expect(result[:success]).to be true
+      end
+    end
+
+    context 'with manual approval required' do
+      before do
+        allow(Rails.configuration.x.paper_trading).to receive(:enabled).and_return(false)
+        allow(AlgoConfig).to receive(:fetch).with(:execution).and_return(
+          manual_approval: {
+            enabled: true,
+            count: 30
+          }
+        )
+        # Create only 20 executed orders (less than 30)
+        create_list(:order, 20, status: 'executed')
+      end
+
+      it 'requires approval for first 30 trades' do
+        result = described_class.call(signal)
+
+        expect(result[:success]).to be false
+        expect(result[:requires_approval]).to be true
+        expect(result[:executed_count]).to eq(20)
+        expect(result[:remaining]).to eq(10)
+      end
+
+      it 'allows orders after 30 trades' do
+        # Create 30 executed orders
+        create_list(:order, 10, status: 'executed')
+        allow(Dhan::Orders).to receive(:place_order).and_return(
+          success: true,
+          order: create(:order, instrument: instrument)
+        )
+
+        result = described_class.call(signal)
+
+        expect(result[:success]).to be true
+      end
+
+      it 'skips approval in dry-run mode' do
+        allow(ENV).to receive(:[]).with('DRY_RUN').and_return('true')
+        allow(Dhan::Orders).to receive(:place_order).and_return(
+          success: true,
+          order: create(:order, instrument: instrument, dry_run: true)
+        )
+
+        result = described_class.call(signal, dry_run: true)
+
+        expect(result[:success]).to be true
+      end
+
+      it 'creates pending approval order' do
+        result = described_class.call(signal)
+
+        expect(result[:success]).to be false
+        expect(result[:requires_approval]).to be true
+        expect(result[:order]).to be_present
+        expect(result[:order].requires_approval).to be true
+        expect(result[:order].status).to eq('pending')
+      end
+
+      it 'sends approval request notification' do
+        allow(Telegram::Notifier).to receive(:send_error_alert)
+
+        described_class.call(signal)
+
+        expect(Telegram::Notifier).to have_received(:send_error_alert)
+      end
+    end
+
+    context 'when order placement fails' do
+      before do
+        allow(Dhan::Orders).to receive(:place_order).and_return(
+          success: false,
+          error: 'Order placement failed'
+        )
+      end
+
+      it 'returns error' do
+        result = described_class.call(signal)
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Order placement failed')
+      end
+    end
+
+    context 'when paper trade execution fails' do
+      before do
+        allow(Rails.configuration.x.paper_trading).to receive(:enabled).and_return(true)
+        allow(PaperTrading::Executor).to receive(:execute).and_raise(StandardError, 'Paper trade error')
+        allow(Rails.logger).to receive(:error)
+      end
+
+      it 'handles error gracefully' do
+        result = described_class.call(signal)
+
+        expect(result[:success]).to be false
+        expect(result[:error]).to include('Paper trade failed')
+        expect(result[:paper_trade]).to be true
+        expect(Rails.logger).to have_received(:error)
+      end
+    end
+
+    context 'with exposure calculations' do
+      before do
+        allow(Dhan::Orders).to receive(:place_order).and_return(
+          success: true,
+          order: create(:order, instrument: instrument)
+        )
+      end
+
+      it 'calculates instrument exposure correctly' do
+        # Create existing orders for same instrument
+        create_list(:order, 3, instrument: instrument, status: 'placed', price: 100.0, quantity: 10)
+
+        service = described_class.new(signal: signal)
+        exposure = service.send(:calculate_instrument_exposure)
+
+        expect(exposure).to eq(3000.0) # 3 orders * 100 * 10
+      end
+
+      it 'calculates total exposure correctly' do
+        # Create orders for different instruments
+        other_instrument = create(:instrument)
+        create_list(:order, 2, instrument: instrument, status: 'placed', price: 100.0, quantity: 10)
+        create_list(:order, 2, instrument: other_instrument, status: 'placed', price: 50.0, quantity: 20)
+
+        service = described_class.new(signal: signal)
+        total_exposure = service.send(:calculate_total_exposure)
+
+        expect(total_exposure).to eq(4000.0) # (2 * 100 * 10) + (2 * 50 * 20)
+      end
+    end
+
+    context 'with large order confirmation' do
+      before do
+        allow(Dhan::Orders).to receive(:place_order).and_return(
+          success: true,
+          order: create(:order, instrument: instrument)
+        )
+        allow(Telegram::Notifier).to receive(:send_error_alert)
+      end
+
+      it 'sends confirmation for large orders' do
+        # Order value: 100 * 60 = 6,000 (6% of 100,000 capital, >5% threshold)
+        large_signal = signal.merge(entry_price: 60.0, qty: 100)
+        result = described_class.call(large_signal)
+
+        expect(result[:success]).to be true
+        expect(Telegram::Notifier).to have_received(:send_error_alert).at_least(:once)
+      end
+
+      it 'does not send confirmation in dry-run mode' do
+        allow(ENV).to receive(:[]).with('DRY_RUN').and_return('true')
+        large_signal = signal.merge(entry_price: 60.0, qty: 100)
+
+        described_class.call(large_signal, dry_run: true)
+
+        # Should not send confirmation in dry-run
+      end
+    end
+
+    context 'with order notification' do
+      before do
+        allow(Dhan::Orders).to receive(:place_order).and_return(
+          success: true,
+          order: create(:order, instrument: instrument, status: 'placed')
+        )
+        allow(Telegram::Notifier).to receive(:send_error_alert)
+      end
+
+      it 'sends notification for successful orders' do
+        result = described_class.call(signal)
+
+        expect(result[:success]).to be true
+        expect(Telegram::Notifier).to have_received(:send_error_alert).at_least(:once)
+      end
+
+      it 'does not send notification in dry-run mode' do
+        allow(ENV).to receive(:[]).with('DRY_RUN').and_return('true')
+
+        described_class.call(signal, dry_run: true)
+
+        # Notification should not be sent in dry-run
+      end
+    end
   end
 end
 

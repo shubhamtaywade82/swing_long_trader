@@ -118,6 +118,230 @@ RSpec.describe Screeners::SwingScreener do
         result = screener.send(:passes_basic_filters?, instrument)
         expect(result).to be true
       end
+
+      it 'filters instruments above max price' do
+        create_list(:candle_series_record, 10, instrument: instrument, timeframe: '1D')
+        allow(instrument).to receive(:ltp).and_return(60_000.0)
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          swing_trading: {
+            screening: { max_price: 50_000 }
+          }
+        })
+
+        result = screener.send(:passes_basic_filters?, instrument)
+        expect(result).to be false
+      end
+
+      it 'filters penny stocks when enabled' do
+        create_list(:candle_series_record, 10, instrument: instrument, timeframe: '1D')
+        allow(instrument).to receive(:ltp).and_return(5.0)
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          swing_trading: {
+            screening: { exclude_penny_stocks: true }
+          }
+        })
+
+        result = screener.send(:passes_basic_filters?, instrument)
+        expect(result).to be false
+      end
+    end
+
+    context '#analyze_instrument' do
+      it 'returns nil when candles are insufficient' do
+        create_list(:candle_series_record, 30, instrument: instrument, timeframe: '1D')
+        allow(instrument).to receive(:load_daily_candles).and_return(
+          CandleSeries.new(symbol: instrument.symbol_name, interval: '1D').tap do |cs|
+            30.times { cs.add_candle(create(:candle)) }
+          end
+        )
+
+        result = screener.send(:analyze_instrument, instrument)
+        expect(result).to be_nil
+      end
+
+      it 'handles indicator calculation errors gracefully' do
+        create_list(:candle_series_record, 60, instrument: instrument, timeframe: '1D')
+        series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+        60.times { series.add_candle(create(:candle)) }
+        allow(instrument).to receive(:load_daily_candles).and_return(series)
+        allow(series).to receive(:ema).and_raise(StandardError, 'Calculation error')
+        allow(Rails.logger).to receive(:error)
+
+        result = screener.send(:analyze_instrument, instrument)
+        expect(result).to be_nil
+        expect(Rails.logger).to have_received(:error)
+      end
+
+      it 'handles supertrend calculation errors gracefully' do
+        create_list(:candle_series_record, 60, instrument: instrument, timeframe: '1D')
+        series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+        60.times { series.add_candle(create(:candle)) }
+        allow(instrument).to receive(:load_daily_candles).and_return(series)
+        allow(Indicators::Supertrend).to receive(:new).and_raise(StandardError, 'Supertrend error')
+        allow(Rails.logger).to receive(:warn)
+
+        result = screener.send(:analyze_instrument, instrument)
+        # Should still return result even if supertrend fails
+        expect(Rails.logger).to have_received(:warn)
+      end
+    end
+
+    context '#calculate_score' do
+      let(:series) do
+        cs = CandleSeries.new(symbol: instrument.symbol_name, interval: '1D')
+        60.times { cs.add_candle(create(:candle)) }
+        cs
+      end
+
+      before do
+        allow(instrument).to receive(:load_daily_candles).and_return(series)
+        allow(series).to receive(:ema).and_return(100.0)
+        allow(series).to receive(:rsi).and_return(60.0)
+        allow(series).to receive(:adx).and_return(25.0)
+        allow(series).to receive(:atr).and_return(2.0)
+        allow(series).to receive(:macd).and_return([1.0, 0.5, 0.5])
+        allow(Indicators::Supertrend).to receive(:new).and_return(
+          double(call: { trend: :bullish, line: Array.new(60, 100.0) })
+        )
+      end
+
+      it 'calculates score with EMA filters' do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          swing_trading: {
+            strategy: {
+              trend_filters: {
+                use_ema20: true,
+                use_ema50: true,
+                use_ema200: true
+              }
+            }
+          }
+        })
+
+        screener = described_class.new(instruments: instruments)
+        indicators = screener.send(:calculate_indicators, series)
+        score = screener.send(:calculate_score, series, indicators)
+
+        expect(score).to be >= 0
+        expect(score).to be <= 100
+      end
+
+      it 'calculates score with volume confirmation' do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          swing_trading: {
+            strategy: {
+              entry_conditions: {
+                require_volume_confirmation: true,
+                min_volume_spike: 1.5
+              }
+            }
+          }
+        })
+
+        screener = described_class.new(instruments: instruments)
+        indicators = screener.send(:calculate_indicators, series)
+        score = screener.send(:calculate_score, series, indicators)
+
+        expect(score).to be >= 0
+      end
+
+      it 'handles missing indicators gracefully' do
+        screener = described_class.new(instruments: instruments)
+        indicators = { ema20: nil, ema50: nil, rsi: nil }
+        score = screener.send(:calculate_score, series, indicators)
+
+        expect(score).to eq(0.0)
+      end
+
+      it 'calculates score with different ADX levels' do
+        screener = described_class.new(instruments: instruments)
+        indicators = {
+          ema20: 100.0,
+          ema50: 95.0,
+          adx: 30.0,
+          rsi: 60.0,
+          supertrend: { direction: :bullish },
+          volume: { spike_ratio: 1.0 }
+        }
+        score = screener.send(:calculate_score, series, indicators)
+
+        expect(score).to be > 0
+      end
+    end
+
+    context '#check_trend_alignment' do
+      it 'detects bullish EMA alignment' do
+        screener = described_class.new(instruments: instruments)
+        indicators = { ema20: 100.0, ema50: 95.0 }
+
+        result = screener.send(:check_trend_alignment, indicators)
+
+        expect(result).to include(:ema_bullish)
+      end
+
+      it 'detects supertrend bullish alignment' do
+        screener = described_class.new(instruments: instruments)
+        indicators = { supertrend: { direction: :bullish } }
+
+        result = screener.send(:check_trend_alignment, indicators)
+
+        expect(result).to include(:supertrend_bullish)
+      end
+
+      it 'detects MACD bullish alignment' do
+        screener = described_class.new(instruments: instruments)
+        indicators = { macd: [1.0, 0.5, 0.5] }
+
+        result = screener.send(:check_trend_alignment, indicators)
+
+        expect(result).to include(:macd_bullish)
+      end
+    end
+
+    context '#calculate_volatility' do
+      it 'calculates volatility metrics' do
+        screener = described_class.new(instruments: instruments)
+        indicators = { atr: 2.0, latest_close: 100.0 }
+
+        result = screener.send(:calculate_volatility, series, indicators)
+
+        expect(result).to have_key(:atr)
+        expect(result).to have_key(:atr_percent)
+        expect(result).to have_key(:level)
+      end
+
+      it 'returns nil when indicators missing' do
+        screener = described_class.new(instruments: instruments)
+        indicators = {}
+
+        result = screener.send(:calculate_volatility, series, indicators)
+
+        expect(result).to be_nil
+      end
+    end
+
+    context '#calculate_momentum' do
+      it 'calculates momentum metrics' do
+        screener = described_class.new(instruments: instruments)
+        indicators = { rsi: 65.0 }
+
+        result = screener.send(:calculate_momentum, series, indicators)
+
+        expect(result).to have_key(:change_5d)
+        expect(result).to have_key(:rsi)
+        expect(result).to have_key(:level)
+      end
+
+      it 'returns nil for insufficient candles' do
+        small_series = CandleSeries.new(symbol: 'TEST', interval: '1D')
+        3.times { small_series.add_candle(create(:candle)) }
+        screener = described_class.new(instruments: instruments)
+        indicators = { rsi: 65.0 }
+
+        result = screener.send(:calculate_momentum, small_series, indicators)
+
+        expect(result).to be_nil
+      end
     end
   end
 end

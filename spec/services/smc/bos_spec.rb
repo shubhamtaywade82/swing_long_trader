@@ -178,6 +178,128 @@ RSpec.describe Smc::Bos do
         expect(result).to be_nil
       end
     end
+
+    context 'with edge cases' do
+      it 'handles no swing highs' do
+        candles = []
+        30.times do |i|
+          price = 100.0 + (i * 0.1)
+          candles << Candle.new(
+            timestamp: (29 - i).days.ago,
+            open: price,
+            high: price + 0.5,
+            low: price - 0.5,
+            close: price + 0.2,
+            volume: 1000
+          )
+        end
+
+        result = described_class.detect(candles, lookback: 10)
+        expect(result).to be_nil
+      end
+
+      it 'handles no swing lows' do
+        candles = []
+        30.times do |i|
+          price = 100.0 + (i * 0.1)
+          candles << Candle.new(
+            timestamp: (29 - i).days.ago,
+            open: price,
+            high: price + 0.5,
+            low: price - 0.5,
+            close: price + 0.2,
+            volume: 1000
+          )
+        end
+
+        result = described_class.detect(candles, lookback: 10)
+        expect(result).to be_nil
+      end
+
+      it 'handles unconfirmed bullish BOS' do
+        candles = []
+        swing_high_price = 110.0
+
+        # Create swing high
+        25.times do |i|
+          price = 100.0 + (i * 0.3)
+          candles << Candle.new(
+            timestamp: (24 - i).days.ago,
+            open: price,
+            high: price + 1.0,
+            low: price - 0.5,
+            close: price + 0.5,
+            volume: 1000
+          )
+        end
+
+        # Create swing high
+        candles << Candle.new(
+          timestamp: 0.days.ago,
+          open: swing_high_price - 1.0,
+          high: swing_high_price,
+          low: swing_high_price - 2.0,
+          close: swing_high_price - 0.5,
+          volume: 1000
+        )
+
+        # Break above but close below (unconfirmed)
+        candles << Candle.new(
+          timestamp: 1.day.from_now,
+          open: swing_high_price + 0.5,
+          high: swing_high_price + 1.0,
+          low: swing_high_price - 0.5,
+          close: swing_high_price - 0.1, # Close below break level
+          volume: 1000
+        )
+
+        result = described_class.detect(candles, lookback: 10)
+        expect(result).not_to be_nil
+        expect(result[:confirmation]).to be false
+      end
+
+      it 'handles unconfirmed bearish BOS' do
+        candles = []
+        swing_low_price = 90.0
+
+        # Create swing low
+        25.times do |i|
+          price = 100.0 - (i * 0.3)
+          candles << Candle.new(
+            timestamp: (24 - i).days.ago,
+            open: price,
+            high: price + 0.5,
+            low: price - 1.0,
+            close: price - 0.5,
+            volume: 1000
+          )
+        end
+
+        # Create swing low
+        candles << Candle.new(
+          timestamp: 0.days.ago,
+          open: swing_low_price + 1.0,
+          high: swing_low_price + 2.0,
+          low: swing_low_price,
+          close: swing_low_price + 0.5,
+          volume: 1000
+        )
+
+        # Break below but close above (unconfirmed)
+        candles << Candle.new(
+          timestamp: 1.day.from_now,
+          open: swing_low_price - 0.5,
+          high: swing_low_price + 0.1, # High above break level
+          low: swing_low_price - 1.0,
+          close: swing_low_price + 0.1, # Close above break level
+          volume: 1000
+        )
+
+        result = described_class.detect(candles, lookback: 10)
+        expect(result).not_to be_nil
+        expect(result[:confirmation]).to be false
+      end
+    end
   end
 end
 

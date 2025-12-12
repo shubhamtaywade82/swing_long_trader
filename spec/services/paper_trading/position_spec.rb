@@ -121,6 +121,26 @@ RSpec.describe PaperTrading::Position, type: :service do
     context 'when creation fails' do
       before do
         allow(PaperPosition).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(PaperPosition.new))
+        allow(Rails.logger).to receive(:error)
+      end
+
+      it 'raises error and logs' do
+        expect do
+          described_class.create(
+            portfolio: portfolio,
+            instrument: instrument,
+            signal: signal
+          )
+        end.to raise_error(ActiveRecord::RecordInvalid)
+
+        expect(Rails.logger).to have_received(:error)
+      end
+    end
+
+    context 'when ledger creation fails' do
+      before do
+        allow(PaperLedger).to receive(:create!).and_raise(StandardError, 'Ledger error')
+        allow(Rails.logger).to receive(:error)
       end
 
       it 'raises error' do
@@ -130,8 +150,139 @@ RSpec.describe PaperTrading::Position, type: :service do
             instrument: instrument,
             signal: signal
           )
-        end.to raise_error(ActiveRecord::RecordInvalid)
+        end.to raise_error(StandardError, 'Ledger error')
       end
+    end
+
+    context 'when portfolio update fails' do
+      before do
+        allow(portfolio).to receive(:increment!).and_raise(StandardError, 'Update error')
+        allow(Rails.logger).to receive(:error)
+      end
+
+      it 'raises error' do
+        expect do
+          described_class.create(
+            portfolio: portfolio,
+            instrument: instrument,
+            signal: signal
+          )
+        end.to raise_error(StandardError, 'Update error')
+      end
+    end
+
+    context 'with short direction' do
+      let(:short_signal) do
+        {
+          direction: 'short',
+          entry_price: 100.0,
+          qty: 10,
+          sl: 105.0,
+          tp: 90.0
+        }
+      end
+
+      it 'creates short position' do
+        position = described_class.create(
+          portfolio: portfolio,
+          instrument: instrument,
+          signal: short_signal
+        )
+
+        expect(position.direction).to eq('short')
+        expect(position.sl).to eq(105.0)
+        expect(position.tp).to eq(90.0)
+      end
+    end
+
+    context 'with symbol direction' do
+      let(:symbol_signal) do
+        {
+          direction: :long,
+          entry_price: 100.0,
+          qty: 10
+        }
+      end
+
+      it 'converts symbol direction to string' do
+        position = described_class.create(
+          portfolio: portfolio,
+          instrument: instrument,
+          signal: symbol_signal
+        )
+
+        expect(position.direction).to eq('long')
+      end
+    end
+
+    context 'when signal has nil SL or TP' do
+      let(:signal_no_sl_tp) do
+        {
+          direction: 'long',
+          entry_price: 100.0,
+          qty: 10,
+          sl: nil,
+          tp: nil
+        }
+      end
+
+      it 'creates position with nil SL and TP' do
+        position = described_class.create(
+          portfolio: portfolio,
+          instrument: instrument,
+          signal: signal_no_sl_tp
+        )
+
+        expect(position.sl).to be_nil
+        expect(position.tp).to be_nil
+      end
+    end
+
+    it 'logs creation info' do
+      allow(Rails.logger).to receive(:info)
+      described_class.create(
+        portfolio: portfolio,
+        instrument: instrument,
+        signal: signal
+      )
+
+      expect(Rails.logger).to have_received(:info).with(/Created paper position/)
+    end
+
+    it 'creates ledger with correct meta information' do
+      position = described_class.create(
+        portfolio: portfolio,
+        instrument: instrument,
+        signal: signal
+      )
+
+      ledger = PaperLedger.last
+      meta = JSON.parse(ledger.meta)
+      expect(meta['symbol']).to eq(instrument.symbol_name)
+      expect(meta['direction']).to eq('long')
+      expect(meta['entry_price']).to eq(100.0)
+      expect(meta['quantity']).to eq(10)
+    end
+  end
+
+  describe '#reserve_capital' do
+    it 'increments reserved capital' do
+      initial_reserved = portfolio.reserved_capital
+      service = described_class.new(portfolio: portfolio, instrument: instrument, signal: signal)
+
+      service.send(:reserve_capital, 5000.0)
+
+      portfolio.reload
+      expect(portfolio.reserved_capital).to eq(initial_reserved + 5000.0)
+    end
+
+    it 'updates portfolio equity after reserving' do
+      allow(portfolio).to receive(:update_equity!)
+      service = described_class.new(portfolio: portfolio, instrument: instrument, signal: signal)
+
+      service.send(:reserve_capital, 5000.0)
+
+      expect(portfolio).to have_received(:update_equity!)
     end
   end
 end
