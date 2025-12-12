@@ -19,6 +19,17 @@ class InstrumentsImporter
     # ------------------------------------------------------------
     def import_from_url
       started_at = Time.current
+
+      # Check if universe filtering will be applied
+      if IndexConstituent.exists?
+        universe_size = IndexConstituent.distinct.count(:symbol)
+        puts "🔍 Universe filtering enabled: #{universe_size} unique symbols"
+        puts "   Only instruments matching universe will be imported"
+      else
+        puts "⚠️  No universe found - all instruments will be imported"
+        puts "   Run 'rails universe:build' to create a filtered universe"
+      end
+
       csv_text   = fetch_csv_with_cache
       summary    = import_from_csv(csv_text)
 
@@ -54,6 +65,15 @@ class InstrumentsImporter
     def import_from_csv(csv_content)
       instruments_rows = build_batches(csv_content)
 
+      # Log filtering info if universe exists
+      if IndexConstituent.exists?
+        universe_size = IndexConstituent.distinct.count(:symbol)
+        puts "📊 Universe filtering active: #{universe_size} unique symbols in universe"
+        puts "   Filtered to #{instruments_rows.size} instruments matching universe"
+      else
+        puts "⚠️  No universe found - importing all instruments"
+      end
+
       instrument_import = instruments_rows.empty? ? nil : import_instruments!(instruments_rows)
 
       {
@@ -69,22 +89,29 @@ class InstrumentsImporter
     # ------------------------------------------------------------
     # 1. Split CSV rows (swing trading only needs instruments, not derivatives)
     # Optionally filter by universe whitelist if master_universe.yml exists
+    # Matches by both symbol and ISIN if available in universe
     # ------------------------------------------------------------
     def build_batches(csv_content)
       instruments = []
-      universe_symbols = load_universe_symbols
 
       CSV.parse(csv_content, headers: true).each do |row|
         next unless VALID_EXCHANGES.include?(row["EXCH_ID"])
         # Skip derivatives (SEGMENT='D') - swing trading uses equity/index instruments only
         next if row["SEGMENT"] == "D"
 
-        # Filter by universe whitelist if available
-        if universe_symbols.present?
-          symbol_name = row["SYMBOL_NAME"]&.strip&.upcase
+        # Filter by universe whitelist if available (from database table)
+        if IndexConstituent.exists?
+          symbol_name = row["SYMBOL_NAME"]
+          symbol_name = symbol_name.strip.upcase if symbol_name
           # Remove suffix like -EQ, -BE, etc. for matching
-          clean_symbol = symbol_name&.split("-")&.first
-          next unless universe_symbols.include?(clean_symbol)
+          clean_symbol = symbol_name ? symbol_name.split("-").first : nil
+          row_isin = row["ISIN"]
+          row_isin = row_isin.strip.upcase if row_isin
+
+          # Match by symbol or ISIN using database query
+          matched = IndexConstituent.in_universe?(symbol: clean_symbol, isin: row_isin)
+
+          next unless matched
         end
 
         attrs = build_attrs(row)
@@ -93,19 +120,6 @@ class InstrumentsImporter
 
       instruments
     end
-
-    def load_universe_symbols
-      return Set.new unless UNIVERSE_FILE.exist?
-
-      begin
-        symbols = YAML.load_file(UNIVERSE_FILE)
-        Set.new(symbols.map(&:to_s).map(&:upcase))
-      rescue StandardError => e
-        Rails.logger.warn("[InstrumentsImporter] Failed to load universe: #{e.message}")
-        Set.new
-      end
-    end
-    private :load_universe_symbols
 
     def build_attrs(row)
       now = Time.zone.now

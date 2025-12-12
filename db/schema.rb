@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_12_000006) do
+ActiveRecord::Schema[8.1].define(version: 2025_12_12_190827) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -73,6 +73,22 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_000006) do
     t.index ["instrument_id", "timeframe"], name: "index_candle_series_on_instrument_id_and_timeframe"
     t.index ["instrument_id"], name: "index_candle_series_on_instrument_id"
     t.index ["timestamp"], name: "index_candle_series_on_timestamp"
+  end
+
+  create_table "index_constituents", force: :cascade do |t|
+    t.string "company_name", null: false
+    t.datetime "created_at", null: false
+    t.string "index_name", null: false
+    t.string "industry"
+    t.string "isin_code"
+    t.string "series"
+    t.string "symbol", null: false
+    t.datetime "updated_at", null: false
+    t.index ["index_name"], name: "index_index_constituents_on_index_name"
+    t.index ["industry"], name: "index_index_constituents_on_industry"
+    t.index ["isin_code"], name: "index_index_constituents_on_isin_code", where: "(isin_code IS NOT NULL)"
+    t.index ["symbol", "isin_code", "index_name"], name: "index_index_constituents_unique", unique: true
+    t.index ["symbol"], name: "index_index_constituents_on_symbol"
   end
 
   create_table "instruments", force: :cascade do |t|
@@ -247,12 +263,134 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_000006) do
     t.index ["status"], name: "index_paper_positions_on_status"
   end
 
+  create_table "positions", force: :cascade do |t|
+    t.decimal "available_capital", precision: 15, scale: 2
+    t.decimal "average_entry_price", precision: 15, scale: 2
+    t.datetime "closed_at"
+    t.integer "closed_positions_count", default: 0
+    t.decimal "closing_capital", precision: 15, scale: 2
+    t.boolean "continued_from_previous_day", default: false
+    t.datetime "created_at", null: false
+    t.decimal "current_price", precision: 15, scale: 2, null: false
+    t.text "dhan_position_data"
+    t.string "dhan_position_id"
+    t.string "direction", null: false
+    t.decimal "entry_price", precision: 15, scale: 2, null: false
+    t.bigint "exit_order_id"
+    t.decimal "exit_price", precision: 15, scale: 2
+    t.string "exit_reason"
+    t.decimal "filled_quantity", precision: 15, scale: 2, default: "0.0"
+    t.decimal "highest_price", precision: 15, scale: 2
+    t.integer "holding_days", default: 0
+    t.bigint "instrument_id", null: false
+    t.datetime "last_synced_at"
+    t.decimal "lowest_price", precision: 15, scale: 2
+    t.text "metadata"
+    t.integer "open_positions_count", default: 0
+    t.datetime "opened_at", null: false
+    t.decimal "opening_capital", precision: 15, scale: 2
+    t.bigint "order_id"
+    t.bigint "paper_portfolio_id"
+    t.decimal "peak_equity", precision: 15, scale: 2
+    t.date "portfolio_date"
+    t.string "portfolio_type"
+    t.integer "quantity", null: false
+    t.decimal "realized_pnl", precision: 15, scale: 2, default: "0.0"
+    t.decimal "realized_pnl_pct", precision: 8, scale: 2, default: "0.0"
+    t.string "status", default: "open", null: false
+    t.decimal "stop_loss", precision: 15, scale: 2
+    t.string "symbol", null: false
+    t.text "sync_metadata"
+    t.boolean "synced_with_dhan", default: false
+    t.decimal "take_profit", precision: 15, scale: 2
+    t.decimal "total_equity", precision: 15, scale: 2
+    t.decimal "total_exposure", precision: 15, scale: 2
+    t.string "trading_mode", default: "live"
+    t.bigint "trading_signal_id"
+    t.decimal "trailing_stop_distance", precision: 15, scale: 2
+    t.decimal "trailing_stop_pct", precision: 8, scale: 2
+    t.string "type"
+    t.decimal "unrealized_pnl", precision: 15, scale: 2, default: "0.0"
+    t.decimal "unrealized_pnl_pct", precision: 8, scale: 2, default: "0.0"
+    t.datetime "updated_at", null: false
+    t.decimal "utilization_pct", precision: 8, scale: 2, default: "0.0"
+    t.decimal "win_rate", precision: 5, scale: 2
+    t.index ["continued_from_previous_day"], name: "index_positions_on_continued_from_previous_day"
+    t.index ["dhan_position_id"], name: "index_positions_on_dhan_position_id"
+    t.index ["exit_order_id"], name: "index_positions_on_exit_order_id"
+    t.index ["instrument_id"], name: "index_positions_on_instrument_id"
+    t.index ["order_id"], name: "index_positions_on_order_id"
+    t.index ["paper_portfolio_id"], name: "index_positions_on_paper_portfolio_id"
+    t.index ["portfolio_date"], name: "index_positions_on_portfolio_date"
+    t.index ["status", "opened_at"], name: "index_positions_on_status_and_opened_at"
+    t.index ["status"], name: "index_positions_on_status"
+    t.index ["synced_with_dhan"], name: "index_positions_on_synced_with_dhan"
+    t.index ["trading_mode", "status"], name: "index_positions_on_trading_mode_and_status"
+    t.index ["trading_mode"], name: "index_positions_on_trading_mode"
+    t.index ["trading_signal_id"], name: "index_positions_on_trading_signal_id"
+    t.index ["type", "portfolio_date"], name: "index_positions_on_type_and_portfolio_date"
+    t.index ["type"], name: "index_positions_on_type"
+  end
+
   create_table "settings", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "key", null: false
     t.datetime "updated_at", null: false
     t.text "value"
     t.index ["key"], name: "index_settings_on_key", unique: true
+  end
+
+  create_table "trading_signals", force: :cascade do |t|
+    t.decimal "available_balance", precision: 15, scale: 2
+    t.decimal "balance_shortfall", precision: 15, scale: 2
+    t.string "balance_type"
+    t.decimal "confidence", precision: 5, scale: 2
+    t.datetime "created_at", null: false
+    t.string "direction", null: false
+    t.decimal "entry_price", precision: 15, scale: 2, null: false
+    t.boolean "executed", default: false, null: false
+    t.datetime "execution_attempted_at"
+    t.datetime "execution_completed_at"
+    t.text "execution_error"
+    t.text "execution_metadata"
+    t.string "execution_reason"
+    t.string "execution_status"
+    t.string "execution_type"
+    t.integer "holding_days_estimate"
+    t.bigint "instrument_id", null: false
+    t.bigint "order_id"
+    t.decimal "order_value", precision: 15, scale: 2, null: false
+    t.bigint "paper_position_id"
+    t.integer "quantity", null: false
+    t.decimal "required_balance", precision: 15, scale: 2
+    t.decimal "risk_reward_ratio", precision: 5, scale: 2
+    t.string "screener_type"
+    t.datetime "signal_generated_at", null: false
+    t.text "signal_metadata"
+    t.boolean "simulated", default: false, null: false
+    t.datetime "simulated_at"
+    t.datetime "simulated_exit_date"
+    t.decimal "simulated_exit_price", precision: 15, scale: 2
+    t.string "simulated_exit_reason"
+    t.integer "simulated_holding_days"
+    t.decimal "simulated_pnl", precision: 15, scale: 2
+    t.decimal "simulated_pnl_pct", precision: 8, scale: 2
+    t.text "simulation_metadata"
+    t.string "source"
+    t.decimal "stop_loss", precision: 15, scale: 2
+    t.string "symbol", null: false
+    t.decimal "take_profit", precision: 15, scale: 2
+    t.datetime "updated_at", null: false
+    t.index ["executed", "signal_generated_at"], name: "index_trading_signals_on_executed_and_signal_generated_at"
+    t.index ["executed", "simulated"], name: "index_trading_signals_on_executed_and_simulated"
+    t.index ["executed"], name: "index_trading_signals_on_executed"
+    t.index ["execution_status"], name: "index_trading_signals_on_execution_status"
+    t.index ["execution_type"], name: "index_trading_signals_on_execution_type"
+    t.index ["instrument_id"], name: "index_trading_signals_on_instrument_id"
+    t.index ["order_id"], name: "index_trading_signals_on_order_id"
+    t.index ["paper_position_id"], name: "index_trading_signals_on_paper_position_id"
+    t.index ["simulated"], name: "index_trading_signals_on_simulated"
+    t.index ["symbol", "signal_generated_at"], name: "index_trading_signals_on_symbol_and_signal_generated_at"
   end
 
   add_foreign_key "backtest_positions", "backtest_runs"
@@ -263,4 +401,12 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_000006) do
   add_foreign_key "paper_ledgers", "paper_positions"
   add_foreign_key "paper_positions", "instruments"
   add_foreign_key "paper_positions", "paper_portfolios"
+  add_foreign_key "positions", "instruments"
+  add_foreign_key "positions", "orders"
+  add_foreign_key "positions", "orders", column: "exit_order_id"
+  add_foreign_key "positions", "paper_portfolios"
+  add_foreign_key "positions", "trading_signals"
+  add_foreign_key "trading_signals", "instruments"
+  add_foreign_key "trading_signals", "orders"
+  add_foreign_key "trading_signals", "paper_positions"
 end
