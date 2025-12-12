@@ -22,12 +22,19 @@ RSpec.describe Strategies::Swing::Executor, type: :service do
   before do
     # Set default capital
     Setting.put('portfolio.current_capital', 100_000)
-    allow(AlgoConfig).to receive(:fetch).and_return(
-      risk: {
-        max_position_size_pct: 10.0,
-        max_total_exposure_pct: 50.0
+    # Mock AlgoConfig.fetch to return appropriate configs based on the key
+    allow(AlgoConfig).to receive(:fetch).and_call_original
+    allow(AlgoConfig).to receive(:fetch).with(:risk).and_return(
+      max_position_size_pct: 10.0,
+      max_total_exposure_pct: 50.0
+    )
+    allow(AlgoConfig).to receive(:fetch).with(:execution).and_return(
+      manual_approval: {
+        enabled: false  # Disable manual approval for tests
       }
     )
+    # Ensure paper trading is disabled for these tests
+    allow(Rails.configuration.x.paper_trading).to receive(:enabled).and_return(false)
   end
 
   describe '.call' do
@@ -106,10 +113,13 @@ RSpec.describe Strategies::Swing::Executor, type: :service do
 
       it 'rejects order exceeding total exposure limit' do
         # Create existing orders to fill up exposure
-        create_list(:order, 5, instrument: instrument, status: 'placed', price: 100.0, quantity: 1000)
+        # Capital is 100,000, so 50% limit is 50,000
+        # Create orders totaling 45,000 (within limit)
+        create_list(:order, 5, instrument: instrument, status: 'placed', price: 90.0, quantity: 100)
 
-        # This order would exceed 50% total exposure
-        result = described_class.call(signal.merge(entry_price: 1000.0, qty: 100))
+        # This order (10,000) would make total 55,000, exceeding 50% limit
+        # But it's within the 10% position size limit (10,000)
+        result = described_class.call(signal.merge(entry_price: 100.0, qty: 100))
 
         expect(result[:success]).to be false
         expect(result[:error]).to include('Total exposure exceeds limit')
@@ -174,12 +184,12 @@ RSpec.describe Strategies::Swing::Executor, type: :service do
       end
 
       it 'sends alert for large orders (>5% of capital)' do
-        # Order value: 100 * 600 = 60,000 (60% of 100,000 capital)
-        large_signal = signal.merge(entry_price: 600.0, qty: 100)
+        # Order value: 100 * 60 = 6,000 (6% of capital, >5% threshold, but <10% position size limit)
+        large_signal = signal.merge(entry_price: 60.0, qty: 100)
         result = described_class.call(large_signal)
 
         expect(result[:success]).to be true
-        expect(Telegram::Notifier).to have_received(:send_error_alert)
+        expect(Telegram::Notifier).to have_received(:send_error_alert).at_least(:once)
       end
 
       it 'does not send alert for small orders' do
