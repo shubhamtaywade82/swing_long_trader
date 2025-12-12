@@ -364,6 +364,7 @@ rails console
 
 ## Documentation
 
+- **[Complete System Guide](docs/COMPLETE_SYSTEM_GUIDE.md)** - **START HERE** - Complete understanding of Live/Paper/Simulation modes
 - **[Quick Start](docs/QUICK_START.md)** - Get running in 5 minutes
 - **[How It Works](docs/HOW_IT_WORKS.md)** - Understanding automated screening and trading flow
 - **[Local Development Guide](docs/LOCAL_DEVELOPMENT_GUIDE.md)** - Complete guide to run locally on your machine
