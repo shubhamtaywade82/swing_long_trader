@@ -37,13 +37,71 @@ module PaperTrading
       required_capital = entry_price * quantity
 
       if required_capital > @portfolio.available_capital
+        send_insufficient_balance_notification(required_capital, @portfolio.available_capital)
         return {
           success: false,
           error: "Insufficient capital: ₹#{required_capital.round(2)} required, ₹#{@portfolio.available_capital.round(2)} available",
+          insufficient_balance: true,
+          required: required_capital,
+          available: @portfolio.available_capital,
+          shortfall: required_capital - @portfolio.available_capital,
         }
       end
 
       { success: true }
+    end
+
+    def send_insufficient_balance_notification(required_amount, available_balance)
+      return unless Telegram::Notifier.enabled?
+
+      instrument = Instrument.find_by(id: @signal[:instrument_id])
+      symbol = instrument&.symbol_name || "Unknown"
+      shortfall = required_amount - available_balance
+      order_value = @signal[:entry_price] * @signal[:qty]
+
+      message = "📊 <b>PAPER TRADING RECOMMENDATION</b>\n\n"
+      message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+      message += "📈 <b>Signal Details:</b>\n"
+      message += "Symbol: <b>#{symbol}</b>\n"
+      message += "Direction: <b>#{@signal[:direction].to_s.upcase}</b>\n"
+      message += "Entry Price: ₹#{@signal[:entry_price].round(2)}\n"
+      message += "Quantity: #{@signal[:qty]}\n"
+      message += "Order Value: ₹#{order_value.round(2)}\n"
+      
+      if @signal[:sl]
+        message += "Stop Loss: ₹#{@signal[:sl].round(2)}\n"
+      end
+      
+      if @signal[:tp]
+        message += "Take Profit: ₹#{@signal[:tp].round(2)}\n"
+      end
+      
+      if @signal[:confidence]
+        message += "Confidence: #{@signal[:confidence].round(1)}%\n"
+      end
+      
+      if @signal[:rr]
+        message += "Risk-Reward: #{@signal[:rr]}:1\n"
+      end
+      
+      if @signal[:holding_days_estimate]
+        message += "Est. Holding: #{@signal[:holding_days_estimate]} days\n"
+      end
+      
+      message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+      message += "💰 <b>Portfolio Balance:</b>\n"
+      message += "Required: ₹#{required_amount.round(2)}\n"
+      message += "Available: ₹#{available_balance.round(2)}\n"
+      message += "Shortfall: <b>₹#{shortfall.round(2)}</b>\n"
+      message += "\nPortfolio: #{@portfolio.name}\n"
+      message += "Total Equity: ₹#{@portfolio.total_equity.round(2)}\n"
+      message += "Capital: ₹#{@portfolio.capital.round(2)}\n"
+      message += "\n⚠️ <b>Trade Not Executed</b> - Insufficient balance\n"
+      message += "\n💡 Add ₹#{shortfall.round(2)} to portfolio to execute this trade."
+
+      Telegram::Notifier.send_error_alert(message, context: "Paper Trading Recommendation - Insufficient Balance")
+    rescue StandardError => e
+      Rails.logger.error("[PaperTrading::RiskManager] Failed to send balance notification: #{e.message}")
     end
 
     def check_max_position_size

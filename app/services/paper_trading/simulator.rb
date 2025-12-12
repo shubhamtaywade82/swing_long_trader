@@ -20,6 +20,9 @@ module PaperTrading
         # Update current price from latest candle
         update_position_price(position)
 
+        # Update position in database (ensures sync)
+        position.update_current_price!(position.current_price)
+
         # Check exit conditions
         exit_result = check_exit_conditions(position)
         next unless exit_result[:should_exit]
@@ -28,6 +31,10 @@ module PaperTrading
         exit_position(position, exit_result[:reason], exit_result[:exit_price])
         exited_count += 1
       end
+
+      # Update portfolio after exits
+      @portfolio.update_equity!
+      @portfolio.update_drawdown!
 
       log_info("Checked #{open_positions.count} positions, exited #{exited_count}")
       { checked: open_positions.count, exited: exited_count }

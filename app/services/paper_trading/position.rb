@@ -22,16 +22,18 @@ module PaperTrading
       # Reserve capital (don't debit - capital stays same, just reserved)
       reserve_capital(position_value)
 
-      # Create position
-      position = PaperPosition.create!(
-        paper_portfolio: @portfolio,
+      # Create position in unified positions table with trading_mode='paper'
+      position = ::Position.create!(
+        paper_portfolio: @portfolio, # For backward compatibility
         instrument: @instrument,
+        trading_mode: "paper",
+        symbol: @instrument.symbol_name,
         direction: @signal[:direction].to_s,
         entry_price: entry_price,
         current_price: entry_price,
         quantity: quantity,
-        sl: @signal[:sl],
-        tp: @signal[:tp],
+        stop_loss: @signal[:sl],
+        take_profit: @signal[:tp],
         status: "open",
         opened_at: Time.current,
         metadata: @signal[:metadata]&.to_json || {}.to_json,

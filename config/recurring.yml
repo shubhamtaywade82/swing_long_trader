@@ -56,19 +56,27 @@ production:
   #   queue: default
   #   priority: 0
 
-  # Optional: Swing entry monitor (commented out - for live trading)
-  # swing_entry_monitor:
-  #   class: Strategies::SwingEntryMonitorJob
-  #   schedule: every 30 minutes from 9:00am to 3:30pm on weekdays
-  #   queue: default
-  #   priority: 1
+  # Swing entry monitor - Automatic trading during market hours
+  swing_entry_monitor:
+    class: Strategies::Swing::EntryMonitorJob
+    schedule: "*/30 9-15 * * 1-5"  # Every 30 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
 
-  # Optional: Swing exit monitor (commented out - for live trading)
-  # swing_exit_monitor:
-  #   class: Strategies::SwingExitMonitorJob
-  #   schedule: every 30 minutes from 9:00am to 3:30pm on weekdays
-  #   queue: default
-  #   priority: 1
+  # Swing exit monitor - Automatic exit monitoring during market hours
+  swing_exit_monitor:
+    class: Strategies::Swing::ExitMonitorJob
+    schedule: "*/30 9-15 * * 1-5"  # Every 30 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
+
+  # Position sync - Sync live positions with DhanHQ and reconcile prices
+  position_sync:
+    class: Positions::SyncJob
+    schedule: "*/15 9-15 * * 1-5"  # Every 15 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
+    args: ["all"]  # Sync both live and paper
 
 development:
   # Same as production for development testing
@@ -95,6 +103,34 @@ development:
     schedule: "*/30 9-15 * * 1-5"
     queue: default
     priority: 1
+
+  # Swing entry monitor - Automatic trading during market hours
+  swing_entry_monitor:
+    class: Strategies::Swing::EntryMonitorJob
+    schedule: "*/30 9-15 * * 1-5"  # Every 30 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
+
+  # Swing exit monitor - Automatic exit monitoring during market hours
+  swing_exit_monitor:
+    class: Strategies::Swing::ExitMonitorJob
+    schedule: "*/30 9-15 * * 1-5"  # Every 30 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
+
+  # Position sync - Sync live positions with DhanHQ and reconcile prices
+  position_sync:
+    class: Positions::SyncJob
+    schedule: "*/15 9-15 * * 1-5"  # Every 15 minutes, 9 AM - 3:30 PM IST, weekdays
+    queue: default
+    priority: 1
+
+  # Daily portfolio snapshot - Create portfolio snapshot at end of trading day
+  daily_portfolio_snapshot:
+    class: Portfolios::DailySnapshotJob
+    schedule: "0 16 * * 1-5"  # 4:00 PM IST (after market close), weekdays
+    queue: default
+    priority: 2
 
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"

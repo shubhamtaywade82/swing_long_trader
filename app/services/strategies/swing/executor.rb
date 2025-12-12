@@ -21,23 +21,57 @@ module Strategies
         validation = validate_signal
         return validation unless validation[:success]
 
+        # Create trading signal record (before execution attempt)
+        signal_record = create_signal_record
+
         # If paper trading is enabled, skip live trading checks and route directly
-        return place_entry_order if Rails.configuration.x.paper_trading.enabled
+        if Rails.configuration.x.paper_trading.enabled
+          result = place_entry_order
+          update_signal_record_after_execution(signal_record, result)
+          return result
+        end
 
         # Check risk limits (for live trading)
         risk_check = check_risk_limits
-        return risk_check unless risk_check[:success]
+        unless risk_check[:success]
+          signal_record&.mark_as_not_executed!(
+            reason: risk_check[:error],
+            metadata: { risk_check: risk_check },
+          )
+          return risk_check
+        end
 
         # Check circuit breaker (for live trading)
         circuit_check = check_circuit_breaker
-        return circuit_check unless circuit_check[:success]
+        unless circuit_check[:success]
+          signal_record&.mark_as_not_executed!(
+            reason: circuit_check[:error],
+            metadata: { circuit_check: circuit_check },
+          )
+          return circuit_check
+        end
 
         # Check if manual approval required (first 30 trades) - only for live trading
         approval_check = check_manual_approval_required
-        return approval_check unless approval_check[:success]
+        unless approval_check[:success]
+          if approval_check[:requires_approval]
+            signal_record&.mark_as_pending_approval!(
+              reason: approval_check[:error],
+              metadata: { approval_check: approval_check },
+            )
+          else
+            signal_record&.mark_as_not_executed!(
+              reason: approval_check[:error],
+              metadata: { approval_check: approval_check },
+            )
+          end
+          return approval_check
+        end
 
         # Place order
-        place_entry_order
+        result = place_entry_order
+        update_signal_record_after_execution(signal_record, result)
+        result
       end
 
       private
@@ -56,11 +90,16 @@ module Strategies
         # Skip risk limit checks in paper trading mode (handled by PaperTrading::RiskManager)
         return { success: true } if Rails.configuration.x.paper_trading.enabled
 
+        order_value = @signal[:entry_price] * @signal[:qty]
+
+        # Check available balance first
+        balance_check = check_available_balance(order_value)
+        return balance_check unless balance_check[:success]
+
         # Check max position size per instrument
         _instrument_exposure = calculate_instrument_exposure
         max_per_instrument = @risk_config[:max_position_size_pct] || 10.0
         max_value = (get_current_capital * max_per_instrument / 100.0)
-        order_value = @signal[:entry_price] * @signal[:qty]
 
         if order_value > max_value
           return {
@@ -82,6 +121,122 @@ module Strategies
         end
 
         { success: true }
+      end
+
+      def check_available_balance(required_amount)
+        balance_result = Dhan::Balance.check_available_balance
+
+        unless balance_result[:success]
+          send_balance_check_failed_notification(required_amount, balance_result[:error])
+          return {
+            success: false,
+            error: "Unable to check account balance: #{balance_result[:error]}",
+            balance_check_failed: true,
+          }
+        end
+
+        available_balance = balance_result[:balance]
+
+        if available_balance < required_amount
+          send_insufficient_balance_notification(required_amount, available_balance)
+          return {
+            success: false,
+            error: "Insufficient balance: ₹#{required_amount.round(2)} required, ₹#{available_balance.round(2)} available",
+            insufficient_balance: true,
+            required: required_amount,
+            available: available_balance,
+            shortfall: required_amount - available_balance,
+          }
+        end
+
+        { success: true, balance: available_balance }
+      end
+
+      def send_insufficient_balance_notification(required_amount, available_balance)
+        return unless Telegram::Notifier.enabled?
+
+        shortfall = required_amount - available_balance
+        order_value = @signal[:entry_price] * @signal[:qty]
+
+        message = "📊 <b>TRADING RECOMMENDATION</b>\n\n"
+        message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        message += "📈 <b>Signal Details:</b>\n"
+        message += "Symbol: <b>#{@instrument.symbol_name}</b>\n"
+        message += "Direction: <b>#{@signal[:direction].to_s.upcase}</b>\n"
+        message += "Entry Price: ₹#{@signal[:entry_price].round(2)}\n"
+        message += "Quantity: #{@signal[:qty]}\n"
+        message += "Order Value: ₹#{order_value.round(2)}\n"
+        
+        if @signal[:sl]
+          message += "Stop Loss: ₹#{@signal[:sl].round(2)}\n"
+        end
+        
+        if @signal[:tp]
+          message += "Take Profit: ₹#{@signal[:tp].round(2)}\n"
+        end
+        
+        if @signal[:confidence]
+          message += "Confidence: #{(@signal[:confidence] * 100).round(1)}%\n"
+        end
+        
+        message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        message += "💰 <b>Balance Information:</b>\n"
+        message += "Required: ₹#{required_amount.round(2)}\n"
+        message += "Available: ₹#{available_balance.round(2)}\n"
+        message += "Shortfall: <b>₹#{shortfall.round(2)}</b>\n"
+        message += "\n⚠️ <b>Trade Not Executed</b> - Insufficient balance\n"
+        message += "\n💡 Add ₹#{shortfall.round(2)} to your account to execute this trade."
+
+        Telegram::Notifier.send_error_alert(message, context: "Trading Recommendation - Insufficient Balance")
+      rescue StandardError => e
+        Rails.logger.error("[Strategies::Swing::Executor] Failed to send balance notification: #{e.message}")
+      end
+
+      def send_balance_check_failed_notification(required_amount, error)
+        return unless Telegram::Notifier.enabled?
+
+        order_value = @signal[:entry_price] * @signal[:qty]
+
+        message = "📊 <b>TRADING RECOMMENDATION</b>\n\n"
+        message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        message += "📈 <b>Signal Details:</b>\n"
+        message += "Symbol: <b>#{@instrument.symbol_name}</b>\n"
+        message += "Direction: <b>#{@signal[:direction].to_s.upcase}</b>\n"
+        message += "Entry Price: ₹#{@signal[:entry_price].round(2)}\n"
+        message += "Quantity: #{@signal[:qty]}\n"
+        message += "Order Value: ₹#{order_value.round(2)}\n"
+        
+        if @signal[:sl]
+          message += "Stop Loss: ₹#{@signal[:sl].round(2)}\n"
+        end
+        
+        if @signal[:tp]
+          message += "Take Profit: ₹#{@signal[:tp].round(2)}\n"
+        end
+        
+        if @signal[:confidence]
+          message += "Confidence: #{@signal[:confidence].round(1)}%\n"
+        end
+        
+        if @signal[:rr]
+          message += "Risk-Reward: #{@signal[:rr]}:1\n"
+        end
+        
+        if @signal[:holding_days_estimate]
+          message += "Est. Holding: #{@signal[:holding_days_estimate]} days\n"
+        end
+        
+        message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        message += "❌ <b>Balance Check Failed</b>\n"
+        message += "Unable to verify account balance.\n"
+        message += "Error: #{error}\n\n"
+        message += "Required for order: ₹#{required_amount.round(2)}\n"
+        message += "\n⚠️ <b>Trade Not Executed</b> - Balance check failed\n"
+        message += "\n💡 Please check your account balance manually."
+
+        Telegram::Notifier.send_error_alert(message, context: "Trading Recommendation - Balance Check Failed")
+      rescue StandardError => e
+        Rails.logger.error("[Strategies::Swing::Executor] Failed to send balance check notification: #{e.message}")
       end
 
       def check_circuit_breaker
@@ -120,16 +275,23 @@ module Strategies
         manual_approval_enabled = execution_config[:manual_approval]&.dig(:enabled) != false
         manual_approval_count = execution_config[:manual_approval]&.dig(:count) || 30
 
-        # If manual approval is disabled, skip
+        # If manual approval is explicitly disabled, skip
+        return { success: true } if manual_approval_enabled == false
+
+        # If auto_trading is enabled, skip manual approval
+        auto_trading_enabled = execution_config[:auto_trading]&.dig(:enabled) == true
+        return { success: true } if auto_trading_enabled
+
+        # If manual approval is disabled (nil or not set), skip
         return { success: true } unless manual_approval_enabled
 
         # Count executed trades (excluding dry-run)
         executed_count = Order.real.where(status: "executed").count
 
-        # If we've already executed 30+ trades, no approval needed
+        # If we've already executed required trades, no approval needed
         return { success: true } if executed_count >= manual_approval_count
 
-        # For first 30 trades, require approval
+        # For first N trades, require approval
         # Create order record with requires_approval flag
         # The order will be placed only after approval
         {
@@ -167,8 +329,14 @@ module Strategies
           send_large_order_confirmation(order_value)
         end
 
-        # If approval required, create order with requires_approval flag
-        return create_pending_approval_order(order_type, transaction_type, order_value) if requires_approval
+        # Check if auto trading is enabled
+        execution_config = AlgoConfig.fetch(:execution) || {}
+        auto_trading_enabled = execution_config[:auto_trading]&.dig(:enabled) == true
+
+        # If approval required and auto trading not enabled, create pending approval order
+        if requires_approval && !auto_trading_enabled
+          return create_pending_approval_order(order_type, transaction_type, order_value)
+        end
 
         # Place order via DhanHQ wrapper
         result = Dhan::Orders.place_order(
@@ -180,6 +348,11 @@ module Strategies
           client_order_id: generate_order_id,
           dry_run: @dry_run,
         )
+
+        # Create position record if order placed successfully
+        if result[:success] && result[:order] && !@dry_run
+          create_position_from_order(result[:order])
+        end
 
         # Log order placement
         log_order_placement(result)
@@ -295,6 +468,113 @@ module Strategies
       def get_current_capital
         # Get current capital (from settings or default)
         Setting.fetch_i("portfolio.current_capital", 100_000)
+      end
+
+      def create_signal_record
+        # Get balance information
+        balance_info = get_balance_info
+
+        TradingSignal.create_from_signal(
+          @signal,
+          source: "entry_monitor",
+          execution_attempted: true,
+          balance_info: balance_info,
+        )
+      rescue StandardError => e
+        Rails.logger.error("[Strategies::Swing::Executor] Failed to create signal record: #{e.message}")
+        nil
+      end
+
+      def get_balance_info
+        if Rails.configuration.x.paper_trading.enabled
+          portfolio = PaperTrading::Portfolio.find_or_create_default
+          required = @signal[:entry_price] * @signal[:qty]
+          available = portfolio.available_capital
+          {
+            required: required,
+            available: available,
+            shortfall: [required - available, 0].max,
+            type: "paper_portfolio",
+          }
+        else
+          balance_result = Dhan::Balance.check_available_balance
+          required = @signal[:entry_price] * @signal[:qty]
+          available = balance_result[:success] ? balance_result[:balance] : 0
+          {
+            required: required,
+            available: available,
+            shortfall: [required - available, 0].max,
+            type: "live_account",
+          }
+        end
+      end
+
+      def update_signal_record_after_execution(signal_record, result)
+        return unless signal_record
+
+        if result[:success]
+          if result[:paper_trade]
+            signal_record.mark_as_executed!(
+              execution_type: "paper",
+              paper_position: result[:position] || result[:order],
+              metadata: { result: result },
+            )
+          else
+            # Find position if created
+            position = Position.find_by(order: result[:order]) if result[:order]
+            signal_record.mark_as_executed!(
+              execution_type: "live",
+              order: result[:order],
+              metadata: { result: result, position_id: position&.id },
+            )
+          end
+        else
+          signal_record.mark_as_failed!(
+            reason: result[:error] || "Execution failed",
+            error: result[:error],
+            metadata: { result: result },
+          )
+        end
+      rescue StandardError => e
+        Rails.logger.error("[Strategies::Swing::Executor] Failed to update signal record: #{e.message}")
+      end
+
+      def create_position_from_order(order)
+        # Create Position record for live trading
+        return unless order&.executed? || order&.placed?
+
+        # Get signal metadata
+        metadata = order.metadata_hash
+        signal_data = metadata["signal"] || {}
+
+        # Create position record for live trading
+        Position.create!(
+          instrument: @instrument,
+          order: order,
+          trading_signal: TradingSignal.find_by(order: order),
+          trading_mode: "live", # Live trading position
+          symbol: order.symbol,
+          direction: order.buy? ? "long" : "short",
+          entry_price: order.average_price || order.price || @signal[:entry_price],
+          current_price: @instrument.ltp || order.average_price || order.price || @signal[:entry_price],
+          quantity: order.filled_quantity.positive? ? order.filled_quantity : order.quantity,
+          average_entry_price: order.average_price,
+          filled_quantity: order.filled_quantity.positive? ? order.filled_quantity : order.quantity,
+          stop_loss: signal_data["sl"] || @signal[:sl],
+          take_profit: signal_data["tp"] || @signal[:tp],
+          status: "open",
+          opened_at: order.created_at,
+          metadata: {
+            order_id: order.id,
+            client_order_id: order.client_order_id,
+            signal: @signal,
+          }.to_json,
+        )
+
+        Rails.logger.info("[Strategies::Swing::Executor] Created position for order #{order.client_order_id}")
+      rescue StandardError => e
+        Rails.logger.error("[Strategies::Swing::Executor] Failed to create position: #{e.message}")
+        nil
       end
 
       def generate_order_id

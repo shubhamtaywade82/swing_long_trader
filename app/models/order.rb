@@ -2,6 +2,8 @@
 
 class Order < ApplicationRecord
   belongs_to :instrument
+  has_one :position, dependent: :nullify # Position created from this order
+  has_many :exit_positions, class_name: "Position", foreign_key: "exit_order_id", dependent: :nullify
 
   validates :client_order_id, presence: true, uniqueness: true
   validates :symbol, :exchange_segment, :security_id, :product_type, :order_type, :transaction_type, :quantity,
