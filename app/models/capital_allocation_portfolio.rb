@@ -3,11 +3,11 @@
 class CapitalAllocationPortfolio < ApplicationRecord
   self.table_name = "capital_allocation_portfolios"
 
-  has_many :swing_positions, dependent: :destroy
-  has_many :long_term_holdings, dependent: :destroy
-  has_many :ledger_entries, dependent: :destroy
-  has_one :swing_risk_config, dependent: :destroy
-  has_one :capital_bucket, class_name: "PortfolioCapitalBucket", dependent: :destroy
+  has_many :swing_positions, foreign_key: "portfolio_id", dependent: :destroy
+  has_many :long_term_holdings, foreign_key: "portfolio_id", dependent: :destroy
+  has_many :ledger_entries, foreign_key: "portfolio_id", dependent: :destroy
+  has_one :swing_risk_config, foreign_key: "portfolio_id", dependent: :destroy
+  has_one :capital_bucket, class_name: "PortfolioCapitalBucket", foreign_key: "portfolio_id", dependent: :destroy
 
   validates :name, presence: true, uniqueness: { case_sensitive: false }
   validates :mode, inclusion: { in: %w[paper live] }

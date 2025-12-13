@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class PortfolioCapitalBucket < ApplicationRecord
-  belongs_to :portfolio, class_name: "CapitalAllocationPortfolio"
+  belongs_to :portfolio, class_name: "CapitalAllocationPortfolio", foreign_key: "portfolio_id"
 
   validates :swing_pct, :long_term_pct, :cash_pct, presence: true,
             numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
