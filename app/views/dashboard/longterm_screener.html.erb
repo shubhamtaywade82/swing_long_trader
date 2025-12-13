@@ -9,7 +9,11 @@
     <div>
       <%= form_with url: run_longterm_screener_path, method: :post, local: false, class: "d-inline", data: { controller: "screener" } do |f| %>
         <%= f.number_field :limit, value: @limit, min: 5, max: 50, class: "form-control d-inline-block", style: "width: 80px; margin-right: 10px;" %>
+        <%= f.hidden_field :sync, value: "false", id: "sync_mode_lt" %>
         <%= f.submit "Run Screener", class: "btn btn-primary", data: { screener_target: "runButton" } %>
+        <button type="button" class="btn btn-outline-secondary ms-2" onclick="document.getElementById('sync_mode_lt').value='true'; this.form.requestSubmit();" title="Run synchronously (bypasses queue, for testing)">
+          <i class="bi bi-play-fill"></i> Run Now
+        </button>
       <% end %>
     </div>
   </div>
@@ -228,11 +232,38 @@
         })
         .then(data => {
           if (statusMessage) {
-            statusMessage.textContent = data.message || 'Screener queued successfully. Waiting for results...';
+            let message = data.message || 'Screener queued successfully. Waiting for results...';
+
+            // Show warning if worker not running
+            if (data.queue_status && !data.queue_status.worker_running) {
+              message += ' ⚠️ WARNING: SolidQueue worker may not be running!';
+              if (statusCard) {
+                statusCard.classList.remove('alert-info', 'alert-success');
+                statusCard.classList.add('alert-warning');
+              }
+            } else if (data.status === 'completed') {
+              // Synchronous run completed
+              message = data.message;
+              if (statusCard) {
+                statusCard.classList.remove('alert-info', 'alert-warning');
+                statusCard.classList.add('alert-success');
+              }
+              // Reload immediately for sync runs
+              setTimeout(() => location.reload(), 2000);
+              return;
+            } else {
+              if (statusCard) {
+                statusCard.classList.remove('alert-danger', 'alert-success', 'alert-warning');
+                statusCard.classList.add('alert-info');
+              }
+            }
+
+            statusMessage.textContent = message;
           }
-          if (statusCard) {
-            statusCard.classList.remove('alert-danger', 'alert-success');
-            statusCard.classList.add('alert-info');
+
+          // Only poll if job was queued (not completed synchronously)
+          if (data.status === 'completed') {
+            return; // Already handled above
           }
 
           // Poll for results instead of immediate refresh

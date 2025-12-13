@@ -184,23 +184,104 @@ class DashboardController < ApplicationController
 
   def run_swing_screener
     limit = params[:limit]&.to_i || 50
+    sync = params[:sync] == "true"
 
-    # Run screener in background
-    Screeners::SwingScreenerJob.perform_later(limit: limit)
+    if sync
+      # Run synchronously for testing (bypasses queue)
+      begin
+        candidates = Screeners::SwingScreener.call(limit: limit)
 
-    # Return immediately with status
-    render json: { status: "queued", message: "Swing screener job queued. Results will appear shortly." }
+        # Cache results
+        cache_key = "swing_screener_results_#{Date.current}"
+        Rails.cache.write(cache_key, candidates, expires_in: 24.hours)
+        Rails.cache.write("#{cache_key}_timestamp", Time.current, expires_in: 24.hours)
+
+        render json: {
+          status: "completed",
+          message: "Swing screener completed. Found #{candidates.size} candidates.",
+          candidate_count: candidates.size,
+        }
+      rescue StandardError => e
+        render json: { status: "error", message: e.message }, status: :unprocessable_content
+      end
+    else
+      # Run screener in background
+      job = Screeners::SwingScreenerJob.perform_later(limit: limit)
+
+      # Log job enqueueing
+      Rails.logger.info("[DashboardController] Enqueued SwingScreenerJob: #{job.job_id}")
+
+      # Check if worker is running by checking queue status
+      queue_status = check_solid_queue_status
+
+      Rails.logger.info("[DashboardController] Queue status: #{queue_status.inspect}")
+
+      message = if queue_status[:worker_running]
+                  "Swing screener job queued (Job ID: #{job.job_id}). Results will appear shortly."
+                else
+                  "Job queued but SolidQueue worker may not be running! " \
+                    "Please start it with: bin/rails solid_queue:start"
+                end
+
+      render json: {
+        status: "queued",
+        message: message,
+        job_id: job.job_id,
+        queue_status: queue_status,
+      }
+    end
   rescue StandardError => e
     render json: { status: "error", message: e.message }, status: :unprocessable_content
   end
 
   def run_longterm_screener
     limit = params[:limit]&.to_i || 10
+    sync = params[:sync] == "true"
 
-    # Run screener in background
-    Screeners::LongtermScreenerJob.perform_later(limit: limit)
+    if sync
+      # Run synchronously for testing (bypasses queue)
+      begin
+        candidates = Screeners::LongtermScreener.call(limit: limit)
 
-    render json: { status: "queued", message: "Long-term screener job queued. Results will appear shortly." }
+        # Cache results
+        cache_key = "longterm_screener_results_#{Date.current}"
+        Rails.cache.write(cache_key, candidates, expires_in: 24.hours)
+        Rails.cache.write("#{cache_key}_timestamp", Time.current, expires_in: 24.hours)
+
+        render json: {
+          status: "completed",
+          message: "Long-term screener completed. Found #{candidates.size} candidates.",
+          candidate_count: candidates.size,
+        }
+      rescue StandardError => e
+        render json: { status: "error", message: e.message }, status: :unprocessable_content
+      end
+    else
+      # Run screener in background
+      job = Screeners::LongtermScreenerJob.perform_later(limit: limit)
+
+      # Log job enqueueing
+      Rails.logger.info("[DashboardController] Enqueued LongtermScreenerJob: #{job.job_id}")
+
+      # Check if worker is running
+      queue_status = check_solid_queue_status
+
+      Rails.logger.info("[DashboardController] Queue status: #{queue_status.inspect}")
+
+      message = if queue_status[:worker_running]
+                  "Long-term screener job queued (Job ID: #{job.job_id}). Results will appear shortly."
+                else
+                  "Job queued but SolidQueue worker may not be running! " \
+                    "Please start it with: bin/rails solid_queue:start"
+                end
+
+      render json: {
+        status: "queued",
+        message: message,
+        job_id: job.job_id,
+        queue_status: queue_status,
+      }
+    end
   rescue StandardError => e
     render json: { status: "error", message: e.message }, status: :unprocessable_content
   end
@@ -298,18 +379,69 @@ class DashboardController < ApplicationController
   end
 
   def check_queue_health
-    # Check SolidQueue health
-    "Healthy"
+    return "Not installed" unless solid_queue_installed?
+
+    stats = get_solid_queue_stats
+    if stats[:pending] > 100 || stats[:failed] > 50
+      "Warning: #{stats[:pending]} pending, #{stats[:failed]} failed"
+    elsif !stats[:worker_running]
+      "Worker not running"
+    else
+      "Healthy"
+    end
   rescue StandardError => e
     "Error: #{e.message}"
   end
 
   def get_queue_stats
+    return { pending: 0, running: 0, failed: 0 } unless solid_queue_installed?
+
+    get_solid_queue_stats
+  end
+
+  def check_solid_queue_status
+    return { worker_running: false, pending: 0, running: 0, failed: 0 } unless solid_queue_installed?
+
+    stats = get_solid_queue_stats
+
+    # Check if worker is running by looking for recent activity
+    # If there are running jobs or jobs finished recently, worker is likely running
+    recent_activity = SolidQueue::Job
+                      .where("finished_at > ?", 5.minutes.ago)
+                      .exists?
+
+    # Also check if there are claimed executions (jobs being processed)
+    has_claimed = SolidQueue::ClaimedExecution.exists?
+
     {
-      pending: 0, # Would query SolidQueue
-      running: 0,
-      failed: 0,
+      worker_running: recent_activity || has_claimed || stats[:running] > 0,
+      pending: stats[:pending],
+      running: stats[:running],
+      failed: stats[:failed],
+      recent_activity: recent_activity,
     }
+  rescue StandardError => e
+    Rails.logger.error("Error checking SolidQueue status: #{e.message}")
+    { worker_running: false, pending: 0, running: 0, failed: 0, error: e.message }
+  end
+
+  def get_solid_queue_stats
+    return { pending: 0, running: 0, failed: 0 } unless solid_queue_installed?
+
+    {
+      pending: SolidQueue::Job.where(finished_at: nil)
+                              .where("scheduled_at IS NULL OR scheduled_at <= ?", Time.current)
+                              .count,
+      running: SolidQueue::ClaimedExecution.count,
+      failed: SolidQueue::FailedExecution.count,
+    }
+  rescue StandardError => e
+    Rails.logger.error("Error getting SolidQueue stats: #{e.message}")
+    { pending: 0, running: 0, failed: 0 }
+  end
+
+  def solid_queue_installed?
+    defined?(SolidQueue) && ActiveRecord::Base.connection.table_exists?("solid_queue_jobs")
   end
 
   def get_recent_errors

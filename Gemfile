@@ -74,6 +74,10 @@ group :development, :test do
   # Environment variables
   gem "dotenv-rails"
 
+  # Query optimization and profiling
+  gem "bullet", "~> 8.1"
+  gem "rack-mini-profiler", "~> 3.1"
+
   # Audits gems for known security defects (use config/bundler-audit.yml to ignore issues)
   gem "bundler-audit", require: false
 

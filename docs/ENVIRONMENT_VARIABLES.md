@@ -51,6 +51,16 @@ RAILS_ENV=development                 # development, test, production
 RAILS_LOG_LEVEL=info                  # debug, info, warn, error
 ```
 
+### Development Tools (Performance & Query Optimization)
+```bash
+ENABLE_BULLET=true                    # Enable Bullet gem for N+1 query detection (default: true in development)
+ENABLE_MINI_PROFILER=true             # Enable Rack Mini Profiler for request profiling (default: true in development)
+```
+
+**Note:** Both tools are enabled by default in development. Set to `false` to disable:
+- `ENABLE_BULLET=false` - Disables N+1 query detection alerts
+- `ENABLE_MINI_PROFILER=false` - Disables request profiling UI
+
 ## Setup
 
 1. Copy `.env.example` to `.env`
