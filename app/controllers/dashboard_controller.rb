@@ -2,9 +2,26 @@
 
 class DashboardController < ApplicationController
   def index
+    mode = current_trading_mode
+
+    if mode == "paper"
+      @positions = Position.paper.open.includes(:instrument).order(opened_at: :desc).limit(20)
+      @portfolio = PaperPortfolio.active.first
+    else
+      @positions = Position.live.open.includes(:instrument).order(opened_at: :desc).limit(20)
+      @portfolio = Portfolio.live.recent.first
+    end
+
+    # Show both for comparison, but filter signals/orders by mode
     @live_positions = Position.live.open.includes(:instrument).order(opened_at: :desc).limit(20)
     @paper_positions = Position.paper.open.includes(:instrument).order(opened_at: :desc).limit(20)
-    @recent_signals = TradingSignal.recent.includes(:instrument).limit(10)
+
+    @recent_signals = if mode == "paper"
+                        TradingSignal.paper.recent.includes(:instrument).limit(10)
+                      else
+                        TradingSignal.live.recent.includes(:instrument).limit(10)
+                      end
+
     @pending_orders = Order.pending_approval.includes(:instrument).order(created_at: :desc)
     @recent_orders = Order.recent.includes(:instrument).limit(10)
 
@@ -16,8 +33,22 @@ class DashboardController < ApplicationController
     @stats = calculate_dashboard_stats
   end
 
+  def toggle_trading_mode
+    current_mode = session[:trading_mode] || "live"
+    new_mode = current_mode == "live" ? "paper" : "live"
+    session[:trading_mode] = new_mode
+
+    Rails.logger.info("[DashboardController] Trading mode toggled: #{current_mode} -> #{new_mode}")
+
+    respond_to do |format|
+      format.json { render json: { mode: new_mode, message: "Switched to #{new_mode.upcase} mode" } }
+      format.html { redirect_to request.referer || dashboard_path }
+    end
+  end
+
   def positions
-    @mode = params[:mode] || "all" # all, live, paper
+    # Use session mode if no explicit mode param, but allow override
+    @mode = params[:mode] || current_trading_mode
     @status = params[:status] || "all" # all, open, closed
 
     positions_scope = Position.regular_positions.includes(:instrument, :order, :exit_order)
@@ -44,7 +75,8 @@ class DashboardController < ApplicationController
   end
 
   def portfolio
-    @mode = params[:mode] || "live" # live, paper
+    # Use session mode if no explicit mode param
+    @mode = params[:mode] || current_trading_mode
 
     if @mode == "paper"
       @portfolio = PaperPortfolio.active.first
@@ -61,7 +93,8 @@ class DashboardController < ApplicationController
 
   def signals
     @status = params[:status] || "all" # all, executed, pending, failed
-    @type = params[:type] || "all" # all, paper, live
+    # Use session mode if no explicit type param
+    @type = params[:type] || current_trading_mode
 
     signals_scope = TradingSignal.includes(:instrument, :order, :paper_position)
 
@@ -91,6 +124,7 @@ class DashboardController < ApplicationController
   def orders
     @status = params[:status] || "all" # all, pending, placed, executed, rejected
     @type = params[:type] || "all" # all, buy, sell
+    # Note: Orders don't have live/paper distinction in the same way, but we can filter by mode if needed
 
     orders_scope = Order.includes(:instrument)
 
@@ -549,8 +583,9 @@ class DashboardController < ApplicationController
         @bearish_stocks << candidate_with_rec
       end
 
-      # Add to recommendations if score is high
-      @recommendations << candidate_with_rec if score >= 60
+      # Add to recommendations ONLY if it's a "Buy" or "Strong Buy" recommendation
+      # This ensures recommendations tab only shows actionable buy signals
+      @recommendations << candidate_with_rec if /(Strong Buy|Buy)/i.match?(recommendation)
     end
 
     # Sort by score

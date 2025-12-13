@@ -106,16 +106,75 @@
     <div class="tab-content">
       <!-- Recommendations Tab -->
       <div class="tab-pane fade show active" id="recommendations" role="tabpanel">
-        <% if @recommendations&.any? %>
-          <%= render partial: "screener_table", locals: { candidates: @recommendations, show_recommendation: true } %>
-        <% else %>
-          <div class="card">
-            <div class="card-body text-center py-5">
-              <i class="bi bi-star" style="font-size: 3rem; color: #ccc;"></i>
-              <p class="text-muted mt-3">No high-scoring recommendations yet</p>
-            </div>
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Buy Recommendations</h5>
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-sm btn-outline-primary active" id="show-buy-recommendations" onclick="toggleRecommendationsView('buy')">
+              <i class="bi bi-check-circle"></i> Buy Only
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-success" id="show-bullish" onclick="toggleRecommendationsView('bullish')">
+              <i class="bi bi-arrow-up-circle"></i> All Bullish
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-warning" id="show-bearish" onclick="toggleRecommendationsView('bearish')">
+              <i class="bi bi-arrow-down-circle"></i> Bearish/Wait
+            </button>
           </div>
-        <% end %>
+        </div>
+
+        <div id="recommendations-content">
+          <% if @recommendations&.any? %>
+            <%= render partial: "screener_table", locals: { candidates: @recommendations, show_recommendation: true } %>
+          <% else %>
+            <div class="card">
+              <div class="card-body text-center py-5">
+                <i class="bi bi-star" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No buy recommendations found</p>
+                <p class="text-muted small">Try viewing "All Bullish" or "Bearish/Wait" stocks using the toggle above</p>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <!-- Hidden templates for toggle views -->
+        <div id="buy-recommendations-html" style="display: none;">
+          <% if @recommendations&.any? %>
+            <%= render partial: "screener_table", locals: { candidates: @recommendations, show_recommendation: true } %>
+          <% else %>
+            <div class="card">
+              <div class="card-body text-center py-5">
+                <i class="bi bi-star" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No buy recommendations found</p>
+                <p class="text-muted small">Try viewing "All Bullish" or "Bearish/Wait" stocks using the toggle above</p>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <div id="bullish-stocks-html" style="display: none;">
+          <% if @bullish_stocks&.any? %>
+            <%= render partial: "screener_table", locals: { candidates: @bullish_stocks, show_recommendation: true } %>
+          <% else %>
+            <div class="card">
+              <div class="card-body text-center py-5">
+                <i class="bi bi-arrow-up-circle" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No bullish stocks found</p>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <div id="bearish-stocks-html" style="display: none;">
+          <% if @bearish_stocks&.any? %>
+            <%= render partial: "screener_table", locals: { candidates: @bearish_stocks, show_recommendation: true } %>
+          <% else %>
+            <div class="card">
+              <div class="card-body text-center py-5">
+                <i class="bi bi-arrow-down-circle" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No bearish stocks found</p>
+              </div>
+            </div>
+          <% end %>
+        </div>
       </div>
 
       <!-- Bullish Stocks Tab -->
@@ -416,5 +475,42 @@
       // Scroll to results if not visible
       container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
+
+    // Function to toggle recommendations view
+    window.toggleRecommendationsView = function(view) {
+      const buyBtn = document.getElementById('show-buy-recommendations');
+      const bullishBtn = document.getElementById('show-bullish');
+      const bearishBtn = document.getElementById('show-bearish');
+      const contentDiv = document.getElementById('recommendations-content');
+
+      // Hide all tab panes first
+      document.querySelectorAll('#recommendations-content > div').forEach(div => div.style.display = 'none');
+
+      // Update button states
+      [buyBtn, bullishBtn, bearishBtn].forEach(btn => {
+        btn.classList.remove('active', 'btn-primary', 'btn-success', 'btn-warning');
+        if (btn === buyBtn) btn.classList.add('btn-outline-primary');
+        if (btn === bullishBtn) btn.classList.add('btn-outline-success');
+        if (btn === bearishBtn) btn.classList.add('btn-outline-warning');
+      });
+
+      // Show appropriate content by switching to the corresponding tab
+      if (view === 'buy') {
+        buyBtn.classList.add('active', 'btn-primary');
+        buyBtn.classList.remove('btn-outline-primary');
+        // Show buy recommendations (default content)
+        contentDiv.innerHTML = document.getElementById('buy-recommendations-html').innerHTML;
+      } else if (view === 'bullish') {
+        bullishBtn.classList.add('active', 'btn-success');
+        bullishBtn.classList.remove('btn-outline-success');
+        // Show bullish stocks
+        contentDiv.innerHTML = document.getElementById('bullish-stocks-html').innerHTML;
+      } else if (view === 'bearish') {
+        bearishBtn.classList.add('active', 'btn-warning');
+        bearishBtn.classList.remove('btn-outline-warning');
+        // Show bearish stocks
+        contentDiv.innerHTML = document.getElementById('bearish-stocks-html').innerHTML;
+      }
+    };
   });
 </script>

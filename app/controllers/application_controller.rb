@@ -6,6 +6,10 @@ class ApplicationController < ActionController::Base
 
   layout :determine_layout
 
+  before_action :set_trading_mode
+
+  helper_method :current_trading_mode
+
   private
 
   def determine_layout
@@ -14,5 +18,14 @@ class ApplicationController < ActionController::Base
     else
       "application"
     end
+  end
+
+  def set_trading_mode
+    # Initialize session mode if not set (default to 'live')
+    session[:trading_mode] ||= "live"
+  end
+
+  def current_trading_mode
+    session[:trading_mode] || "live"
   end
 end

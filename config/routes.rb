@@ -25,6 +25,7 @@ Rails.application.routes.draw do
   post "screeners/swing/run", to: "dashboard#run_swing_screener", as: :run_swing_screener
   post "screeners/longterm/run", to: "dashboard#run_longterm_screener", as: :run_longterm_screener
   get "screeners/check", to: "dashboard#check_screener_results", as: :check_screener_results
+  post "dashboard/toggle_mode", to: "dashboard#toggle_trading_mode", as: :toggle_trading_mode
 
   # ActionCable for live updates
   mount ActionCable.server => "/cable"

@@ -11,6 +11,7 @@ export default class extends Controller {
     "statValue",
     "livePositionsTable",
     "paperPositionsTable",
+    "tradingModeBtn",
   ];
 
   static values = {
@@ -222,5 +223,63 @@ export default class extends Controller {
         statElement.textContent = stats[statKey];
       }
     });
+  }
+
+  toggleTradingMode(event) {
+    event.preventDefault();
+    const button = event.currentTarget;
+    const currentMode = button.dataset.mode;
+    const newMode = currentMode === "live" ? "paper" : "live";
+
+    // Disable button during request
+    button.disabled = true;
+
+    // Make AJAX request to toggle mode
+    const csrfToken = document.querySelector(
+      'meta[name="csrf-token"]'
+    )?.content;
+    if (!csrfToken) {
+      console.error("CSRF token not found");
+      button.disabled = false;
+      return;
+    }
+
+    fetch("/dashboard/toggle_mode", {
+      method: "POST",
+      headers: {
+        "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')
+          .content,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode: newMode }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        // Update button appearance
+        button.dataset.mode = newMode;
+        button.classList.remove("btn-danger", "btn-info");
+        button.classList.add(newMode === "live" ? "btn-danger" : "btn-info");
+
+        // Update icon and text
+        const icon = button.querySelector("i");
+        const text = button.querySelector(".mode-text");
+        if (icon) {
+          icon.className = `bi bi-${
+            newMode === "live" ? "lightning-charge" : "file-earmark-text"
+          }`;
+        }
+        if (text) {
+          text.textContent = newMode.toUpperCase();
+        }
+
+        // Reload page to show updated data
+        window.location.reload();
+      })
+      .catch((error) => {
+        console.error("Error toggling trading mode:", error);
+        button.disabled = false;
+        alert("Failed to toggle trading mode. Please try again.");
+      });
   }
 }

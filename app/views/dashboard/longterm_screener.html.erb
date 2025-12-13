@@ -103,16 +103,75 @@
     <div class="tab-content">
       <!-- Recommendations Tab -->
       <div class="tab-pane fade show active" id="recommendations" role="tabpanel">
-        <% if @recommendations&.any? %>
-          <%= render partial: "longterm_screener_table", locals: { candidates: @recommendations, show_recommendation: true } %>
-        <% else %>
-          <div class="card">
-            <div class="card-body text-center py-5">
-              <i class="bi bi-star" style="font-size: 3rem; color: #ccc;"></i>
-              <p class="text-muted mt-3">No high-scoring recommendations yet</p>
-            </div>
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Buy Recommendations</h5>
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-sm btn-outline-primary active" id="show-buy-recommendations-lt" onclick="toggleRecommendationsViewLT('buy')">
+              <i class="bi bi-check-circle"></i> Buy Only
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-success" id="show-bullish-lt" onclick="toggleRecommendationsViewLT('bullish')">
+              <i class="bi bi-arrow-up-circle"></i> All Bullish
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-warning" id="show-bearish-lt" onclick="toggleRecommendationsViewLT('bearish')">
+              <i class="bi bi-arrow-down-circle"></i> Bearish/Wait
+            </button>
           </div>
-        <% end %>
+        </div>
+
+        <div id="recommendations-content-lt">
+          <% if @recommendations&.any? %>
+            <%= render partial: "longterm_screener_table", locals: { candidates: @recommendations, show_recommendation: true } %>
+          <% else %>
+            <div class="card">
+              <div class="card-body text-center py-5">
+                <i class="bi bi-star" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No buy recommendations found</p>
+                <p class="text-muted small">Try viewing "All Bullish" or "Bearish/Wait" stocks using the toggle above</p>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <!-- Hidden templates for toggle views -->
+        <div id="buy-recommendations-html-lt" style="display: none;">
+          <% if @recommendations&.any? %>
+            <%= render partial: "longterm_screener_table", locals: { candidates: @recommendations, show_recommendation: true } %>
+          <% else %>
+            <div class="card">
+              <div class="card-body text-center py-5">
+                <i class="bi bi-star" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No buy recommendations found</p>
+                <p class="text-muted small">Try viewing "All Bullish" or "Bearish/Wait" stocks using the toggle above</p>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <div id="bullish-stocks-html-lt" style="display: none;">
+          <% if @bullish_stocks&.any? %>
+            <%= render partial: "longterm_screener_table", locals: { candidates: @bullish_stocks, show_recommendation: true } %>
+          <% else %>
+            <div class="card">
+              <div class="card-body text-center py-5">
+                <i class="bi bi-arrow-up-circle" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No bullish stocks found</p>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <div id="bearish-stocks-html-lt" style="display: none;">
+          <% if @bearish_stocks&.any? %>
+            <%= render partial: "longterm_screener_table", locals: { candidates: @bearish_stocks, show_recommendation: true } %>
+          <% else %>
+            <div class="card">
+              <div class="card-body text-center py-5">
+                <i class="bi bi-arrow-down-circle" style="font-size: 3rem; color: #ccc;"></i>
+                <p class="text-muted mt-3">No bearish stocks found</p>
+              </div>
+            </div>
+          <% end %>
+        </div>
       </div>
 
       <!-- Bullish Stocks Tab -->
@@ -413,5 +472,36 @@
       // Scroll to results if not visible
       container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
+
+    // Function to toggle recommendations view for long-term screener
+    window.toggleRecommendationsViewLT = function(view) {
+      const buyBtn = document.getElementById('show-buy-recommendations-lt');
+      const bullishBtn = document.getElementById('show-bullish-lt');
+      const bearishBtn = document.getElementById('show-bearish-lt');
+      const contentDiv = document.getElementById('recommendations-content-lt');
+
+      // Update button states
+      [buyBtn, bullishBtn, bearishBtn].forEach(btn => {
+        btn.classList.remove('active', 'btn-primary', 'btn-success', 'btn-warning');
+        if (btn === buyBtn) btn.classList.add('btn-outline-primary');
+        if (btn === bullishBtn) btn.classList.add('btn-outline-success');
+        if (btn === bearishBtn) btn.classList.add('btn-outline-warning');
+      });
+
+      // Show appropriate content
+      if (view === 'buy') {
+        buyBtn.classList.add('active', 'btn-primary');
+        buyBtn.classList.remove('btn-outline-primary');
+        contentDiv.innerHTML = document.getElementById('buy-recommendations-html-lt').innerHTML;
+      } else if (view === 'bullish') {
+        bullishBtn.classList.add('active', 'btn-success');
+        bullishBtn.classList.remove('btn-outline-success');
+        contentDiv.innerHTML = document.getElementById('bullish-stocks-html-lt').innerHTML;
+      } else if (view === 'bearish') {
+        bearishBtn.classList.add('active', 'btn-warning');
+        bearishBtn.classList.remove('btn-outline-warning');
+        contentDiv.innerHTML = document.getElementById('bearish-stocks-html-lt').innerHTML;
+      }
+    };
   });
 </script>

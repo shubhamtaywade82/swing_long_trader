@@ -99,6 +99,18 @@
             <h1 class="page-title"><%= content_for(:page_title) || "Dashboard" %></h1>
           </div>
           <div class="header-right">
+            <!-- Trading Mode Toggle -->
+            <div class="trading-mode-toggle">
+              <button type="button"
+                      class="btn btn-sm <%= current_trading_mode == 'live' ? 'btn-danger' : 'btn-info' %> trading-mode-btn"
+                      data-action="click->dashboard#toggleTradingMode"
+                      data-dashboard-target="tradingModeBtn"
+                      data-mode="<%= current_trading_mode %>"
+                      title="Toggle between Live and Paper trading mode">
+                <i class="bi bi-<%= current_trading_mode == 'live' ? 'lightning-charge' : 'file-earmark-text' %>"></i>
+                <span class="mode-text"><%= current_trading_mode.upcase %></span>
+              </button>
+            </div>
             <div class="connection-status" data-dashboard-target="connectionStatus">
               <span class="status-indicator"></span>
               <span class="status-text">Connected</span>

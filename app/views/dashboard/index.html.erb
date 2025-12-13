@@ -1,10 +1,22 @@
 <% content_for :page_title, "Dashboard" %>
 
 <div class="dashboard-page">
+  <!-- Mode Indicator Banner -->
+  <div class="alert alert-<%= current_trading_mode == 'live' ? 'danger' : 'info' %> mb-4 d-flex align-items-center justify-content-between" role="alert">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-<%= current_trading_mode == 'live' ? 'lightning-charge' : 'file-earmark-text' %>"></i>
+      <strong>Current Mode: <%= current_trading_mode.upcase %></strong>
+      <span class="badge bg-<%= current_trading_mode == 'live' ? 'dark' : 'light text-dark' %> ms-2">
+        <%= current_trading_mode == 'live' ? 'Real Trading' : 'Paper Trading' %>
+      </span>
+    </div>
+    <small class="text-muted">All data below is filtered for <%= current_trading_mode.upcase %> mode</small>
+  </div>
+
   <!-- Stats Cards -->
   <div class="row g-3 mb-4">
     <div class="col-md-3 col-sm-6">
-      <div class="stat-card">
+      <div class="stat-card <%= 'stat-card-active' if current_trading_mode == 'live' %>">
         <div class="stat-icon bg-primary">
           <i class="bi bi-briefcase"></i>
         </div>
@@ -18,7 +30,7 @@
     </div>
 
     <div class="col-md-3 col-sm-6">
-      <div class="stat-card">
+      <div class="stat-card <%= 'stat-card-active' if current_trading_mode == 'paper' %>">
         <div class="stat-icon bg-info">
           <i class="bi bi-briefcase-fill"></i>
         </div>
@@ -64,11 +76,14 @@
   <div class="row g-4">
     <!-- Live Positions -->
     <div class="col-lg-6">
-      <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="card <%= 'border-danger border-2' if current_trading_mode == 'live' %>">
+        <div class="card-header d-flex justify-content-between align-items-center <%= 'bg-danger text-white' if current_trading_mode == 'live' %>">
           <h5 class="mb-0">
             <i class="bi bi-briefcase text-primary"></i>
             Live Positions
+            <% if current_trading_mode == 'live' %>
+              <span class="badge bg-light text-dark ms-2">ACTIVE</span>
+            <% end %>
           </h5>
           <%= link_to positions_path(mode: "live"), class: "btn btn-sm btn-outline-primary" do %>
             View All <i class="bi bi-arrow-right"></i>
@@ -117,11 +132,14 @@
 
     <!-- Paper Positions -->
     <div class="col-lg-6">
-      <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="card <%= 'border-info border-2' if current_trading_mode == 'paper' %>">
+        <div class="card-header d-flex justify-content-between align-items-center <%= 'bg-info text-white' if current_trading_mode == 'paper' %>">
           <h5 class="mb-0">
             <i class="bi bi-briefcase-fill text-info"></i>
             Paper Positions
+            <% if current_trading_mode == 'paper' %>
+              <span class="badge bg-light text-dark ms-2">ACTIVE</span>
+            <% end %>
           </h5>
           <%= link_to positions_path(mode: "paper"), class: "btn btn-sm btn-outline-info" do %>
             View All <i class="bi bi-arrow-right"></i>
