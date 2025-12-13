@@ -213,12 +213,20 @@ module Strategies
         recommendations = mtf_analysis[:entry_recommendations]
         return nil if recommendations.empty?
 
-        # Use highest confidence recommendation
-        best_rec = recommendations.first
+        # Prefer recommendations with intraday confirmation
+        best_rec = recommendations.find { |r| r[:intraday_confirmation]&.dig(:m15_bullish) } ||
+                   recommendations.find { |r| r[:intraday_confirmation]&.dig(:h1_bullish) } ||
+                   recommendations.first
+
         entry_zone = best_rec[:entry_zone]
 
-        # Use middle of entry zone
-        (entry_zone[0] + entry_zone[1]) / 2.0
+        # For intraday pullback entries, use the lower bound (support level)
+        if best_rec[:type] == :intraday_pullback
+          entry_zone[0]
+        else
+          # Use middle of entry zone for other types
+          (entry_zone[0] + entry_zone[1]) / 2.0
+        end
       end
 
       def calculate_take_profit(entry_price, stop_loss, direction, mtf_analysis = nil)

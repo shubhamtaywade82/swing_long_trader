@@ -446,13 +446,16 @@ module Swing
     end
 
     def identify_support_resistance(timeframes)
-      # Use daily and weekly for S/R levels
+      # Use daily and weekly for major S/R levels
+      # Use 1h for intraday S/R levels (for entry timing)
       daily_tf = timeframes[:d1]
       weekly_tf = timeframes[:w1]
+      h1_tf = timeframes[:h1]
 
       support_levels = []
       resistance_levels = []
 
+      # Major support/resistance from weekly and daily
       if daily_tf && daily_tf[:structure][:swing_lows]
         support_levels += daily_tf[:structure][:swing_lows].map { |sl| sl[:price] }
       end
@@ -469,9 +472,26 @@ module Swing
         resistance_levels += weekly_tf[:structure][:swing_highs].map { |sh| sh[:price] }
       end
 
+      # Intraday support/resistance from 1h (for entry timing)
+      if h1_tf && h1_tf[:structure]
+        if h1_tf[:structure][:swing_lows]&.any?
+          # Add 1h support levels (for intraday entry timing)
+          h1_supports = h1_tf[:structure][:swing_lows].map { |sl| sl[:price] }
+          support_levels += h1_supports.last(3) # Last 3 swing lows from 1h
+        end
+
+        if h1_tf[:structure][:swing_highs]&.any?
+          # Add 1h resistance levels
+          h1_resistances = h1_tf[:structure][:swing_highs].map { |sh| sh[:price] }
+          resistance_levels += h1_resistances.last(3) # Last 3 swing highs from 1h
+        end
+      end
+
       {
         support_levels: support_levels.uniq.sort.reverse.first(5), # Top 5 support levels
         resistance_levels: resistance_levels.uniq.sort.first(5),   # Top 5 resistance levels
+        intraday_support: h1_tf&.dig(:structure, :swing_lows)&.last(2)&.map { |sl| sl[:price] } || [],
+        intraday_resistance: h1_tf&.dig(:structure, :swing_highs)&.last(2)&.map { |sh| sh[:price] } || [],
       }
     end
 
@@ -487,17 +507,44 @@ module Swing
       current_price = daily_tf[:latest_close]
       support_levels = analysis[:support_resistance][:support_levels]
 
+      # Get intraday timeframes for entry timing
+      h1_tf = analysis[:timeframes][:h1]
+      m15_tf = analysis[:timeframes][:m15]
+
+      # Use 1h for entry timing confirmation
+      h1_bullish = h1_tf && h1_tf[:trend_direction] == :bullish && h1_tf[:momentum_direction] == :bullish
+      # Use 15m for precise entry timing
+      m15_bullish = m15_tf && m15_tf[:trend_direction] == :bullish && m15_tf[:momentum_direction] == :bullish
+
       # Recommend entry near support if price is above support
       if support_levels.any? && current_price > support_levels.first
         nearest_support = support_levels.first
         distance_pct = ((current_price - nearest_support) / nearest_support * 100).round(2)
 
         if distance_pct < 3 # Within 3% of support
+          # Enhance confidence if intraday timeframes confirm
+          entry_confidence = calculate_entry_confidence(analysis, :support_bounce)
+          entry_confidence += 5 if h1_bullish # 1h confirms
+          entry_confidence += 5 if m15_bullish # 15m confirms
+
+          # Use 15m/1h for precise entry zone if available
+          entry_zone_low = nearest_support
+          entry_zone_high = current_price
+
+          if m15_tf && m15_tf[:latest_close]
+            # Use 15m close as upper bound for entry zone
+            entry_zone_high = [current_price, m15_tf[:latest_close]].max
+          end
+
           recommendations << {
             type: :support_bounce,
-            entry_zone: [nearest_support, current_price],
+            entry_zone: [entry_zone_low, entry_zone_high],
             stop_loss: nearest_support * 0.98, # 2% below support
-            confidence: calculate_entry_confidence(analysis, :support_bounce),
+            confidence: [[entry_confidence, 100].min, 0].max.round(2),
+            intraday_confirmation: {
+              h1_bullish: h1_bullish,
+              m15_bullish: m15_bullish,
+            },
           }
         end
       end
@@ -509,12 +556,57 @@ module Swing
         distance_pct = ((nearest_resistance - current_price) / current_price * 100).round(2)
 
         if distance_pct < 2 # Within 2% of resistance
+          # Enhance confidence if intraday timeframes confirm breakout
+          entry_confidence = calculate_entry_confidence(analysis, :breakout)
+          entry_confidence += 5 if h1_bullish # 1h confirms
+          entry_confidence += 5 if m15_bullish # 15m confirms
+
+          # Use 15m/1h for precise entry zone
+          entry_zone_low = current_price
+          entry_zone_high = nearest_resistance * 1.01
+
+          if m15_tf && m15_tf[:latest_close] && m15_tf[:latest_close] > current_price
+            # Use 15m close if it's above current price (breakout confirmation)
+            entry_zone_low = [current_price, m15_tf[:latest_close]].min
+          end
+
           recommendations << {
             type: :breakout,
-            entry_zone: [current_price, nearest_resistance * 1.01],
+            entry_zone: [entry_zone_low, entry_zone_high],
             stop_loss: current_price * 0.97, # 3% below entry
-            confidence: calculate_entry_confidence(analysis, :breakout),
+            confidence: [[entry_confidence, 100].min, 0].max.round(2),
+            intraday_confirmation: {
+              h1_bullish: h1_bullish,
+              m15_bullish: m15_bullish,
+            },
           }
+        end
+      end
+
+      # Add intraday pullback entry if 15m/1h show pullback but daily/weekly are bullish
+      if h1_tf && m15_tf && daily_tf[:trend_direction] == :bullish
+        # Check if 15m/1h show pullback (momentum neutral/bearish but trend still bullish)
+        h1_pullback = h1_tf[:trend_direction] == :bullish && h1_tf[:momentum_direction] == :neutral
+        m15_pullback = m15_tf[:trend_direction] == :bullish && m15_tf[:momentum_direction] == :neutral
+
+        if h1_pullback || m15_pullback
+          # Find support from 1h timeframe
+          h1_support = h1_tf[:structure][:swing_lows]&.last&.dig(:price) if h1_tf[:structure]
+          h1_support ||= m15_tf[:structure][:swing_lows]&.last&.dig(:price) if m15_tf[:structure]
+
+          if h1_support && current_price > h1_support && current_price < h1_support * 1.02
+            recommendations << {
+              type: :intraday_pullback,
+              entry_zone: [h1_support, current_price],
+              stop_loss: h1_support * 0.99, # 1% below 1h support
+              confidence: calculate_entry_confidence(analysis, :intraday_pullback),
+              intraday_confirmation: {
+                h1_pullback: h1_pullback,
+                m15_pullback: m15_pullback,
+                timeframe: h1_pullback ? "1h" : "15m",
+              },
+            }
+          end
         end
       end
 
