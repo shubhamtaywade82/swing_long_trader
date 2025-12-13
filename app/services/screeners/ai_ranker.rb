@@ -57,12 +57,18 @@ module Screeners
       # Build prompt
       prompt = build_prompt(candidate)
 
-      # Call OpenAI API
-      response = call_openai(prompt)
-      return nil unless response
+      # Call AI service (OpenAI or Ollama based on config)
+      ai_result = AI::UnifiedService.call(
+        prompt: prompt,
+        provider: @config[:provider] || "auto",
+        model: @model,
+        temperature: @temperature,
+      )
+
+      return nil unless ai_result[:success]
 
       # Parse response
-      result = parse_response(response)
+      result = parse_response(ai_result[:content])
       return nil unless result
 
       # Cache result
@@ -161,30 +167,6 @@ module Screeners
       summary
     end
 
-    def call_openai(prompt)
-      return nil unless openai_api_key
-
-      require "ruby/openai" unless defined?(Ruby::OpenAI)
-
-      client = Ruby::OpenAI::Client.new(access_token: openai_api_key)
-      response = client.chat(
-        parameters: {
-          model: @model,
-          messages: [
-            { role: "system", content: "You are a technical analysis expert. Always respond with valid JSON only." },
-            { role: "user", content: prompt },
-          ],
-          temperature: @temperature,
-          max_tokens: 200,
-        },
-      )
-
-      response.dig("choices", 0, "message", "content")
-    rescue StandardError => e
-      Rails.logger.error("[Screeners::AIRanker] OpenAI API error: #{e.message}")
-      nil
-    end
-
     def parse_response(response)
       return nil unless response
 
@@ -208,10 +190,6 @@ module Screeners
     rescue StandardError => e
       Rails.logger.error("[Screeners::AIRanker] Error parsing response: #{e.message}")
       nil
-    end
-
-    def openai_api_key
-      ENV.fetch("OPENAI_API_KEY", nil)
     end
 
     def rate_limit_exceeded?

@@ -75,7 +75,8 @@ swing_trading:
 
   ai_ranking:
     enabled: true
-    model: gpt-4o-mini # OpenAI model for ranking
+    provider: auto # Options: "openai", "ollama", "auto" (auto-detect)
+    model: gpt-4o-mini # Model name (OpenAI: gpt-4o-mini, gpt-4o | Ollama: llama3.2, llama3.1, mistral, qwen2.5)
     max_candidates: 20
     factors:
       - technical_strength
@@ -84,6 +85,23 @@ swing_trading:
       - risk_reward
       - momentum
     temperature: 0.3 # Lower temperature for more consistent rankings
+
+# ============================================
+# OLLAMA CONFIGURATION (Local LLM)
+# ============================================
+ollama:
+  enabled: true
+  base_url: http://localhost:11434 # Ollama server URL (default: localhost:11434)
+  model: llama3.2 # Default model for Ollama (recommended: llama3.2, llama3.1, mistral, qwen2.5)
+  temperature: 0.3
+  timeout: 30 # Request timeout in seconds
+
+# ============================================
+# AI PROVIDER CONFIGURATION
+# ============================================
+ai:
+  provider: auto # Global provider: "openai", "ollama", "auto" (auto-detect with fallback)
+  # When set to "auto", system tries OpenAI first, falls back to Ollama if OpenAI fails
 
 # ============================================
 # LONG-TERM TRADING CONFIGURATION
