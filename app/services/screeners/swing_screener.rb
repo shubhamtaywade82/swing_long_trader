@@ -188,13 +188,13 @@ module Screeners
     def load_universe
       # Load from IndexConstituent database table (preferred)
       base_scope = if IndexConstituent.exists?
-                     universe_symbols = IndexConstituent.distinct.pluck(:symbol).map(&:upcase)
-                     Instrument.where(symbol_name: universe_symbols)
-                               .or(Instrument.where(isin: IndexConstituent.where.not(isin_code: nil).distinct.pluck(:isin_code).map(&:upcase)))
-                   else
-                     # Fallback: use all equity/index instruments from NSE
-                     Instrument.where(segment: %w[equity index], exchange: "NSE")
-                   end
+        universe_symbols = IndexConstituent.distinct.pluck(:symbol).map(&:upcase)
+        Instrument.where(symbol_name: universe_symbols)
+                 .or(Instrument.where(isin: IndexConstituent.where.not(isin_code: nil).distinct.pluck(:isin_code).map(&:upcase)))
+      else
+        # Fallback: use all equity/index instruments from NSE
+        Instrument.where(segment: %w[equity index], exchange: "NSE")
+      end
 
       # Pre-filter instruments that have daily candles to avoid N+1 queries
       # Use distinct to avoid duplicates from joins

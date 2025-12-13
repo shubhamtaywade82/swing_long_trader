@@ -84,6 +84,12 @@
               <span class="nav-link-text">Monitoring</span>
             <% end %>
           </li>
+          <li class="nav-item">
+            <%= link_to about_path, class: "nav-link #{'active' if current_page?(about_path)}", data: { tooltip: "About" } do %>
+              <i class="bi bi-info-circle"></i>
+              <span class="nav-link-text">About</span>
+            <% end %>
+          </li>
           <li class="nav-item nav-section-header">
             <span class="nav-section-title">Screeners</span>
           </li>

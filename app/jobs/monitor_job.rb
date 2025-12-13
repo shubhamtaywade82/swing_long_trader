@@ -14,6 +14,7 @@ class MonitorJob < ApplicationJob
       job_queue: check_job_queue,
       job_duration: check_job_duration,
       openai_cost: check_openai_cost,
+      dhan_expirations: check_dhan_expirations,
     }
 
     failed_checks = checks.reject { |_k, v| v[:healthy] }
@@ -170,6 +171,32 @@ class MonitorJob < ApplicationJob
       total += Metrics::Tracker.get_openai_daily_cost(date)
     end
     total
+  end
+
+  def check_dhan_expirations
+    expirations = AboutController.new.send(:check_dhan_expirations)
+    critical = expirations.select { |e| e[:severity] == "critical" }
+    warnings = expirations.select { |e| e[:severity] == "warning" }
+
+    if critical.any?
+      message = "🚨 CRITICAL: DhanHQ Expirations:\n\n"
+      critical.each do |exp|
+        message += "❌ #{exp[:message]}\n"
+      end
+      Telegram::Notifier.send_error_alert(message, context: "MonitorJob - DhanHQ Expiration")
+      { healthy: false, message: "#{critical.size} critical expiration(s)" }
+    elsif warnings.any?
+      message = "⚠️ WARNING: DhanHQ Expiring Soon:\n\n"
+      warnings.each do |exp|
+        message += "⚠️ #{exp[:message]}\n"
+      end
+      Telegram::Notifier.send_error_alert(message, context: "MonitorJob - DhanHQ Expiration Warning")
+      { healthy: true, message: "#{warnings.size} warning(s)" }
+    else
+      { healthy: true, message: "OK" }
+    end
+  rescue StandardError => e
+    { healthy: false, message: "Error: #{e.message}" }
   end
 
   def solid_queue_installed?

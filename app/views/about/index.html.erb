@@ -1,0 +1,174 @@
+<% content_for :page_title, "About" %>
+
+<div class="about-page">
+  <p class="text-muted mb-3 small">System information and API status</p>
+
+  <!-- DhanHQ Profile Information -->
+  <div class="card mb-3">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-building"></i> DhanHQ API Profile</h5>
+    </div>
+    <div class="card-body p-2">
+      <% if @dhan_profile.nil? || @dhan_profile[:error] %>
+        <div class="alert alert-danger mb-0">
+          <i class="bi bi-exclamation-triangle"></i> <%= @dhan_profile&.dig(:error) || "Unable to fetch DhanHQ profile" %>
+        </div>
+      <% else %>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <table class="table table-sm table-borderless mb-0">
+              <tr>
+                <td class="text-muted" style="width: 40%;"><strong>Client ID:</strong></td>
+                <td><%= @dhan_profile[:client_id] || "N/A" %></td>
+              </tr>
+              <tr>
+                <td class="text-muted"><strong>Token Validity:</strong></td>
+                <td>
+                  <%= @dhan_profile[:token_validity] || "N/A" %>
+                  <% if @token_time_remaining %>
+                    <br><small class="text-muted">Time remaining: <strong><%= @token_time_remaining[:message] %></strong></small>
+                  <% end %>
+                  <% token_expiry = @dhan_expirations.find { |e| e[:type] == "token" } %>
+                  <% if token_expiry %>
+                    <span class="badge bg-<%= token_expiry[:severity] == 'critical' ? 'danger' : 'warning' %> ms-2">
+                      <%= token_expiry[:severity] == 'critical' ? 'EXPIRED' : 'Expiring Soon' %>
+                    </span>
+                  <% end %>
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted"><strong>Active Segments:</strong></td>
+                <td><%= @dhan_profile[:active_segment] || "N/A" %></td>
+              </tr>
+              <tr>
+                <td class="text-muted"><strong>DDPI:</strong></td>
+                <td>
+                  <span class="badge bg-<%= @dhan_profile[:ddpi] == 'Active' ? 'success' : 'secondary' %>">
+                    <%= @dhan_profile[:ddpi] || "N/A" %>
+                  </span>
+                </td>
+              </tr>
+            </table>
+          </div>
+          <div class="col-md-6">
+            <table class="table table-sm table-borderless mb-0">
+              <tr>
+                <td class="text-muted" style="width: 40%;"><strong>MTF:</strong></td>
+                <td>
+                  <span class="badge bg-<%= @dhan_profile[:mtf] == 'Active' ? 'success' : 'secondary' %>">
+                    <%= @dhan_profile[:mtf] || "N/A" %>
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted"><strong>Data Plan:</strong></td>
+                <td>
+                  <span class="badge bg-<%= @dhan_profile[:data_plan] == 'Active' ? 'success' : 'secondary' %>">
+                    <%= @dhan_profile[:data_plan] || "N/A" %>
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted"><strong>Data Validity:</strong></td>
+                <td>
+                  <%= @dhan_profile[:data_validity] || "N/A" %>
+                  <% if @data_time_remaining %>
+                    <br><small class="text-muted">Time remaining: <strong><%= @data_time_remaining[:message] %></strong></small>
+                  <% end %>
+                  <% data_expiry = @dhan_expirations.find { |e| e[:type] == "data_plan" } %>
+                  <% if data_expiry %>
+                    <span class="badge bg-<%= data_expiry[:severity] == 'critical' ? 'danger' : 'warning' %> ms-2">
+                      <%= data_expiry[:severity] == 'critical' ? 'EXPIRED' : 'Expiring Soon' %>
+                    </span>
+                  <% end %>
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- Expiration Warnings -->
+        <% if @dhan_expirations.any? %>
+          <div class="mt-2">
+            <% @dhan_expirations.each do |expiration| %>
+              <div class="alert alert-<%= expiration[:severity] == 'critical' ? 'danger' : 'warning' %> mb-2 py-2">
+                <i class="bi bi-<%= expiration[:severity] == 'critical' ? 'exclamation-triangle-fill' : 'exclamation-triangle' %>"></i>
+                <strong><%= expiration[:type].humanize %>:</strong> <%= expiration[:message] %>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+
+  <!-- Telegram Bot Information -->
+  <div class="card mb-3">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-telegram"></i> Telegram Bot</h5>
+    </div>
+    <div class="card-body p-2">
+      <% if @telegram_status.nil? || !@telegram_status[:configured] %>
+        <div class="alert alert-secondary mb-0">
+          <i class="bi bi-info-circle"></i> Telegram bot is not configured. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.
+        </div>
+      <% elsif @telegram_status[:error] %>
+        <div class="alert alert-danger mb-0">
+          <i class="bi bi-exclamation-triangle"></i> Error: <%= @telegram_status[:error] %>
+        </div>
+      <% else %>
+        <table class="table table-sm table-borderless mb-0">
+          <tr>
+            <td class="text-muted" style="width: 30%;"><strong>Status:</strong></td>
+            <td><span class="badge bg-success">Configured</span></td>
+          </tr>
+          <% if @telegram_status[:bot_username] %>
+            <tr>
+              <td class="text-muted"><strong>Bot Username:</strong></td>
+              <td>@<%= @telegram_status[:bot_username] %></td>
+            </tr>
+          <% end %>
+          <% if @telegram_status[:bot_id] %>
+            <tr>
+              <td class="text-muted"><strong>Bot ID:</strong></td>
+              <td><%= @telegram_status[:bot_id] %></td>
+            </tr>
+          <% end %>
+          <% if @telegram_status[:bot_first_name] %>
+            <tr>
+              <td class="text-muted"><strong>Bot Name:</strong></td>
+              <td><%= @telegram_status[:bot_first_name] %></td>
+            </tr>
+          <% end %>
+        </table>
+      <% end %>
+    </div>
+  </div>
+
+  <!-- System Information -->
+  <div class="card mb-3">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-gear"></i> System Information</h5>
+    </div>
+    <div class="card-body p-2">
+      <table class="table table-sm table-borderless mb-0">
+        <tr>
+          <td class="text-muted" style="width: 30%;"><strong>Rails Version:</strong></td>
+          <td><%= Rails.version %></td>
+        </tr>
+        <tr>
+          <td class="text-muted"><strong>Ruby Version:</strong></td>
+          <td><%= RUBY_VERSION %></td>
+        </tr>
+        <tr>
+          <td class="text-muted"><strong>Environment:</strong></td>
+          <td><span class="badge bg-<%= Rails.env.production? ? 'danger' : Rails.env.development? ? 'info' : 'warning' %>"><%= Rails.env.upcase %></span></td>
+        </tr>
+        <tr>
+          <td class="text-muted"><strong>Database:</strong></td>
+          <td><%= ActiveRecord::Base.connection.adapter_name %> <%= ActiveRecord::Base.connection.database_version rescue "N/A" %></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>

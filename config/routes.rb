@@ -21,6 +21,7 @@ Rails.application.routes.draw do
   get "ai-evaluations", to: "dashboard#ai_evaluations", as: :ai_evaluations
   get "orders", to: "dashboard#orders", as: :orders
   get "monitoring", to: "dashboard#monitoring", as: :monitoring
+  get "about", to: "about#index", as: :about
   get "screeners/swing", to: "dashboard#swing_screener", as: :swing_screener
   get "screeners/longterm", to: "dashboard#longterm_screener", as: :longterm_screener
   post "screeners/swing/run", to: "dashboard#run_swing_screener", as: :run_swing_screener
