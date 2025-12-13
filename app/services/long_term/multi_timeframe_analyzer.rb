@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
-module Swing
+module LongTerm
   class MultiTimeframeAnalyzer < ApplicationService
     TIMEFRAMES = {
-      m15: "15",   # 15 minutes
-      h1: "60",    # 1 hour
+      h1: "60",    # 1 hour (for entry timing)
       d1: "1D",    # Daily
       w1: "1W",    # Weekly
     }.freeze
@@ -13,11 +12,10 @@ module Swing
       new(instrument: instrument, include_intraday: include_intraday).call
     end
 
-    def initialize(instrument:, include_intraday: true, trading_style: :swing)
+    def initialize(instrument:, include_intraday: true)
       @instrument = instrument
       @include_intraday = include_intraday
-      @trading_style = trading_style
-      @config = AlgoConfig.fetch(%i[swing_trading multi_timeframe]) || {}
+      @config = AlgoConfig.fetch(%i[long_term_trading multi_timeframe]) || {}
     end
 
     def call
@@ -34,9 +32,8 @@ module Swing
         entry_recommendations: [],
       }
 
-      # Load and analyze each timeframe
+      # Load and analyze each timeframe (NO 15m for long-term)
       TIMEFRAMES.each do |tf_key, tf_value|
-        next if tf_key == :m15 && !@include_intraday
         next if tf_key == :h1 && !@include_intraday
 
         tf_analysis = analyze_timeframe(tf_key, tf_value)
@@ -55,7 +52,7 @@ module Swing
         analysis: analysis,
       }
     rescue StandardError => e
-      log_error("Multi-timeframe analysis failed: #{e.message}")
+      log_error("Long-term multi-timeframe analysis failed: #{e.message}")
       { success: false, error: e.message }
     end
 
@@ -68,7 +65,6 @@ module Swing
 
       # Need minimum candles for reliable analysis
       min_candles = case tf_key
-                    when :m15 then 50
                     when :h1 then 30
                     when :d1 then 50
                     when :w1 then 20
@@ -105,12 +101,12 @@ module Swing
 
     def load_timeframe_candles(tf_value)
       case tf_value
-      when "15", "60"
-        # Load intraday candles (on-demand, not stored)
+      when "60"
+        # Load 1h candles (on-demand)
         result = Candles::IntradayFetcher.call(
           instrument: @instrument,
-          interval: tf_value,
-          days: tf_value == "15" ? 2 : 5, # 15m: 2 days, 1h: 5 days
+          interval: "60",
+          days: 10, # More days for long-term analysis
         )
         return nil unless result[:success]
 
@@ -256,12 +252,12 @@ module Swing
         max_score += 30
       end
 
-      # Price momentum (40 points)
+      # Price momentum (40 points) - longer period for long-term
       closes = series.closes
-      if closes.size >= 5
-        change_5 = ((closes.last - closes[-5]) / closes[-5] * 100).round(2)
-        if change_5.positive?
-          score += [40, (change_5 * 2)].min # Cap at 40
+      if closes.size >= 10 # Use 10-period for long-term
+        change_10 = ((closes.last - closes[-10]) / closes[-10] * 100).round(2)
+        if change_10.positive?
+          score += [40, (change_10 * 2)].min
         end
       end
       max_score += 40
@@ -296,7 +292,7 @@ module Swing
         end
       end
 
-      highs.last(5) # Return last 5 swing highs
+      highs.last(5)
     end
 
     def identify_swing_lows(series)
@@ -314,7 +310,7 @@ module Swing
         end
       end
 
-      lows.last(5) # Return last 5 swing lows
+      lows.last(5)
     end
 
     def check_higher_highs(series)
@@ -337,8 +333,8 @@ module Swing
       closes = series.closes
       return 0.0 if closes.empty?
 
-      # Calculate linear regression slope
-      n = [closes.size, 20].min
+      # Calculate linear regression slope (longer period for long-term)
+      n = [closes.size, 30].min # Use 30 periods for long-term
       x_values = (0...n).to_a
       y_values = closes.last(n)
 
@@ -351,7 +347,7 @@ module Swing
       return 0.0 if denominator.zero?
 
       slope = numerator / denominator
-      (slope / y_mean * 100).round(2) # Normalize as percentage
+      (slope / y_mean * 100).round(2)
     end
 
     def determine_trend_direction(indicators)
@@ -362,9 +358,10 @@ module Swing
 
     def determine_momentum_direction(indicators, series)
       closes = series.closes
-      return :neutral if closes.size < 5
+      return :neutral if closes.size < 10
 
-      change = ((closes.last - closes[-5]) / closes[-5] * 100).round(2)
+      # Use 10-period change for long-term
+      change = ((closes.last - closes[-10]) / closes[-10] * 100).round(2)
 
       if change > 2
         :bullish
@@ -378,34 +375,19 @@ module Swing
     def calculate_mtf_score(timeframes)
       return 0.0 if timeframes.empty?
 
-      # Weight timeframes by trading style
-      # Swing Trading: More weight to daily and intraday (1d, 1h, 15m)
-      # Long-Term Trading: More weight to weekly and daily (1w, 1d, 1h)
-      trading_style = @trading_style || @config[:trading_style] || :swing
-
-      weights = if trading_style == :long_term || trading_style == :longterm
-                  {
-                    w1: 0.4,  # Weekly: 40% (primary for long-term)
-                    d1: 0.35, # Daily: 35%
-                    h1: 0.25, # Hourly: 25% (for entry timing)
-                    m15: 0.0, # 15min: 0% (not used for long-term)
-                  }
-                else
-                  # Swing Trading (default) - More weight to 1d, 1h, 15m
-                  {
-                    w1: 0.2,  # Weekly: 20% (trend context only)
-                    d1: 0.4,  # Daily: 40% (primary timeframe)
-                    h1: 0.25, # Hourly: 25% (entry timing)
-                    m15: 0.15, # 15min: 15% (precise entry)
-                  }
-                end
+      # Long-Term Trading Weights: More weight to weekly and daily
+      weights = {
+        w1: 0.4,  # Weekly: 40% (primary for long-term)
+        d1: 0.35, # Daily: 35%
+        h1: 0.25, # Hourly: 25% (for entry timing only)
+      }
 
       total_score = 0.0
       total_weight = 0.0
 
       timeframes.each do |tf_key, tf_data|
         weight = weights[tf_key.to_sym] || 0.0
-        next if weight.zero? # Skip timeframes with 0 weight
+        next if weight.zero?
 
         trend_score = tf_data[:trend_score] || 0
         momentum_score = tf_data[:momentum_score] || 0
@@ -434,9 +416,9 @@ module Swing
       alignment[:bearish_count] = directions.count(:bearish)
       alignment[:neutral_count] = directions.count(:neutral)
 
-      # Consider aligned if majority are bullish
+      # For long-term, require stronger alignment (at least 2/3 bullish)
       alignment[:aligned] = alignment[:bullish_count] > alignment[:bearish_count] &&
-                            alignment[:bullish_count] >= (directions.size / 2.0).ceil
+                            alignment[:bullish_count] >= (directions.size * 0.67).ceil
 
       alignment
     end
@@ -463,8 +445,8 @@ module Swing
     end
 
     def identify_support_resistance(timeframes)
-      # Use daily and weekly for major S/R levels
-      # Use 1h for intraday S/R levels (for entry timing)
+      # Use weekly and daily for major S/R levels
+      # Use 1h for entry timing only
       daily_tf = timeframes[:d1]
       weekly_tf = timeframes[:w1]
       h1_tf = timeframes[:h1]
@@ -489,24 +471,22 @@ module Swing
         resistance_levels += weekly_tf[:structure][:swing_highs].map { |sh| sh[:price] }
       end
 
-      # Intraday support/resistance from 1h (for entry timing)
+      # 1h support/resistance for entry timing only
       if h1_tf && h1_tf[:structure]
         if h1_tf[:structure][:swing_lows]&.any?
-          # Add 1h support levels (for intraday entry timing)
           h1_supports = h1_tf[:structure][:swing_lows].map { |sl| sl[:price] }
-          support_levels += h1_supports.last(3) # Last 3 swing lows from 1h
+          support_levels += h1_supports.last(2) # Last 2 swing lows from 1h
         end
 
         if h1_tf[:structure][:swing_highs]&.any?
-          # Add 1h resistance levels
           h1_resistances = h1_tf[:structure][:swing_highs].map { |sh| sh[:price] }
-          resistance_levels += h1_resistances.last(3) # Last 3 swing highs from 1h
+          resistance_levels += h1_resistances.last(2) # Last 2 swing highs from 1h
         end
       end
 
       {
-        support_levels: support_levels.uniq.sort.reverse.first(5), # Top 5 support levels
-        resistance_levels: resistance_levels.uniq.sort.first(5),   # Top 5 resistance levels
+        support_levels: support_levels.uniq.sort.reverse.first(5),
+        resistance_levels: resistance_levels.uniq.sort.first(5),
         intraday_support: h1_tf&.dig(:structure, :swing_lows)&.last(2)&.map { |sl| sl[:price] } || [],
         intraday_resistance: h1_tf&.dig(:structure, :swing_highs)&.last(2)&.map { |sh| sh[:price] } || [],
       }
@@ -515,115 +495,60 @@ module Swing
     def generate_entry_recommendations(analysis)
       recommendations = []
 
-      # Only recommend if trend is aligned
+      # Only recommend if trend is aligned (stronger requirement for long-term)
       return recommendations unless analysis[:trend_alignment][:aligned]
 
       daily_tf = analysis[:timeframes][:d1]
-      return recommendations unless daily_tf
+      weekly_tf = analysis[:timeframes][:w1]
+      return recommendations unless daily_tf && weekly_tf
 
       current_price = daily_tf[:latest_close]
       support_levels = analysis[:support_resistance][:support_levels]
 
-      # Get intraday timeframes for entry timing
+      # Get 1h for entry timing
       h1_tf = analysis[:timeframes][:h1]
-      m15_tf = analysis[:timeframes][:m15]
-
-      # Use 1h for entry timing confirmation
       h1_bullish = h1_tf && h1_tf[:trend_direction] == :bullish && h1_tf[:momentum_direction] == :bullish
-      # Use 15m for precise entry timing
-      m15_bullish = m15_tf && m15_tf[:trend_direction] == :bullish && m15_tf[:momentum_direction] == :bullish
 
-      # Recommend entry near support if price is above support
+      # Long-term entries: Focus on weekly/daily support with 1h confirmation
       if support_levels.any? && current_price > support_levels.first
         nearest_support = support_levels.first
         distance_pct = ((current_price - nearest_support) / nearest_support * 100).round(2)
 
-        if distance_pct < 3 # Within 3% of support
-          # Enhance confidence if intraday timeframes confirm
+        if distance_pct < 5 # Within 5% of support (wider for long-term)
           entry_confidence = calculate_entry_confidence(analysis, :support_bounce)
           entry_confidence += 5 if h1_bullish # 1h confirms
-          entry_confidence += 5 if m15_bullish # 15m confirms
-
-          # Use 15m/1h for precise entry zone if available
-          entry_zone_low = nearest_support
-          entry_zone_high = current_price
-
-          if m15_tf && m15_tf[:latest_close]
-            # Use 15m close as upper bound for entry zone
-            entry_zone_high = [current_price, m15_tf[:latest_close]].max
-          end
 
           recommendations << {
-            type: :support_bounce,
-            entry_zone: [entry_zone_low, entry_zone_high],
-            stop_loss: nearest_support * 0.98, # 2% below support
+            type: :long_term_support,
+            entry_zone: [nearest_support, current_price],
+            stop_loss: nearest_support * 0.95, # 5% below support (wider for long-term)
             confidence: [[entry_confidence, 100].min, 0].max.round(2),
             intraday_confirmation: {
               h1_bullish: h1_bullish,
-              m15_bullish: m15_bullish,
             },
           }
         end
       end
 
-      # Recommend breakout entry if price is near resistance
+      # Long-term breakout entries
       resistance_levels = analysis[:support_resistance][:resistance_levels]
       if resistance_levels.any?
         nearest_resistance = resistance_levels.first
         distance_pct = ((nearest_resistance - current_price) / current_price * 100).round(2)
 
-        if distance_pct < 2 # Within 2% of resistance
-          # Enhance confidence if intraday timeframes confirm breakout
+        if distance_pct < 3 # Within 3% of resistance
           entry_confidence = calculate_entry_confidence(analysis, :breakout)
-          entry_confidence += 5 if h1_bullish # 1h confirms
-          entry_confidence += 5 if m15_bullish # 15m confirms
-
-          # Use 15m/1h for precise entry zone
-          entry_zone_low = current_price
-          entry_zone_high = nearest_resistance * 1.01
-
-          if m15_tf && m15_tf[:latest_close] && m15_tf[:latest_close] > current_price
-            # Use 15m close if it's above current price (breakout confirmation)
-            entry_zone_low = [current_price, m15_tf[:latest_close]].min
-          end
+          entry_confidence += 5 if h1_bullish
 
           recommendations << {
-            type: :breakout,
-            entry_zone: [entry_zone_low, entry_zone_high],
-            stop_loss: current_price * 0.97, # 3% below entry
+            type: :long_term_breakout,
+            entry_zone: [current_price, nearest_resistance * 1.02],
+            stop_loss: current_price * 0.93, # 7% below entry (wider for long-term)
             confidence: [[entry_confidence, 100].min, 0].max.round(2),
             intraday_confirmation: {
               h1_bullish: h1_bullish,
-              m15_bullish: m15_bullish,
             },
           }
-        end
-      end
-
-      # Add intraday pullback entry if 15m/1h show pullback but daily/weekly are bullish
-      if h1_tf && m15_tf && daily_tf[:trend_direction] == :bullish
-        # Check if 15m/1h show pullback (momentum neutral/bearish but trend still bullish)
-        h1_pullback = h1_tf[:trend_direction] == :bullish && h1_tf[:momentum_direction] == :neutral
-        m15_pullback = m15_tf[:trend_direction] == :bullish && m15_tf[:momentum_direction] == :neutral
-
-        if h1_pullback || m15_pullback
-          # Find support from 1h timeframe
-          h1_support = h1_tf[:structure][:swing_lows]&.last&.dig(:price) if h1_tf[:structure]
-          h1_support ||= m15_tf[:structure][:swing_lows]&.last&.dig(:price) if m15_tf[:structure]
-
-          if h1_support && current_price > h1_support && current_price < h1_support * 1.02
-            recommendations << {
-              type: :intraday_pullback,
-              entry_zone: [h1_support, current_price],
-              stop_loss: h1_support * 0.99, # 1% below 1h support
-              confidence: calculate_entry_confidence(analysis, :intraday_pullback),
-              intraday_confirmation: {
-                h1_pullback: h1_pullback,
-                m15_pullback: m15_pullback,
-                timeframe: h1_pullback ? "1h" : "15m",
-              },
-            }
-          end
         end
       end
 

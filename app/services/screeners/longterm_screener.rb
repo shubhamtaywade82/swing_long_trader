@@ -54,7 +54,17 @@ module Screeners
     end
 
     def analyze_instrument(instrument)
-      # Load daily and weekly candles
+      # Multi-timeframe analysis (long-term: 1w, 1d, 1h - NO 15m)
+      mtf_result = LongTerm::MultiTimeframeAnalyzer.call(
+        instrument: instrument,
+        include_intraday: @config.dig(:multi_timeframe, :include_intraday) != false,
+      )
+
+      return nil unless mtf_result[:success]
+
+      mtf_analysis = mtf_result[:analysis]
+
+      # Load daily and weekly candles for backward compatibility
       daily_series = instrument.load_daily_candles(limit: 200)
       weekly_series = instrument.load_weekly_candles(limit: 52)
 
@@ -71,17 +81,24 @@ module Screeners
 
       return nil unless daily_indicators && weekly_indicators
 
-      # Calculate score
-      score = calculate_score(daily_series, weekly_series, daily_indicators, weekly_indicators)
+      # Calculate score (enhanced with MTF)
+      base_score = calculate_score(daily_series, weekly_series, daily_indicators, weekly_indicators)
+      mtf_score = mtf_analysis[:multi_timeframe_score] || 0
+
+      # Combined score: 50% base score, 50% MTF score (more weight to MTF for long-term)
+      combined_score = (base_score * 0.5 + mtf_score * 0.5).round(2)
 
       # Build candidate hash
       {
         instrument_id: instrument.id,
         symbol: instrument.symbol_name,
-        score: score,
+        score: combined_score,
+        base_score: base_score,
+        mtf_score: mtf_score,
         daily_indicators: daily_indicators,
         weekly_indicators: weekly_indicators,
-        metadata: build_metadata(instrument, daily_series, weekly_series, daily_indicators, weekly_indicators),
+        multi_timeframe: mtf_analysis,
+        metadata: build_metadata(instrument, daily_series, weekly_series, daily_indicators, weekly_indicators, mtf_analysis),
       }
     end
 
@@ -191,8 +208,8 @@ module Screeners
       score
     end
 
-    def build_metadata(instrument, daily_series, weekly_series, daily_indicators, weekly_indicators)
-      {
+    def build_metadata(instrument, daily_series, weekly_series, daily_indicators, weekly_indicators, mtf_analysis = nil)
+      metadata = {
         ltp: instrument.ltp,
         daily_candles_count: daily_series.candles.size,
         weekly_candles_count: weekly_series.candles.size,
@@ -201,6 +218,19 @@ module Screeners
         trend_alignment: check_trend_alignment(daily_indicators, weekly_indicators),
         momentum: calculate_momentum(daily_series, weekly_series, daily_indicators, weekly_indicators),
       }
+
+      # Add multi-timeframe metadata
+      if mtf_analysis
+        metadata[:multi_timeframe] = {
+          score: mtf_analysis[:multi_timeframe_score],
+          trend_alignment: mtf_analysis[:trend_alignment],
+          momentum_alignment: mtf_analysis[:momentum_alignment],
+          timeframes_analyzed: mtf_analysis[:timeframes].keys.map(&:to_s),
+          entry_recommendations: mtf_analysis[:entry_recommendations],
+        }
+      end
+
+      metadata
     end
 
     def check_trend_alignment(daily_indicators, weekly_indicators)
