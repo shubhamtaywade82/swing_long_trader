@@ -426,8 +426,8 @@
       });
     });
 
-    // Function to update progressive results display
-    function updateProgressiveResults(candidates, progress) {
+    // Function to update progressive results display (make it globally accessible)
+    window.updateProgressiveResults = function(candidates, progress) {
       const container = document.getElementById('progressive-results');
       if (!container) return;
 
@@ -442,39 +442,59 @@
         container.appendChild(resultsDiv);
       }
 
+      if (!candidates || candidates.length === 0) {
+        resultsDiv.innerHTML = '<div class="alert alert-info">No candidates found yet. Still processing...</div>';
+        return;
+      }
+
       // Build HTML for candidates table
       let html = '<div class="card"><div class="card-body">';
-      html += '<h5 class="card-title">Top Candidates (Live - ' + candidates.length + ' found so far)</h5>';
+      html += '<h5 class="card-title"><i class="bi bi-arrow-repeat"></i> Top Candidates (Live - ' + candidates.length + ' found so far)</h5>';
       html += '<div class="table-responsive"><table class="table table-sm table-hover">';
-      html += '<thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Price</th><th>RSI</th><th>Trend</th></tr></thead><tbody>';
+      html += '<thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Base</th><th>MTF</th><th>Price</th><th>RSI</th><th>ADX</th><th>Trend</th></tr></thead><tbody>';
 
       candidates.slice(0, 20).forEach((candidate, index) => {
         const rsi = candidate.indicators?.rsi || candidate.daily_indicators?.rsi || '-';
+        const adx = candidate.indicators?.adx || candidate.daily_indicators?.adx || '-';
         const price = candidate.indicators?.latest_close || candidate.daily_indicators?.latest_close || 0;
         const st = candidate.indicators?.supertrend || candidate.weekly_indicators?.supertrend;
         const trend = st ? (st.direction === 'bullish' ? 'BULL' : 'BEAR') : '-';
+        const baseScore = candidate.base_score || 0;
+        const mtfScore = candidate.mtf_score || 0;
 
         html += '<tr>';
         html += '<td><strong>#' + (index + 1) + '</strong></td>';
         html += '<td><strong>' + candidate.symbol + '</strong></td>';
         html += '<td><span class="badge bg-' + (candidate.score >= 70 ? 'success' : candidate.score >= 50 ? 'warning' : 'secondary') + '">' + candidate.score.toFixed(1) + '</span></td>';
+        html += '<td>' + baseScore.toFixed(1) + '</td>';
+        html += '<td>' + mtfScore.toFixed(1) + '</td>';
         html += '<td>₹' + price.toFixed(2) + '</td>';
         html += '<td>' + (rsi !== '-' ? '<span class="badge bg-' + (rsi > 70 ? 'danger' : rsi < 30 ? 'success' : 'info') + '">' + rsi.toFixed(1) + '</span>' : '-') + '</td>';
+        html += '<td>' + (adx !== '-' ? '<span class="badge bg-' + (adx > 25 ? 'success' : 'secondary') + '">' + adx.toFixed(1) + '</span>' : '-') + '</td>';
         html += '<td><span class="badge bg-' + (trend === 'BULL' ? 'success' : 'secondary') + '">' + trend + '</span></td>';
         html += '</tr>';
       });
 
       html += '</tbody></table></div>';
       if (progress && progress.status === 'running') {
-        html += '<div class="mt-2"><small class="text-muted">Still processing... Results update every 5 seconds</small></div>';
+        const pct = progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
+        html += '<div class="mt-2">';
+        html += '<div class="progress mb-2" style="height: 20px;">';
+        html += '<div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: ' + pct + '%">' + pct + '%</div>';
+        html += '</div>';
+        html += '<small class="text-muted">Processing: ' + progress.processed + '/' + progress.total + ' (' + progress.analyzed + ' analyzed) - Results update in real-time via WebSocket</small>';
+        html += '</div>';
       }
       html += '</div></div>';
 
       resultsDiv.innerHTML = html;
 
-      // Scroll to results if not visible
-      container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
+      // Scroll to results if not visible (only first time)
+      if (!resultsDiv.dataset.scrolled) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        resultsDiv.dataset.scrolled = 'true';
+      }
+    };
 
     // Function to toggle recommendations view
     window.toggleRecommendationsView = function(view) {

@@ -14,6 +14,7 @@ module Screeners
       @config = AlgoConfig.fetch[:swing_trading] || {}
       @screening_config = @config[:screening] || {}
       @strategy_config = @config[:strategy] || {}
+      @candle_cache = {} # Cache candles to avoid N+1 queries
     end
 
     def call
@@ -26,6 +27,9 @@ module Screeners
 
       Rails.logger.info("[Screeners::SwingScreener] Starting screener: #{total_count} instruments, limit: #{@limit}")
 
+      # Preload candles for all instruments to avoid N+1 queries
+      preload_candles_for_instruments
+
       # Initialize progress
       Rails.cache.write(progress_key, {
         total: total_count,
@@ -35,6 +39,15 @@ module Screeners
         started_at: start_time.iso8601,
         status: "running",
       }, expires_in: 1.hour)
+
+      # Broadcast initial status
+      broadcast_progress(progress_key, {
+        total: total_count,
+        processed: 0,
+        analyzed: 0,
+        candidates: 0,
+        status: "running",
+      })
 
       @instruments.find_each(batch_size: 50) do |instrument|
         processed_count += 1
@@ -87,7 +100,7 @@ module Screeners
         analyzed_count += 1
         candidates << analysis
 
-        # Cache partial results incrementally (every 5 new candidates)
+        # Cache and broadcast partial results incrementally (every 5 new candidates)
         # This allows UI to show results as they're found
         if candidates.size % 5 == 0
           # Sort and keep top N candidates
@@ -98,8 +111,8 @@ module Screeners
           Rails.cache.write(results_key, sorted_candidates, expires_in: 24.hours)
           Rails.cache.write("#{results_key}_timestamp", Time.current, expires_in: 24.hours)
 
-          # Update progress with current candidate count
-          Rails.cache.write(progress_key, {
+          # Update progress
+          progress_data = {
             total: total_count,
             processed: processed_count,
             analyzed: analyzed_count,
@@ -108,7 +121,12 @@ module Screeners
             status: "running",
             elapsed: (Time.current - start_time).round(1),
             partial_results: true,
-          }, expires_in: 1.hour)
+          }
+          Rails.cache.write(progress_key, progress_data, expires_in: 1.hour)
+
+          # Broadcast progress and partial results via ActionCable
+          broadcast_progress(progress_key, progress_data)
+          broadcast_partial_results(results_key, sorted_candidates)
         end
       end
 
@@ -121,7 +139,7 @@ module Screeners
       Rails.cache.write("#{results_key}_timestamp", Time.current, expires_in: 24.hours)
 
       # Mark as completed
-      Rails.cache.write(progress_key, {
+      progress_data = {
         total: total_count,
         processed: processed_count,
         analyzed: analyzed_count,
@@ -130,7 +148,12 @@ module Screeners
         completed_at: Time.current.iso8601,
         duration: duration.round(1),
         status: "completed",
-      }, expires_in: 1.hour)
+      }
+      Rails.cache.write(progress_key, progress_data, expires_in: 1.hour)
+
+      # Broadcast completion
+      broadcast_progress(progress_key, progress_data)
+      broadcast_complete_results(results_key, sorted_candidates)
 
       Rails.logger.info(
         "[Screeners::SwingScreener] Completed: #{processed_count} processed, " \
@@ -155,9 +178,109 @@ module Screeners
                    end
 
       # Pre-filter instruments that have daily candles to avoid N+1 queries
+      # Use distinct to avoid duplicates from joins
       base_scope.joins(:candle_series_records)
                 .where(candle_series_records: { timeframe: "1D" })
                 .distinct
+                .includes(:candle_series_records) # Eager load to reduce queries
+    end
+
+    def preload_candles_for_instruments
+      # Batch load all daily candles for all instruments to avoid N+1 queries
+      Rails.logger.info("[Screeners::SwingScreener] Preloading candles for #{@instruments.count} instruments...")
+
+      instrument_ids = @instruments.pluck(:id)
+
+      # Load all daily candles in one query
+      candle_records = CandleSeriesRecord
+                       .for_timeframe("1D")
+                       .where(instrument_id: instrument_ids)
+                       .recent(100) # Get last 100 candles per instrument
+                       .order(instrument_id: :asc, timestamp: :desc)
+                       .to_a
+
+      # Group candles by instrument_id
+      candles_by_instrument = candle_records.group_by(&:instrument_id)
+
+      # Build CandleSeries for each instrument
+      @instruments.each do |instrument|
+        records = candles_by_instrument[instrument.id] || []
+        next if records.empty?
+
+        # Convert to CandleSeries format
+        series = CandleSeries.new(
+          symbol: instrument.symbol_name,
+          interval: "1D",
+        )
+
+        # Sort by timestamp (oldest first) and convert to Candle objects
+        records.sort_by(&:timestamp).each do |record|
+          candle = Candle.new(
+            timestamp: record.timestamp,
+            open: record.open,
+            high: record.high,
+            low: record.low,
+            close: record.close,
+            volume: record.volume,
+          )
+          series.add_candle(candle)
+        end
+
+        @candle_cache[instrument.id] ||= {}
+        @candle_cache[instrument.id]["1D"] = series
+      end
+
+      Rails.logger.info("[Screeners::SwingScreener] Preloaded candles for #{@candle_cache.size} instruments")
+    end
+
+    def get_cached_candles(instrument, timeframe)
+      cached = @candle_cache[instrument.id]&.[](timeframe)
+      return cached if cached
+
+      # Fallback: load if not in cache (shouldn't happen if preload worked)
+      Rails.logger.warn("[Screeners::SwingScreener] Cache miss for #{instrument.symbol_name} #{timeframe}, loading...")
+      instrument.load_daily_candles(limit: 100)
+    end
+
+    def broadcast_progress(_progress_key, progress_data)
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "screener_progress",
+          screener_type: "swing",
+          progress: progress_data,
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::SwingScreener] Failed to broadcast progress: #{e.message}")
+    end
+
+    def broadcast_partial_results(_results_key, candidates)
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "screener_partial_results",
+          screener_type: "swing",
+          candidate_count: candidates.size,
+          candidates: candidates.first(20), # Send top 20 for progressive display
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::SwingScreener] Failed to broadcast partial results: #{e.message}")
+    end
+
+    def broadcast_complete_results(_results_key, candidates)
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "screener_complete",
+          screener_type: "swing",
+          candidate_count: candidates.size,
+          message: "Swing screener completed successfully",
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::SwingScreener] Failed to broadcast completion: #{e.message}")
     end
 
     def passes_basic_filters?(instrument)
@@ -179,32 +302,25 @@ module Screeners
     end
 
     def analyze_instrument(instrument)
+      # Use cached candles to avoid N+1 queries
+      daily_series = get_cached_candles(instrument, "1D")
+      return nil unless daily_series&.candles&.any?
+
       # Multi-timeframe analysis (DISABLE intraday by default for performance)
       # Intraday fetching makes API calls which are very slow
       # Only enable if explicitly configured
       include_intraday = @config.dig(:multi_timeframe, :include_intraday) == true
 
+      # Pass cached candles to MTF analyzer to avoid reloading
       mtf_result = Swing::MultiTimeframeAnalyzer.call(
         instrument: instrument,
         include_intraday: include_intraday,
+        cached_candles: @candle_cache,
       )
 
       return nil unless mtf_result[:success]
 
       mtf_analysis = mtf_result[:analysis]
-
-      # Load daily candles once (reuse from MTF if available, otherwise load)
-      # MTF analyzer already loads daily candles, so try to reuse
-      daily_series = if mtf_analysis[:timeframes] && mtf_analysis[:timeframes][:d1]
-                       # Try to get series from MTF analysis
-                       nil # Will load below if needed
-                     else
-                       instrument.load_daily_candles(limit: 100)
-                     end
-
-      # Load if not available from MTF
-      daily_series ||= instrument.load_daily_candles(limit: 100)
-      return nil unless daily_series&.candles&.any?
 
       # Need at least 50 candles for reliable analysis
       return nil if daily_series.candles.size < 50
@@ -299,15 +415,15 @@ module Screeners
       max_score = 0.0
 
       # Trend alignment (EMA filters) - 30 points
-      if @strategy_config.dig(:trend_filters,
-                              :use_ema20) && @strategy_config.dig(:trend_filters,
-                                                                  :use_ema50) && indicators[:ema20] && indicators[:ema50] && (indicators[:ema20] > indicators[:ema50])
+      if @strategy_config.dig(:trend_filters, :use_ema20) &&
+         @strategy_config.dig(:trend_filters, :use_ema50) &&
+         indicators[:ema20] && indicators[:ema50] && (indicators[:ema20] > indicators[:ema50])
         score += 15
         max_score += 15
       end
 
-      if @strategy_config.dig(:trend_filters,
-                              :use_ema200) && indicators[:ema20] && indicators[:ema200] && (indicators[:ema20] > indicators[:ema200])
+      if @strategy_config.dig(:trend_filters, :use_ema200) &&
+         indicators[:ema20] && indicators[:ema200] && (indicators[:ema20] > indicators[:ema200])
         score += 15
         max_score += 15
       end
@@ -400,12 +516,10 @@ module Screeners
       return nil unless smc_config[:enabled]
 
       # Determine expected direction from indicators
-      direction = if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish
-                    :long
-                  elsif indicators[:supertrend] && indicators[:supertrend][:direction] == :bearish
+      direction = if indicators[:supertrend] && indicators[:supertrend][:direction] == :bearish
                     :short
                   else
-                    :long # Default
+                    :long # Default or bullish
                   end
 
       Smc::StructureValidator.validate(

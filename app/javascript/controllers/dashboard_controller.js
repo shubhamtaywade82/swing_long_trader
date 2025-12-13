@@ -108,6 +108,49 @@ export default class extends Controller {
     }
   }
 
+  handleScreenerStream(data) {
+    // Handle real-time screener updates via ActionCable
+    if (data.type === "screener_progress") {
+      // Update progress display if on screener page
+      const statusMessage = document.querySelector(
+        '[data-screener-target="statusMessage"]'
+      );
+      if (statusMessage && data.progress) {
+        const progress = data.progress;
+        const pct =
+          progress.total > 0
+            ? Math.round((progress.processed / progress.total) * 100)
+            : 0;
+        const elapsed = progress.elapsed || 0;
+        const remaining = progress.remaining || 0;
+        const candidateCount = progress.candidates || 0;
+
+        statusMessage.textContent =
+          `Processing: ${progress.processed}/${progress.total} (${pct}%) - ` +
+          `${progress.analyzed} analyzed, ${candidateCount} candidates found - ` +
+          `${elapsed}s elapsed${
+            remaining > 0 ? `, ~${remaining}s remaining` : ""
+          }`;
+      }
+    } else if (data.type === "screener_partial_results") {
+      // Update progressive results display
+      if (window.updateProgressiveResults && data.candidates) {
+        window.updateProgressiveResults(data.candidates, data.progress || {});
+      }
+    } else if (data.type === "screener_complete") {
+      // Reload page to show final results
+      const statusMessage = document.querySelector(
+        '[data-screener-target="statusMessage"]'
+      );
+      if (statusMessage) {
+        statusMessage.textContent = `Results ready! Found ${data.candidate_count} candidates. Refreshing...`;
+      }
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    }
+  }
+
   updateTime() {
     const now = new Date();
     const timeString = now.toLocaleTimeString("en-US", {
@@ -140,6 +183,14 @@ export default class extends Controller {
 
         received: (data) => {
           this.handleUpdate(data);
+          // Handle screener streaming updates
+          if (
+            data.type === "screener_progress" ||
+            data.type === "screener_partial_results" ||
+            data.type === "screener_complete"
+          ) {
+            this.handleScreenerStream(data);
+          }
         },
       }
     );

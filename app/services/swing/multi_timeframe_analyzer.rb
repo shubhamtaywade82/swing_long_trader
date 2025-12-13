@@ -9,14 +9,15 @@ module Swing
       w1: "1W",    # Weekly
     }.freeze
 
-    def self.call(instrument:, include_intraday: true)
-      new(instrument: instrument, include_intraday: include_intraday).call
+    def self.call(instrument:, include_intraday: true, cached_candles: nil)
+      new(instrument: instrument, include_intraday: include_intraday, cached_candles: cached_candles).call
     end
 
-    def initialize(instrument:, include_intraday: true, trading_style: :swing)
+    def initialize(instrument:, include_intraday: true, trading_style: :swing, cached_candles: nil)
       @instrument = instrument
       @include_intraday = include_intraday
       @trading_style = trading_style
+      @cached_candles = cached_candles
       @config = AlgoConfig.fetch(%i[swing_trading multi_timeframe]) || {}
     end
 
@@ -104,6 +105,11 @@ module Swing
     end
 
     def load_timeframe_candles(tf_value)
+      # Check cache first to avoid N+1 queries
+      if @cached_candles && @cached_candles[@instrument.id] && @cached_candles[@instrument.id][tf_value]
+        return @cached_candles[@instrument.id][tf_value]
+      end
+
       case tf_value
       when "15", "60"
         # Load intraday candles (on-demand, not stored)
@@ -200,23 +206,17 @@ module Swing
 
       # EMA alignment (40 points)
       if indicators[:ema20] && indicators[:ema50]
-        if indicators[:ema20] > indicators[:ema50]
-          score += 20
-        end
+        score += 20 if indicators[:ema20] > indicators[:ema50]
         max_score += 20
       end
 
       if indicators[:ema20] && indicators[:ema200]
-        if indicators[:ema20] > indicators[:ema200]
-          score += 20
-        end
+        score += 20 if indicators[:ema20] > indicators[:ema200]
         max_score += 20
       end
 
       # Supertrend (30 points)
-      if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish
-        score += 30
-      end
+      score += 30 if indicators[:supertrend] && indicators[:supertrend][:direction] == :bullish
       max_score += 30
 
       # ADX strength (30 points)
@@ -250,9 +250,7 @@ module Swing
       if indicators[:macd].is_a?(Array) && indicators[:macd].size >= 2
         macd_line = indicators[:macd][0]
         signal_line = indicators[:macd][1]
-        if macd_line && signal_line && macd_line > signal_line
-          score += 30
-        end
+        score += 30 if macd_line && signal_line && macd_line > signal_line
         max_score += 30
       end
 
@@ -288,12 +286,12 @@ module Swing
       candles = series.candles
 
       (2..(candles.size - 3)).each do |i|
-        if candles[i].high > candles[i - 1].high &&
-           candles[i].high > candles[i - 2].high &&
-           candles[i].high > candles[i + 1].high &&
-           candles[i].high > candles[i + 2].high
-          highs << { index: i, price: candles[i].high, timestamp: candles[i].timestamp }
-        end
+        next unless candles[i].high > candles[i - 1].high &&
+                    candles[i].high > candles[i - 2].high &&
+                    candles[i].high > candles[i + 1].high &&
+                    candles[i].high > candles[i + 2].high
+
+        highs << { index: i, price: candles[i].high, timestamp: candles[i].timestamp }
       end
 
       highs.last(5) # Return last 5 swing highs
@@ -306,12 +304,12 @@ module Swing
       candles = series.candles
 
       (2..(candles.size - 3)).each do |i|
-        if candles[i].low < candles[i - 1].low &&
-           candles[i].low < candles[i - 2].low &&
-           candles[i].low < candles[i + 1].low &&
-           candles[i].low < candles[i + 2].low
-          lows << { index: i, price: candles[i].low, timestamp: candles[i].timestamp }
-        end
+        next unless candles[i].low < candles[i - 1].low &&
+                    candles[i].low < candles[i - 2].low &&
+                    candles[i].low < candles[i + 1].low &&
+                    candles[i].low < candles[i + 2].low
+
+        lows << { index: i, price: candles[i].low, timestamp: candles[i].timestamp }
       end
 
       lows.last(5) # Return last 5 swing lows
@@ -383,7 +381,7 @@ module Swing
       # Long-Term Trading: More weight to weekly and daily (1w, 1d, 1h)
       trading_style = @trading_style || @config[:trading_style] || :swing
 
-      weights = if trading_style == :long_term || trading_style == :longterm
+      weights = if %i[long_term longterm].include?(trading_style)
                   {
                     w1: 0.4,  # Weekly: 40% (primary for long-term)
                     d1: 0.35, # Daily: 35%
@@ -409,7 +407,7 @@ module Swing
 
         trend_score = tf_data[:trend_score] || 0
         momentum_score = tf_data[:momentum_score] || 0
-        combined_score = (trend_score * 0.6 + momentum_score * 0.4)
+        combined_score = ((trend_score * 0.6) + (momentum_score * 0.4))
 
         total_score += combined_score * weight
         total_weight += weight
@@ -505,8 +503,8 @@ module Swing
       end
 
       {
-        support_levels: support_levels.uniq.sort.reverse.first(5), # Top 5 support levels
-        resistance_levels: resistance_levels.uniq.sort.first(5),   # Top 5 resistance levels
+        support_levels: support_levels.uniq.sort.last(5).reverse, # Top 5 support levels
+        resistance_levels: resistance_levels.uniq.sort.first(5), # Top 5 resistance levels
         intraday_support: h1_tf&.dig(:structure, :swing_lows)&.last(2)&.map { |sl| sl[:price] } || [],
         intraday_resistance: h1_tf&.dig(:structure, :swing_highs)&.last(2)&.map { |sh| sh[:price] } || [],
       }
@@ -634,9 +632,7 @@ module Swing
       base_confidence = analysis[:multi_timeframe_score]
 
       # Boost confidence if momentum is aligned
-      if analysis[:momentum_alignment][:aligned]
-        base_confidence += 10
-      end
+      base_confidence += 10 if analysis[:momentum_alignment][:aligned]
 
       # Boost confidence based on timeframe alignment
       bullish_tfs = analysis[:trend_alignment][:bullish_count]
