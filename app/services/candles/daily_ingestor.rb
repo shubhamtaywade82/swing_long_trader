@@ -13,7 +13,6 @@ module Candles
       new(instruments: instruments, days_back: days_back).call
     end
 
-    # rubocop:disable Lint/MissingSuper
     def initialize(instruments: nil, days_back: nil)
       # ApplicationService doesn't define initialize, so super is not needed
       # Filter by segment (equity/index) instead of instrument_type
@@ -31,6 +30,7 @@ module Candles
         processed: 0,
         success: 0,
         failed: 0,
+        skipped_up_to_date: 0,
         total_candles: 0,
         errors: [],
         rate_limit_retries: 0,
@@ -48,6 +48,7 @@ module Candles
         if result[:success]
           results[:success] += 1
           results[:total_candles] += result[:upserted] || 0
+          results[:skipped_up_to_date] += 1 if result[:action] == :skipped_up_to_date
         else
           results[:failed] += 1
           results[:errors] << { instrument: instrument.symbol_name, error: result[:error] }
@@ -66,6 +67,7 @@ module Candles
           end
           puts "   Progress: #{results[:processed]}/#{@total_count} (#{(results[:processed].to_f / @total_count * 100).round(1)}%) | " \
                "Success: #{results[:success]} | Failed: #{results[:failed]} | " \
+               "Up-to-date: #{results[:skipped_up_to_date]} | " \
                "ETA: #{(remaining / 60).round(1)} min"
         end
 
@@ -85,9 +87,40 @@ module Candles
 
       # Calculate date range
       to_date = Time.zone.today - 1 # Yesterday (today's data may not be complete)
-      from_date = to_date - @days_back.days
 
-      # Fetch historical daily candles from DhanHQ
+      # Check for existing candles to optimize date range
+      latest_candle = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1D")
+
+      if latest_candle
+        # Start from the day after the latest candle (optimization: only fetch new data)
+        latest_date = latest_candle.timestamp.to_date
+        from_date = latest_date + 1.day
+
+        # If we already have data up to yesterday, skip this instrument
+        if from_date > to_date
+          Rails.logger.debug do
+            "[Candles::DailyIngestor] #{instrument.symbol_name}: " \
+              "Already up-to-date (latest: #{latest_date}, to_date: #{to_date})"
+          end
+          return {
+            success: true,
+            upserted: 0,
+            skipped: 0,
+            total: 0,
+            action: :skipped_up_to_date,
+          }
+        end
+
+        # Ensure we don't fetch less than minimum required days (for initial gaps)
+        # But if latest candle is very old, use the configured days_back
+        min_from_date = to_date - @days_back.days
+        from_date = [from_date, min_from_date].min
+      else
+        # No existing candles - fetch full range
+        from_date = to_date - @days_back.days
+      end
+
+      # Fetch historical daily candles from DhanHQ (only for the optimized date range)
       candles_data = fetch_daily_candles(
         instrument: instrument,
         from_date: from_date,
@@ -96,7 +129,7 @@ module Candles
 
       return { success: false, error: "No candles data received" } if candles_data.blank?
 
-      # Upsert candles to database
+      # Upsert candles to database (will skip existing ones)
       result = Ingestor.upsert_candles(
         instrument: instrument,
         timeframe: "1D",
@@ -104,9 +137,11 @@ module Candles
       )
 
       if result[:success]
+        action_type = latest_candle ? "updated" : "initial_load"
         Rails.logger.info(
-          "[Candles::DailyIngestor] #{instrument.symbol_name}: " \
-          "upserted=#{result[:upserted]}, skipped=#{result[:skipped]}, total=#{result[:total]}",
+          "[Candles::DailyIngestor] #{instrument.symbol_name} (#{action_type}): " \
+          "upserted=#{result[:upserted]}, skipped=#{result[:skipped]}, total=#{result[:total]}, " \
+          "date_range=#{from_date}..#{to_date}",
         )
       end
 
@@ -169,6 +204,7 @@ module Candles
       puts "   Processed: #{results[:processed]}"
       puts "   Success: #{results[:success]}"
       puts "   Failed: #{results[:failed]}"
+      puts "   Already up-to-date: #{results[:skipped_up_to_date]}" if results[:skipped_up_to_date].positive?
       puts "   Total candles: #{results[:total_candles]}"
       puts "   Rate limit retries: #{results[:rate_limit_retries]}" if results[:rate_limit_retries].positive?
 
@@ -177,6 +213,7 @@ module Candles
         "processed=#{results[:processed]}, " \
         "success=#{results[:success]}, " \
         "failed=#{results[:failed]}, " \
+        "skipped_up_to_date=#{results[:skipped_up_to_date]}, " \
         "total_candles=#{results[:total_candles]}, " \
         "duration=#{duration.round(2)}s, " \
         "rate_limit_retries=#{results[:rate_limit_retries]}",

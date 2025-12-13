@@ -8,27 +8,21 @@ RSpec.describe Candles::WeeklyIngestor do
 
   describe ".call" do
     context "when daily candles are valid" do
-      let(:mock_daily_candles) do
-        Array.new(7) do |i|
-          {
-            timestamp: i.days.ago.to_i,
-            open: 100.0 + i,
-            high: 105.0 + i,
-            low: 99.0 + i,
-            close: 103.0 + i,
-            volume: 1_000_000,
-          }
-        end
-      end
-
       let(:result) { described_class.call(instruments: instruments, weeks_back: 1) }
 
       before do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).with(
-          from_date: anything,
-          to_date: anything,
-          oi: false,
-        ).and_return(mock_daily_candles)
+        # Create daily candles in database (weekly ingestor loads from DB, not API)
+        7.times do |i|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0 + i,
+                 high: 105.0 + i,
+                 low: 99.0 + i,
+                 close: 103.0 + i,
+                 volume: 1_000_000)
+        end
       end
 
       it { expect(result[:processed]).to eq(1) }
@@ -71,27 +65,21 @@ RSpec.describe Candles::WeeklyIngestor do
     end
 
     context "when weeks_back is custom" do
-      let(:mock_daily_candles) do
-        Array.new(28) do |i|
-          {
-            timestamp: i.days.ago.to_i,
-            open: 100.0 + i,
-            high: 105.0 + i,
-            low: 99.0 + i,
-            close: 103.0 + i,
-            volume: 1_000_000,
-          }
-        end
-      end
-
       let(:result) { described_class.call(instruments: instruments, weeks_back: 4) }
 
       before do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).with(
-          from_date: anything,
-          to_date: anything,
-          oi: false,
-        ).and_return(mock_daily_candles)
+        # Create 28 days of daily candles in database
+        28.times do |i|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0 + i,
+                 high: 105.0 + i,
+                 low: 99.0 + i,
+                 close: 103.0 + i,
+                 volume: 1_000_000)
+        end
       end
 
       it { expect(result[:processed]).to eq(1) }
@@ -105,7 +93,7 @@ RSpec.describe Candles::WeeklyIngestor do
       let(:result) { described_class.call(instruments: instruments_empty, weeks_back: 1) }
 
       before do
-        allow(instrument_no_candles).to receive(:historical_ohlc).and_return([])
+        # Don't create any daily candles - instrument will have no data
       end
 
       it { expect(result[:failed]).to be >= 0 }
@@ -136,7 +124,27 @@ RSpec.describe Candles::WeeklyIngestor do
       let(:result) { described_class.call(instruments: multiple_instruments, weeks_back: 1) }
 
       before do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return([])
+        # Create daily candles for both instruments
+        7.times do |i|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+          create(:candle_series_record,
+                 instrument: instrument2,
+                 timeframe: "1D",
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
       end
 
       it { expect(result[:processed]).to eq(2) }
@@ -146,7 +154,7 @@ RSpec.describe Candles::WeeklyIngestor do
       let(:result) { described_class.call }
 
       before do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return([])
+        # No daily candles needed - will fail for instruments without data
       end
 
       it { expect(result).to be_a(Hash) }
@@ -155,25 +163,8 @@ RSpec.describe Candles::WeeklyIngestor do
     end
 
     context "with edge cases" do
-      it "handles API errors gracefully" do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_raise(StandardError.new("API error"))
-
-        result = described_class.call(instruments: instruments, weeks_back: 1)
-
-        expect(result[:failed]).to eq(1)
-        expect(result[:errors]).not_to be_empty
-      end
-
       it "handles empty daily candles" do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return([])
-
-        result = described_class.call(instruments: instruments, weeks_back: 1)
-
-        expect(result[:failed]).to eq(1)
-      end
-
-      it "handles nil daily candles" do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return(nil)
+        # No daily candles created - instrument will have no data
 
         result = described_class.call(instruments: instruments, weeks_back: 1)
 
@@ -181,19 +172,18 @@ RSpec.describe Candles::WeeklyIngestor do
       end
 
       it "aggregates multiple weeks correctly" do
-        # Create 14 days of candles (2 weeks)
-        mock_daily_candles = Array.new(14) do |i|
-          {
-            timestamp: i.days.ago.to_i,
-            open: 100.0,
-            high: 105.0,
-            low: 99.0,
-            close: 103.0,
-            volume: 1_000_000,
-          }
+        # Create 14 days of candles (2 weeks) in database
+        14.times do |i|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
         end
-
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return(mock_daily_candles)
 
         result = described_class.call(instruments: instruments, weeks_back: 2)
 
@@ -202,39 +192,50 @@ RSpec.describe Candles::WeeklyIngestor do
         expect(weekly_count).to be >= 2
       end
 
-      it "handles hash format candles (DhanHQ format)" do
-        mock_hash_candles = {
-          "timestamp" => [7.days.ago.to_i, 6.days.ago.to_i],
-          "open" => [100.0, 101.0],
-          "high" => [105.0, 106.0],
-          "low" => [99.0, 100.0],
-          "close" => [103.0, 104.0],
-          "volume" => [1_000_000, 1_100_000],
-        }
+      it "processes multiple instruments efficiently" do
+        # Weekly ingestor doesn't have rate limiting (loads from DB, not API)
+        # This test verifies it can handle multiple instruments
 
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return(mock_hash_candles)
+        # Process 10 instruments (use unique security_ids to avoid validation errors)
+        instruments_list = 10.times.map { |i| create(:instrument, security_id: "weekly_test_#{i}") }
+        instruments = Instrument.where(id: instruments_list.map(&:id))
+
+        # Create daily candles for all instruments
+        instruments_list.each do |inst|
+          7.times do |i|
+            create(:candle_series_record,
+                   instrument: inst,
+                   timeframe: "1D",
+                   timestamp: i.days.ago.beginning_of_day,
+                   open: 100.0,
+                   high: 105.0,
+                   low: 99.0,
+                   close: 103.0,
+                   volume: 1_000_000)
+          end
+        end
 
         result = described_class.call(instruments: instruments, weeks_back: 1)
 
-        expect(result[:success]).to eq(1)
-      end
-
-      it "handles rate limiting delay" do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return([])
-        allow(described_class).to receive(:sleep)
-
-        # Process 10 instruments to trigger rate limiting
-        instruments_list = create_list(:instrument, 10, security_id: "12345")
-        instruments = Instrument.where(id: instruments_list.map(&:id))
-
-        described_class.call(instruments: instruments, weeks_back: 1)
-
-        # Should have called sleep at least once (every 10 instruments)
-        expect(described_class).to have_received(:sleep).at_least(:once)
+        # Should process all instruments
+        expect(result[:processed]).to eq(10)
+        expect(result[:success]).to be > 0
       end
 
       it "logs summary correctly" do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return([])
+        # Create daily candles
+        7.times do |i|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
         allow(Rails.logger).to receive(:info)
         allow(Rails.logger).to receive(:warn)
 
@@ -247,11 +248,19 @@ RSpec.describe Candles::WeeklyIngestor do
         instrument2 = create(:instrument, symbol_name: "TEST2", security_id: "12346")
         instruments = Instrument.where(id: [instrument.id, instrument2.id])
 
-        # First instrument succeeds, second fails
-        allow(instrument).to receive(:historical_ohlc).and_return([
-                                                                    { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
-                                                                  ])
-        allow(instrument2).to receive(:historical_ohlc).and_raise(StandardError.new("API error"))
+        # Create daily candles for first instrument (will succeed)
+        7.times do |i|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+        # Second instrument has no daily candles (will fail)
 
         result = described_class.call(instruments: instruments, weeks_back: 1)
 
@@ -289,9 +298,11 @@ RSpec.describe Candles::WeeklyIngestor do
         end
 
         it "uses first open and last close" do
+          # Ensure both candles are in the same week (use same week start)
+          week_start = Time.zone.today.beginning_of_week
           daily_candles = [
-            { timestamp: 6.days.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
-            { timestamp: 5.days.ago.to_i, open: 103.0, high: 108.0, low: 102.0, close: 106.0, volume: 1_200_000 },
+            { timestamp: week_start + 1.day, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+            { timestamp: week_start + 2.days, open: 103.0, high: 108.0, low: 102.0, close: 106.0, volume: 1_200_000 },
           ]
 
           weekly = service.send(:aggregate_to_weekly, daily_candles)
@@ -301,9 +312,11 @@ RSpec.describe Candles::WeeklyIngestor do
         end
 
         it "calculates max high and min low" do
+          # Ensure both candles are in the same week
+          week_start = Time.zone.today.beginning_of_week
           daily_candles = [
-            { timestamp: 6.days.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
-            { timestamp: 5.days.ago.to_i, open: 103.0, high: 110.0, low: 95.0, close: 106.0, volume: 1_200_000 },
+            { timestamp: week_start + 1.day, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+            { timestamp: week_start + 2.days, open: 103.0, high: 110.0, low: 95.0, close: 106.0, volume: 1_200_000 },
           ]
 
           weekly = service.send(:aggregate_to_weekly, daily_candles)
@@ -313,9 +326,11 @@ RSpec.describe Candles::WeeklyIngestor do
         end
 
         it "sums volumes" do
+          # Ensure both candles are in the same week
+          week_start = Time.zone.today.beginning_of_week
           daily_candles = [
-            { timestamp: 6.days.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
-            { timestamp: 5.days.ago.to_i, open: 103.0, high: 108.0, low: 102.0, close: 106.0, volume: 1_200_000 },
+            { timestamp: week_start + 1.day, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+            { timestamp: week_start + 2.days, open: 103.0, high: 108.0, low: 102.0, close: 106.0, volume: 1_200_000 },
           ]
 
           weekly = service.send(:aggregate_to_weekly, daily_candles)

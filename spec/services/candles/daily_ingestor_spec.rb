@@ -164,28 +164,49 @@ RSpec.describe Candles::DailyIngestor do
       end
 
       it "handles rate limiting delay" do
-        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return([])
-        allow(described_class).to receive(:sleep)
+        # Ensure no existing candles so instruments aren't skipped
+        CandleSeriesRecord.delete_all
 
-        # Process 10 instruments to trigger rate limiting
-        instruments_list = create_list(:instrument, 10, security_id: "12345")
+        # Mock API to return data (so instruments aren't skipped)
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return([
+                                                                                    { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+                                                                                  ])
+
+        # Process 10 instruments to trigger rate limiting (use unique security_ids)
+        # With delay_interval of 5, sleep should be called at 5 and 10
+        instruments_list = 10.times.map { |i| create(:instrument, security_id: "rate_limit_#{i}") }
         instruments = Instrument.where(id: instruments_list.map(&:id))
 
-        described_class.call(instruments: instruments, days_back: 2)
+        # Create service instance and stub sleep on it
+        service = described_class.new(instruments: instruments, days_back: 2)
+        sleep_calls = []
+        allow(service).to receive(:sleep) { |duration| sleep_calls << duration }
 
-        # Should have called sleep at least once (every 10 instruments)
-        expect(described_class).to have_received(:sleep).at_least(:once)
+        service.call
+
+        # Should have called sleep at least once (every 5 instruments by default)
+        # With 10 instruments and delay_interval of 5, sleep should be called when processed is 5
+        expect(sleep_calls.length).to be > 0
       end
 
       it "handles partial failures" do
         instrument2 = create(:instrument, symbol_name: "TEST2", security_id: "12346")
         instruments = Instrument.where(id: [instrument.id, instrument2.id])
 
+        # Ensure no existing candles (optimization would skip if data exists)
+        CandleSeriesRecord.where(instrument: [instrument, instrument2]).delete_all
+
         # First instrument succeeds, second fails
-        allow(instrument).to receive(:historical_ohlc).and_return([
-                                                                    { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
-                                                                  ])
-        allow(instrument2).to receive(:historical_ohlc).and_raise(StandardError.new("API error"))
+        # Use allow_any_instance_of since find_each reloads instruments
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc) do |inst|
+          if inst.id == instrument.id
+            [{ timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 }]
+          elsif inst.id == instrument2.id
+            raise StandardError.new("API error")
+          else
+            []
+          end
+        end
 
         result = described_class.call(instruments: instruments, days_back: 2)
 

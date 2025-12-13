@@ -8,7 +8,6 @@ module Candles
       new(instruments: instruments, weeks_back: weeks_back).call
     end
 
-    # rubocop:disable Lint/MissingSuper
     def initialize(instruments: nil, weeks_back: nil)
       # ApplicationService doesn't define initialize, so super is not needed
       # Filter by segment (equity/index) instead of instrument_type
@@ -23,6 +22,7 @@ module Candles
         processed: 0,
         success: 0,
         failed: 0,
+        skipped_up_to_date: 0,
         total_candles: 0,
         errors: [],
       }
@@ -38,6 +38,7 @@ module Candles
         if result[:success]
           results[:success] += 1
           results[:total_candles] += result[:upserted] || 0
+          results[:skipped_up_to_date] += 1 if result[:action] == :skipped_up_to_date
         else
           results[:failed] += 1
           results[:errors] << { instrument: instrument.symbol_name, error: result[:error] }
@@ -54,6 +55,7 @@ module Candles
           end
           puts "   Progress: #{results[:processed]}/#{@total_count} (#{(results[:processed].to_f / @total_count * 100).round(1)}%) | " \
                "Success: #{results[:success]} | Failed: #{results[:failed]} | " \
+               "Up-to-date: #{results[:skipped_up_to_date]} | " \
                "ETA: #{(remaining / 60).round(1)} min"
         end
       end
@@ -68,11 +70,48 @@ module Candles
       return { success: false, error: "Invalid instrument" } if instrument.blank?
       return { success: false, error: "Missing security_id" } if instrument.security_id.blank?
 
-      # Calculate date range (weeks back)
+      # Calculate date range
       to_date = Time.zone.today - 1 # Yesterday
-      from_date = to_date - (@weeks_back * 7).days
 
-      # Fetch daily candles and aggregate to weekly
+      # Check for existing weekly candles to optimize date range
+      latest_weekly_candle = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1W")
+
+      if latest_weekly_candle
+        # Start from the week after the latest weekly candle
+        latest_week_start = latest_weekly_candle.timestamp.beginning_of_week
+        # Get the start of the next week (Monday after latest week)
+        next_week_start = latest_week_start + 1.week
+        # Convert to date for daily candle fetching
+        from_date = next_week_start.to_date
+
+        # If we already have data up to the current week, check if we need to update
+        current_week_start = to_date.beginning_of_week
+        latest_week_date = latest_week_start.to_date
+
+        # If latest weekly candle is from current week or later, skip
+        if latest_week_date >= current_week_start
+          Rails.logger.debug do
+            "[Candles::WeeklyIngestor] #{instrument.symbol_name}: " \
+              "Already up-to-date (latest week: #{latest_week_date}, current week: #{current_week_start})"
+          end
+          return {
+            success: true,
+            upserted: 0,
+            skipped: 0,
+            total: 0,
+            action: :skipped_up_to_date,
+          }
+        end
+
+        # Ensure we don't fetch less than minimum required weeks (for initial gaps)
+        min_from_date = to_date - (@weeks_back * 7).days
+        from_date = [from_date, min_from_date].min
+      else
+        # No existing weekly candles - fetch full range
+        from_date = to_date - (@weeks_back * 7).days
+      end
+
+      # Fetch daily candles and aggregate to weekly (only for the optimized date range)
       daily_candles = fetch_daily_candles(
         instrument: instrument,
         from_date: from_date,
@@ -86,7 +125,7 @@ module Candles
 
       return { success: false, error: "No weekly candles after aggregation" } if weekly_candles.empty?
 
-      # Upsert weekly candles to database
+      # Upsert weekly candles to database (will skip existing ones)
       result = Ingestor.upsert_candles(
         instrument: instrument,
         timeframe: "1W",
@@ -94,9 +133,11 @@ module Candles
       )
 
       if result[:success]
+        action_type = latest_weekly_candle ? "updated" : "initial_load"
         Rails.logger.info(
-          "[Candles::WeeklyIngestor] #{instrument.symbol_name}: " \
-          "upserted=#{result[:upserted]}, skipped=#{result[:skipped]}, total=#{result[:total]}",
+          "[Candles::WeeklyIngestor] #{instrument.symbol_name} (#{action_type}): " \
+          "upserted=#{result[:upserted]}, skipped=#{result[:skipped]}, total=#{result[:total]}, " \
+          "date_range=#{from_date}..#{to_date}",
         )
       end
 
@@ -242,7 +283,8 @@ module Candles
         if timestamp.match?(/\A\d+(\.\d+)?\z/)
           Time.zone.at(timestamp.to_f)
         else
-          Time.zone.parse(timestamp)
+          parsed = Time.zone.parse(timestamp)
+          parsed || Time.zone.now # Fallback if parse returns nil
         end
       else
         # Fallback: try to convert to numeric (for Unix epoch)
@@ -250,7 +292,8 @@ module Candles
         if numeric.match?(/\A\d+(\.\d+)?\z/)
           Time.zone.at(numeric.to_f)
         else
-          Time.zone.parse(timestamp.to_s)
+          parsed = Time.zone.parse(timestamp.to_s)
+          parsed || Time.zone.now # Fallback if parse returns nil
         end
       end
     rescue StandardError => e
@@ -264,6 +307,7 @@ module Candles
       puts "   Processed: #{results[:processed]}"
       puts "   Success: #{results[:success]}"
       puts "   Failed: #{results[:failed]}"
+      puts "   Already up-to-date: #{results[:skipped_up_to_date]}" if results[:skipped_up_to_date].positive?
       puts "   Total candles: #{results[:total_candles]}"
 
       Rails.logger.info(
@@ -271,6 +315,7 @@ module Candles
         "processed=#{results[:processed]}, " \
         "success=#{results[:success]}, " \
         "failed=#{results[:failed]}, " \
+        "skipped_up_to_date=#{results[:skipped_up_to_date]}, " \
         "total_candles=#{results[:total_candles]}, " \
         "duration=#{duration.round(2)}s",
       )
