@@ -38,6 +38,7 @@ module Screeners
           ai_summary: result[:summary],
           ai_holding_days: result[:holding_days],
           ai_risk: result[:risk],
+          ai_timeframe_alignment: result[:timeframe_alignment],
         )
       end
 
@@ -79,21 +80,27 @@ module Screeners
     def build_prompt(candidate)
       indicators = candidate[:indicators] || candidate[:daily_indicators] || {}
       metadata = candidate[:metadata] || {}
+      mtf_data = candidate[:multi_timeframe] || metadata[:multi_timeframe] || {}
+
+      mtf_summary = build_mtf_summary(mtf_data)
 
       <<~PROMPT
         You are a technical analysis expert for swing trading (holding period: 5-20 days).
+        Analyze this stock using MULTI-TIMEFRAME analysis (15m, 1h, 1d, 1w).
 
-        Analyze this stock candidate and provide a JSON response with:
-        - score: 0-100 (overall quality score)
+        Provide a JSON response with:
+        - score: 0-100 (overall quality score considering all timeframes)
         - confidence: 0-100 (confidence in the analysis)
-        - summary: Brief 2-3 sentence summary
+        - summary: Brief 2-3 sentence multi-timeframe summary
         - holding_days: Estimated holding period (5-20 days)
         - risk: "low", "medium", or "high"
+        - timeframe_alignment: "excellent", "good", "fair", or "poor"
 
         Stock: #{candidate[:symbol]}
         Current Score: #{candidate[:score]}/100
+        MTF Score: #{mtf_data[:score] || candidate[:mtf_score] || 'N/A'}/100
 
-        Technical Indicators:
+        Daily Timeframe Indicators:
         - EMA20: #{indicators[:ema20]&.round(2) || 'N/A'}
         - EMA50: #{indicators[:ema50]&.round(2) || 'N/A'}
         - EMA200: #{indicators[:ema200]&.round(2) || 'N/A'}
@@ -102,19 +109,56 @@ module Screeners
         - ATR: #{indicators[:atr]&.round(2) || 'N/A'}
         - Supertrend: #{indicators[:supertrend]&.dig(:direction) || 'N/A'}
 
+        #{mtf_summary}
+
         #{"Trend Alignment: #{metadata[:trend_alignment].join(', ')}" if metadata[:trend_alignment]}
 
         #{"Momentum: #{metadata[:momentum][:change_5d] || 'N/A'}% (5-day change)" if metadata[:momentum]}
+
+        Consider:
+        - Higher timeframes (weekly, daily) should show bullish trend
+        - Lower timeframes (1h, 15m) should confirm entry timing
+        - Support/resistance levels from weekly and daily charts
+        - Overall structure alignment across all timeframes
 
         Provide ONLY valid JSON in this format:
         {
           "score": 75,
           "confidence": 80,
-          "summary": "Strong bullish trend with good momentum...",
+          "summary": "Strong bullish trend across all timeframes with good momentum...",
           "holding_days": 12,
-          "risk": "medium"
+          "risk": "medium",
+          "timeframe_alignment": "excellent"
         }
       PROMPT
+    end
+
+    def build_mtf_summary(mtf_data)
+      return "" if mtf_data.empty?
+
+      summary = "\nMulti-Timeframe Analysis:\n"
+
+      if mtf_data[:trend_alignment]
+        ta = mtf_data[:trend_alignment]
+        summary += "- Trend Alignment: #{ta[:aligned] ? 'ALIGNED' : 'NOT ALIGNED'} "
+        summary += "(Bullish: #{ta[:bullish_count]}, Bearish: #{ta[:bearish_count]})\n"
+      end
+
+      if mtf_data[:momentum_alignment]
+        ma = mtf_data[:momentum_alignment]
+        summary += "- Momentum Alignment: #{ma[:aligned] ? 'ALIGNED' : 'NOT ALIGNED'} "
+        summary += "(Bullish: #{ma[:bullish_count]}, Bearish: #{ma[:bearish_count]})\n"
+      end
+
+      if mtf_data[:timeframes_analyzed]&.any?
+        summary += "- Timeframes Analyzed: #{mtf_data[:timeframes_analyzed].join(', ')}\n"
+      end
+
+      if mtf_data[:entry_recommendations]&.any?
+        summary += "- Entry Recommendations: #{mtf_data[:entry_recommendations].size} found\n"
+      end
+
+      summary
     end
 
     def call_openai(prompt)
@@ -148,14 +192,15 @@ module Screeners
       json_text = response.strip
       json_text = json_text.gsub(/```json\s*/, "").gsub(/```\s*$/, "") if json_text.include?("```")
 
-      parsed = JSON.parse(json_text)
-      {
-        score: parsed["score"]&.to_f || 0,
-        confidence: parsed["confidence"]&.to_f || 0,
-        summary: parsed["summary"] || "",
-        holding_days: parsed["holding_days"]&.to_i || 10,
-        risk: parsed["risk"]&.downcase || "medium",
-      }
+        parsed = JSON.parse(json_text)
+        {
+          score: parsed["score"]&.to_f || 0,
+          confidence: parsed["confidence"]&.to_f || 0,
+          summary: parsed["summary"] || "",
+          holding_days: parsed["holding_days"]&.to_i || 10,
+          risk: parsed["risk"]&.downcase || "medium",
+          timeframe_alignment: parsed["timeframe_alignment"]&.downcase || "fair",
+        }
     rescue JSON::ParserError => e
       Rails.logger.error("[Screeners::AIRanker] Failed to parse JSON response: #{e.message}")
       Rails.logger.debug { "[Screeners::AIRanker] Response: #{response}" }
