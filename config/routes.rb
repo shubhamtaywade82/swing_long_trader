@@ -11,6 +11,16 @@ Rails.application.routes.draw do
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
-  # Defines the root path route ("/")
-  # root "posts#index"
+  # Dashboard routes
+  root "dashboard#index"
+
+  get "dashboard", to: "dashboard#index", as: :dashboard
+  get "positions", to: "dashboard#positions", as: :positions
+  get "portfolio", to: "dashboard#portfolio", as: :portfolio
+  get "signals", to: "dashboard#signals", as: :signals
+  get "orders", to: "dashboard#orders", as: :orders
+  get "monitoring", to: "dashboard#monitoring", as: :monitoring
+
+  # ActionCable for live updates
+  mount ActionCable.server => "/cable"
 end

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Order < ApplicationRecord
+  include DashboardBroadcastable
+
   belongs_to :instrument
   has_one :position, dependent: :nullify # Position created from this order
   has_many :exit_positions, class_name: "Position", foreign_key: "exit_order_id", dependent: :nullify

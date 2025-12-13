@@ -38,25 +38,28 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
   end
 
   describe "#calculate_at" do
-    before do
-      allow_any_instance_of(CandleSeries).to receive(:hma).and_return(100.0)
-    end
-
     it "calculates trend duration" do
       indicator = described_class.new(series: series)
       result = indicator.calculate_at(50)
 
-      # May return nil if trend is not detected
+      # May return nil if trend is not detected (needs sufficient data and clear trend)
+      # If result exists, it should have the expected structure
       if result
         expect(result).to have_key(:value)
         expect(result).to have_key(:direction)
         expect(result).to have_key(:confidence)
+        expect(result[:value]).to have_key(:hma)
+        expect(result[:value]).to have_key(:trend_direction)
+      else
+        # It's acceptable to return nil if trend is not clear
+        expect(result).to be_nil
       end
     end
 
     it "returns nil when not ready" do
       indicator = described_class.new(series: series)
-      result = indicator.calculate_at(10)
+      min_required = indicator.min_required_candles
+      result = indicator.calculate_at(min_required - 1)
 
       expect(result).to be_nil
     end
@@ -65,7 +68,8 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       indicator = described_class.new(series: series)
       non_trading_candle = create(:candle, timestamp: Time.zone.parse("2023-01-01 02:00:00"))
       series.add_candle(non_trading_candle)
-      allow_any_instance_of(described_class).to receive(:trading_hours?).and_return(false)
+      last_index = series.candles.size - 1
+      allow(indicator).to receive(:trading_hours?).and_return(false)
 
       result = indicator.calculate_at(series.candles.size - 1)
 
@@ -118,11 +122,13 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         expect(wma).to be_nil
       end
 
-      it "handles zero weight sum" do
+      it "handles zero values correctly" do
+        # All zero values should still calculate WMA (weights are never zero)
         values = Array.new(10, 0.0)
         wma = indicator.send(:calculate_wma, values, 10)
 
-        expect(wma).to be_nil
+        # WMA with all zeros should be 0.0, not nil (weights sum is never zero)
+        expect(wma).to eq(0.0)
       end
     end
 
@@ -176,15 +182,17 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
 
       it "limits duration samples" do
         indicator_with_samples = described_class.new(series: series, config: { samples: 5 })
-        # Create 6 bullish trends (each followed by bearish to trigger save)
-        # This should result in 5 samples (limited by samples: 5)
+        # Create 6 separate bullish trends (each followed by bearish to trigger save)
+        # After 6 trends, we should have 5 samples (limited by samples: 5, oldest one removed)
         6.times do
           10.times { indicator_with_samples.send(:update_trend_duration, :bullish) }
-          indicator_with_samples.send(:update_trend_duration, :bearish) # Switch to save bullish duration
+          # Switch to bearish to save the bullish duration (10)
+          indicator_with_samples.send(:update_trend_duration, :bearish)
         end
 
         bullish_durations = indicator_with_samples.instance_variable_get(:@bullish_durations)
-        expect(bullish_durations.size).to eq(5) # Should be limited to 5 samples
+        expect(bullish_durations.size).to eq(5) # Should be limited to 5 samples (6th one removed)
+        expect(bullish_durations).to all(eq(10)) # All should be 10
       end
 
       it "does not increment count for neutral trend" do

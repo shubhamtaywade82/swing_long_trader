@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class TradingSignal < ApplicationRecord
+  include DashboardBroadcastable
+
   belongs_to :instrument
   belongs_to :order, optional: true
   belongs_to :paper_position, optional: true
@@ -158,7 +160,7 @@ class TradingSignal < ApplicationRecord
     instrument = Instrument.find_by(id: signal[:instrument_id])
     return nil unless instrument
 
-    signal_record = create!(
+    create!(
       instrument: instrument,
       symbol: signal[:symbol] || instrument.symbol_name,
       direction: signal[:direction].to_s,
@@ -184,7 +186,5 @@ class TradingSignal < ApplicationRecord
       balance_shortfall: balance_info[:shortfall],
       balance_type: balance_info[:type] || "live_account",
     )
-
-    signal_record
   end
 end

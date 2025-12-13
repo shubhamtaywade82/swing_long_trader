@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= content_for(:title) || "Swing Long Trader - Dashboard" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Swing Long Trader">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.png">
+
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_include_tag "application", "data-turbo-track": "reload", type: "module" %>
+  </head>
+
+  <body data-controller="dashboard" data-dashboard-channel-value="DashboardChannel">
+    <div class="dashboard-wrapper">
+      <!-- Side Navigation -->
+      <nav class="sidebar" data-dashboard-target="sidebar">
+        <div class="sidebar-header">
+          <h4 class="sidebar-title">
+            <i class="bi bi-graph-up-arrow"></i>
+            Swing Trader
+          </h4>
+          <button class="btn btn-link sidebar-toggle d-md-none" data-action="click->dashboard#toggleSidebar">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <ul class="sidebar-nav">
+          <li class="nav-item">
+            <%= link_to dashboard_path, class: "nav-link #{'active' if current_page?(dashboard_path)}" do %>
+              <i class="bi bi-speedometer2"></i>
+              <span>Dashboard</span>
+            <% end %>
+          </li>
+          <li class="nav-item">
+            <%= link_to positions_path, class: "nav-link #{'active' if current_page?(positions_path)}" do %>
+              <i class="bi bi-briefcase"></i>
+              <span>Positions</span>
+            <% end %>
+          </li>
+          <li class="nav-item">
+            <%= link_to portfolio_path, class: "nav-link #{'active' if current_page?(portfolio_path)}" do %>
+              <i class="bi bi-pie-chart"></i>
+              <span>Portfolio</span>
+            <% end %>
+          </li>
+          <li class="nav-item">
+            <%= link_to signals_path, class: "nav-link #{'active' if current_page?(signals_path)}" do %>
+              <i class="bi bi-bullseye"></i>
+              <span>Trading Signals</span>
+            <% end %>
+          </li>
+          <li class="nav-item">
+            <%= link_to orders_path, class: "nav-link #{'active' if current_page?(orders_path)}" do %>
+              <i class="bi bi-list-check"></i>
+              <span>Orders</span>
+            <% end %>
+          </li>
+          <li class="nav-item">
+            <%= link_to monitoring_path, class: "nav-link #{'active' if current_page?(monitoring_path)}" do %>
+              <i class="bi bi-activity"></i>
+              <span>Monitoring</span>
+            <% end %>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- Main Content Area -->
+      <div class="main-content">
+        <!-- Header -->
+        <header class="dashboard-header">
+          <div class="header-left">
+            <button class="btn btn-link sidebar-toggle-mobile d-md-none" data-action="click->dashboard#toggleSidebar">
+              <i class="bi bi-list"></i>
+            </button>
+            <h1 class="page-title"><%= content_for(:page_title) || "Dashboard" %></h1>
+          </div>
+          <div class="header-right">
+            <div class="connection-status" data-dashboard-target="connectionStatus">
+              <span class="status-indicator"></span>
+              <span class="status-text">Connected</span>
+            </div>
+            <div class="current-time" data-dashboard-target="currentTime">
+              <%= Time.current.strftime("%H:%M:%S") %>
+            </div>
+          </div>
+        </header>
+
+        <!-- Page Content -->
+        <main class="content-area" data-dashboard-target="contentArea">
+          <%= yield %>
+        </main>
+      </div>
+    </div>
+
+    <!-- Overlay for mobile sidebar -->
+    <div class="sidebar-overlay d-md-none" data-dashboard-target="overlay" data-action="click->dashboard#closeSidebar"></div>
+  </body>
+</html>

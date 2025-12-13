@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
 class Position < ApplicationRecord
+  include DashboardBroadcastable
+
   belongs_to :instrument
   belongs_to :order # Entry order
   belongs_to :exit_order, class_name: "Order", optional: true
   belongs_to :trading_signal, optional: true
 
-  validates :symbol, :direction, :entry_price, :current_price, :quantity, :opened_at, presence: true, unless: :portfolio?
+  validates :symbol, :direction, :entry_price, :current_price, :quantity, :opened_at, presence: true,
+                                                                                      unless: :portfolio?
   validates :direction, inclusion: { in: %w[long short] }, allow_nil: true
   validates :status, inclusion: { in: %w[open closed partially_closed] }
   validates :quantity, numericality: { greater_than: 0 }, allow_nil: true
@@ -98,11 +101,11 @@ class Position < ApplicationRecord
   end
 
   def calculate_unrealized_pnl
-    if long?
-      pnl = (current_price - entry_price) * quantity
-    else
-      pnl = (entry_price - current_price) * quantity
-    end
+    pnl = if long?
+            (current_price - entry_price) * quantity
+          else
+            (entry_price - current_price) * quantity
+          end
 
     pnl_pct = if entry_price.positive?
                 (pnl / entry_value * 100).round(2)
@@ -127,11 +130,11 @@ class Position < ApplicationRecord
   def calculate_realized_pnl
     return { pnl: 0, pnl_pct: 0 } unless closed? && exit_price
 
-    if long?
-      pnl = (exit_price - entry_price) * quantity
-    else
-      pnl = (entry_price - exit_price) * quantity
-    end
+    pnl = if long?
+            (exit_price - entry_price) * quantity
+          else
+            (entry_price - exit_price) * quantity
+          end
 
     pnl_pct = if entry_price.positive?
                 (pnl / entry_value * 100).round(2)
@@ -211,9 +214,11 @@ class Position < ApplicationRecord
 
   def mark_as_closed!(exit_price:, exit_reason:, exit_order: nil)
     pnl_result = if long?
-                   { pnl: (exit_price - entry_price) * quantity, pnl_pct: ((exit_price - entry_price) / entry_price * 100).round(2) }
+                   { pnl: (exit_price - entry_price) * quantity,
+                     pnl_pct: ((exit_price - entry_price) / entry_price * 100).round(2) }
                  else
-                   { pnl: (entry_price - exit_price) * quantity, pnl_pct: ((entry_price - exit_price) / entry_price * 100).round(2) }
+                   { pnl: (entry_price - exit_price) * quantity,
+                     pnl_pct: ((entry_price - exit_price) / entry_price * 100).round(2) }
                  end
 
     update!(

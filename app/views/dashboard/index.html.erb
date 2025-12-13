@@ -1,0 +1,257 @@
+<% content_for :page_title, "Dashboard" %>
+
+<div class="dashboard-page">
+  <!-- Stats Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3 col-sm-6">
+      <div class="stat-card">
+        <div class="stat-icon bg-primary">
+          <i class="bi bi-briefcase"></i>
+        </div>
+        <div class="stat-content">
+          <h3 class="stat-value" data-dashboard-target="statValue" data-stat="livePositions">
+            <%= @stats[:total_live_positions] %>
+          </h3>
+          <p class="stat-label">Live Positions</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+      <div class="stat-card">
+        <div class="stat-icon bg-info">
+          <i class="bi bi-briefcase-fill"></i>
+        </div>
+        <div class="stat-content">
+          <h3 class="stat-value" data-dashboard-target="statValue" data-stat="paperPositions">
+            <%= @stats[:total_paper_positions] %>
+          </h3>
+          <p class="stat-label">Paper Positions</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+      <div class="stat-card">
+        <div class="stat-icon bg-success">
+          <i class="bi bi-arrow-up-circle"></i>
+        </div>
+        <div class="stat-content">
+          <h3 class="stat-value" data-dashboard-target="statValue" data-stat="unrealizedPnl">
+            <%= number_to_currency(@stats[:total_unrealized_pnl_live] + @stats[:total_unrealized_pnl_paper], unit: "₹", precision: 0) %>
+          </h3>
+          <p class="stat-label">Unrealized P&L</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+      <div class="stat-card">
+        <div class="stat-icon bg-warning">
+          <i class="bi bi-hourglass-split"></i>
+        </div>
+        <div class="stat-content">
+          <h3 class="stat-value" data-dashboard-target="statValue" data-stat="pendingOrders">
+            <%= @stats[:pending_orders] %>
+          </h3>
+          <p class="stat-label">Pending Orders</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content Grid -->
+  <div class="row g-4">
+    <!-- Live Positions -->
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">
+            <i class="bi bi-briefcase text-primary"></i>
+            Live Positions
+          </h5>
+          <%= link_to positions_path(mode: "live"), class: "btn btn-sm btn-outline-primary" do %>
+            View All <i class="bi bi-arrow-right"></i>
+          <% end %>
+        </div>
+        <div class="card-body">
+          <% if @live_positions.any? %>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>Direction</th>
+                    <th>Qty</th>
+                    <th>Entry</th>
+                    <th>Current</th>
+                    <th>P&L</th>
+                  </tr>
+                </thead>
+                <tbody data-dashboard-target="livePositionsTable">
+                  <% @live_positions.each do |position| %>
+                    <tr data-position-id="<%= position.id %>">
+                      <td><strong><%= position.symbol %></strong></td>
+                      <td>
+                        <span class="badge bg-<%= position.long? ? 'success' : 'danger' %>">
+                          <%= position.direction.upcase %>
+                        </span>
+                      </td>
+                      <td><%= position.quantity %></td>
+                      <td>₹<%= number_with_precision(position.entry_price, precision: 2) %></td>
+                      <td>₹<%= number_with_precision(position.current_price, precision: 2) %></td>
+                      <td class="<%= position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger' %>">
+                        <%= number_to_currency(position.unrealized_pnl, unit: "₹", precision: 0) %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <p class="text-muted text-center py-3">No live positions</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paper Positions -->
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">
+            <i class="bi bi-briefcase-fill text-info"></i>
+            Paper Positions
+          </h5>
+          <%= link_to positions_path(mode: "paper"), class: "btn btn-sm btn-outline-info" do %>
+            View All <i class="bi bi-arrow-right"></i>
+          <% end %>
+        </div>
+        <div class="card-body">
+          <% if @paper_positions.any? %>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>Direction</th>
+                    <th>Qty</th>
+                    <th>Entry</th>
+                    <th>Current</th>
+                    <th>P&L</th>
+                  </tr>
+                </thead>
+                <tbody data-dashboard-target="paperPositionsTable">
+                  <% @paper_positions.each do |position| %>
+                    <tr data-position-id="<%= position.id %>">
+                      <td><strong><%= position.symbol %></strong></td>
+                      <td>
+                        <span class="badge bg-<%= position.long? ? 'success' : 'danger' %>">
+                          <%= position.direction.upcase %>
+                        </span>
+                      </td>
+                      <td><%= position.quantity %></td>
+                      <td>₹<%= number_with_precision(position.entry_price, precision: 2) %></td>
+                      <td>₹<%= number_with_precision(position.current_price, precision: 2) %></td>
+                      <td class="<%= position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger' %>">
+                        <%= number_to_currency(position.unrealized_pnl, unit: "₹", precision: 0) %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <p class="text-muted text-center py-3">No paper positions</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Signals -->
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">
+            <i class="bi bi-bullseye text-success"></i>
+            Recent Signals
+          </h5>
+          <%= link_to signals_path, class: "btn btn-sm btn-outline-success" do %>
+            View All <i class="bi bi-arrow-right"></i>
+          <% end %>
+        </div>
+        <div class="card-body">
+          <% if @recent_signals.any? %>
+            <div class="list-group list-group-flush">
+              <% @recent_signals.each do |signal| %>
+                <div class="list-group-item" data-signal-id="<%= signal.id %>">
+                  <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                      <strong><%= signal.symbol %></strong>
+                      <span class="badge bg-<%= signal.long? ? 'success' : 'danger' %> ms-2">
+                        <%= signal.direction.upcase %>
+                      </span>
+                      <br>
+                      <small class="text-muted">
+                        <%= signal.signal_generated_at.strftime("%H:%M:%S") %>
+                      </small>
+                    </div>
+                    <div class="text-end">
+                      <span class="badge bg-<%= signal.executed? ? 'success' : 'secondary' %>">
+                        <%= signal.executed? ? 'Executed' : 'Pending' %>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          <% else %>
+            <p class="text-muted text-center py-3">No recent signals</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pending Orders -->
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">
+            <i class="bi bi-list-check text-warning"></i>
+            Pending Approval
+          </h5>
+          <%= link_to orders_path(status: "pending_approval"), class: "btn btn-sm btn-outline-warning" do %>
+            View All <i class="bi bi-arrow-right"></i>
+          <% end %>
+        </div>
+        <div class="card-body">
+          <% if @pending_orders.any? %>
+            <div class="list-group list-group-flush">
+              <% @pending_orders.each do |order| %>
+                <div class="list-group-item" data-order-id="<%= order.id %>">
+                  <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                      <strong><%= order.symbol %></strong>
+                      <span class="badge bg-<%= order.buy? ? 'success' : 'danger' %> ms-2">
+                        <%= order.transaction_type %>
+                      </span>
+                      <br>
+                      <small class="text-muted">
+                        Qty: <%= order.quantity %> @ ₹<%= number_with_precision(order.price || 0, precision: 2) %>
+                      </small>
+                    </div>
+                    <div class="text-end">
+                      <span class="badge bg-warning">Pending</span>
+                    </div>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          <% else %>
+            <p class="text-muted text-center py-3">No pending orders</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
