@@ -120,8 +120,26 @@ export default class extends Controller {
       case "stats_update":
         this.updateStats(data.stats);
         break;
+      case "screener_update":
+        this.handleScreenerUpdate(data);
+        break;
       default:
         console.log("Unknown update type:", data.type);
+    }
+  }
+
+  handleScreenerUpdate(data) {
+    // Show notification that screener completed
+    if (data.screener_type && data.candidate_count !== undefined) {
+      const message = `${data.screener_type} screener completed: Found ${data.candidate_count} candidates`;
+      console.log(message);
+
+      // Reload page after a short delay to show results
+      setTimeout(() => {
+        if (window.location.pathname.includes("screener")) {
+          window.location.reload();
+        }
+      }, 2000);
     }
   }
 

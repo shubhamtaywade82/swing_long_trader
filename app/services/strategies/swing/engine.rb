@@ -30,7 +30,7 @@ module Strategies
         end
 
         # Multi-timeframe analysis (optional, enhances signal quality)
-        mtf_result = Swing::MultiTimeframeAnalyzer.call(
+        mtf_result = ::Swing::MultiTimeframeAnalyzer.call(
           instrument: @instrument,
           include_intraday: @config.dig(:multi_timeframe, :include_intraday) != false,
         )

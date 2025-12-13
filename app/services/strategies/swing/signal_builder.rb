@@ -24,7 +24,7 @@ module Strategies
         return nil unless validate_inputs
 
         # Multi-timeframe analysis
-        mtf_result = Swing::MultiTimeframeAnalyzer.call(
+        mtf_result = ::Swing::MultiTimeframeAnalyzer.call(
           instrument: @instrument,
           include_intraday: @mtf_config[:include_intraday] != false,
         )

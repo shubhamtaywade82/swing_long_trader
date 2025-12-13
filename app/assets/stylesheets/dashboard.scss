@@ -418,3 +418,73 @@
 .text-muted {
   color: #6c757d !important;
 }
+
+// Screener Styles
+.nav-section-header {
+  margin-top: 1rem;
+  padding: 0.5rem 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-section-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #95a5a6;
+  font-weight: 600;
+}
+
+.screener-page {
+  .form-control {
+    display: inline-block;
+  }
+
+  .nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+
+    .nav-link {
+      color: #6c757d;
+      border: none;
+      border-bottom: 3px solid transparent;
+      padding: 0.75rem 1.5rem;
+      font-weight: 500;
+
+      &:hover {
+        border-bottom-color: #dee2e6;
+        color: #495057;
+      }
+
+      &.active {
+        color: #495057;
+        border-bottom-color: #0d6efd;
+        background-color: transparent;
+      }
+    }
+  }
+
+  .tab-content {
+    margin-top: 1rem;
+  }
+
+  // Ensure status card is visible when shown
+  [data-screener-target="statusCard"],
+  #screener-status-card {
+    transition: opacity 0.3s ease;
+
+    &.show,
+    &[style*="display: block"],
+    &[style*="display:block"],
+    &:not(.d-none) {
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      position: relative !important;
+      z-index: 1000 !important;
+      margin-bottom: 1rem !important;
+    }
+
+    &.d-none {
+      display: none !important;
+    }
+  }
+}

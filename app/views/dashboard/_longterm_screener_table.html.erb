@@ -1,0 +1,130 @@
+<div class="card">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Symbol</th>
+            <th>Score</th>
+            <th>Base Score</th>
+            <th>MTF Score</th>
+            <th>Price</th>
+            <th>Weekly Trend</th>
+            <th>Daily Trend</th>
+            <th>Weekly ADX</th>
+            <th>Daily RSI</th>
+            <th>Momentum</th>
+            <% if show_recommendation %>
+              <th>Recommendation</th>
+            <% end %>
+            <% if show_position %>
+              <th>Position</th>
+            <% end %>
+          </tr>
+        </thead>
+        <tbody>
+          <% candidates.each_with_index do |candidate, index| %>
+            <tr>
+              <td><strong>#<%= index + 1 %></strong></td>
+              <td><strong><%= candidate[:symbol] %></strong></td>
+              <td>
+                <span class="badge bg-<%= candidate[:score] >= 70 ? 'success' : candidate[:score] >= 50 ? 'warning' : 'secondary' %>">
+                  <%= number_with_precision(candidate[:score], precision: 1) %>
+                </span>
+              </td>
+              <td><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
+              <td><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
+              <td>₹<%= number_with_precision(candidate.dig(:daily_indicators, :latest_close) || 0, precision: 2) %></td>
+              <td>
+                <% weekly_ema20 = candidate.dig(:weekly_indicators, :ema20) %>
+                <% weekly_ema50 = candidate.dig(:weekly_indicators, :ema50) %>
+                <% if weekly_ema20 && weekly_ema50 %>
+                  <span class="badge bg-<%= weekly_ema20 > weekly_ema50 ? 'success' : 'danger' %>">
+                    <%= weekly_ema20 > weekly_ema50 ? 'BULL' : 'BEAR' %>
+                  </span>
+                <% else %>
+                  <span class="text-muted">-</span>
+                <% end %>
+              </td>
+              <td>
+                <% daily_ema20 = candidate.dig(:daily_indicators, :ema20) %>
+                <% daily_ema50 = candidate.dig(:daily_indicators, :ema50) %>
+                <% if daily_ema20 && daily_ema50 %>
+                  <span class="badge bg-<%= daily_ema20 > daily_ema50 ? 'success' : 'danger' %>">
+                    <%= daily_ema20 > daily_ema50 ? 'BULL' : 'BEAR' %>
+                  </span>
+                <% else %>
+                  <span class="text-muted">-</span>
+                <% end %>
+              </td>
+              <td>
+                <% weekly_adx = candidate.dig(:weekly_indicators, :adx) %>
+                <% if weekly_adx %>
+                  <span class="badge bg-<%= weekly_adx > 25 ? 'success' : 'secondary' %>">
+                    <%= number_with_precision(weekly_adx, precision: 1) %>
+                  </span>
+                <% else %>
+                  <span class="text-muted">-</span>
+                <% end %>
+              </td>
+              <td>
+                <% daily_rsi = candidate.dig(:daily_indicators, :rsi) %>
+                <% if daily_rsi %>
+                  <span class="badge bg-<%= daily_rsi > 70 ? 'danger' : daily_rsi < 30 ? 'success' : 'info' %>">
+                    <%= number_with_precision(daily_rsi, precision: 1) %>
+                  </span>
+                <% else %>
+                  <span class="text-muted">-</span>
+                <% end %>
+              </td>
+              <td>
+                <% weekly_supertrend = candidate.dig(:weekly_indicators, :supertrend) %>
+                <% if weekly_supertrend %>
+                  <span class="badge bg-<%= weekly_supertrend[:direction] == :bullish ? 'success' : 'danger' %>">
+                    <%= weekly_supertrend[:direction].to_s.upcase %>
+                  </span>
+                <% else %>
+                  <span class="text-muted">-</span>
+                <% end %>
+              </td>
+              <% if show_recommendation %>
+                <td>
+                  <% rec = candidate[:recommendation] || "N/A" %>
+                  <% rec_class = case rec
+                       when /Strong Buy|Buy/i then "success"
+                       when /Watch/i then "warning"
+                       when /Wait|Avoid/i then "danger"
+                       when /Already in/i then "info"
+                       else "secondary"
+                     end %>
+                  <span class="badge bg-<%= rec_class %>">
+                    <%= rec %>
+                  </span>
+                </td>
+              <% end %>
+              <% if show_position && candidate[:position] %>
+                <td>
+                  <% pos = candidate[:position] %>
+                  <% mode = candidate[:position_mode] || "unknown" %>
+                  <span class="badge bg-<%= mode == 'live' ? 'danger' : 'info' %>">
+                    <%= mode.upcase %>
+                  </span>
+                  <br>
+                  <small class="text-muted">
+                    Entry: ₹<%= number_with_precision(pos.entry_price, precision: 2) %>
+                    <% if pos.respond_to?(:unrealized_pnl) %>
+                      | P&L: <span class="<%= pos.unrealized_pnl >= 0 ? 'text-success' : 'text-danger' %>">
+                        ₹<%= number_with_precision(pos.unrealized_pnl, precision: 0) %>
+                      </span>
+                    <% end %>
+                  </small>
+                </td>
+              <% end %>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

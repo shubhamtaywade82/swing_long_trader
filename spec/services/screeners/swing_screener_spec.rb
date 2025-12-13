@@ -539,6 +539,8 @@ RSpec.describe Screeners::SwingScreener do
       describe "#build_metadata" do
         it "builds metadata hash" do
           instrument = create(:instrument)
+          series = CandleSeries.new(symbol: instrument.symbol_name, interval: "1D")
+          50.times { series.add_candle(create(:candle)) }
           indicators = { ema20: 100.0, rsi: 65.0 }
           smc_validation = { valid: true, score: 80 }
 

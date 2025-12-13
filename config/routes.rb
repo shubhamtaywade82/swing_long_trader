@@ -20,6 +20,11 @@ Rails.application.routes.draw do
   get "signals", to: "dashboard#signals", as: :signals
   get "orders", to: "dashboard#orders", as: :orders
   get "monitoring", to: "dashboard#monitoring", as: :monitoring
+  get "screeners/swing", to: "dashboard#swing_screener", as: :swing_screener
+  get "screeners/longterm", to: "dashboard#longterm_screener", as: :longterm_screener
+  post "screeners/swing/run", to: "dashboard#run_swing_screener", as: :run_swing_screener
+  post "screeners/longterm/run", to: "dashboard#run_longterm_screener", as: :run_longterm_screener
+  get "screeners/check", to: "dashboard#check_screener_results", as: :check_screener_results
 
   # ActionCable for live updates
   mount ActionCable.server => "/cable"

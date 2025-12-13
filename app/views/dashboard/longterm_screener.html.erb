@@ -1,0 +1,310 @@
+<% content_for :page_title, "Long-Term Screener" %>
+
+<div class="screener-page">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2>Long-Term Trading Screener</h2>
+      <p class="text-muted mb-0">Find long-term investment opportunities based on multi-timeframe analysis</p>
+    </div>
+    <div>
+      <%= form_with url: run_longterm_screener_path, method: :post, local: false, class: "d-inline", data: { controller: "screener" } do |f| %>
+        <%= f.number_field :limit, value: @limit, min: 5, max: 50, class: "form-control d-inline-block", style: "width: 80px; margin-right: 10px;" %>
+        <%= f.submit "Run Screener", class: "btn btn-primary", data: { screener_target: "runButton" } %>
+      <% end %>
+    </div>
+  </div>
+
+  <!-- Status Card -->
+  <div class="alert alert-info mb-4 d-none" data-screener-target="statusCard" id="screener-status-card">
+    <div class="d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center">
+        <div class="spinner-border spinner-border-sm me-2" role="status" data-screener-target="spinner">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <span data-screener-target="statusMessage">Running screener...</span>
+      </div>
+      <small class="text-muted ms-3">
+        <i class="bi bi-info-circle"></i>
+        Note: Ensure SolidQueue worker is running (<code>bin/rails solid_queue:start</code>)
+      </small>
+    </div>
+  </div>
+
+  <!-- Results Info -->
+  <% if @last_run %>
+    <div class="alert alert-info mb-4" data-candidates-count="<%= @candidates.size %>">
+      <i class="bi bi-info-circle"></i>
+      Last run: <%= @last_run.strftime("%Y-%m-%d %H:%M:%S") %> |
+      Found <%= @candidates.size %> candidates
+      <% if @recommendations&.any? %>
+        | <strong><%= @recommendations.size %> Recommendations</strong>
+      <% end %>
+      <% if @flag_stocks&.any? %>
+        | <strong><%= @flag_stocks.size %> Already in Positions</strong>
+      <% end %>
+    </div>
+  <% end %>
+
+  <!-- Tabs for Categories -->
+  <% if @candidates.any? %>
+    <ul class="nav nav-tabs mb-4" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="recommendations-tab" data-bs-toggle="tab" data-bs-target="#recommendations" type="button" role="tab">
+          Recommendations
+          <% if @recommendations&.any? %>
+            <span class="badge bg-success ms-2"><%= @recommendations.size %></span>
+          <% end %>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="bullish-tab" data-bs-toggle="tab" data-bs-target="#bullish" type="button" role="tab">
+          Bullish Stocks
+          <% if @bullish_stocks&.any? %>
+            <span class="badge bg-success ms-2"><%= @bullish_stocks.size %></span>
+          <% end %>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="bearish-tab" data-bs-toggle="tab" data-bs-target="#bearish" type="button" role="tab">
+          Bearish / Wait
+          <% if @bearish_stocks&.any? %>
+            <span class="badge bg-warning ms-2"><%= @bearish_stocks.size %></span>
+          <% end %>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="flags-tab" data-bs-toggle="tab" data-bs-target="#flags" type="button" role="tab">
+          Flag Stocks (In Positions)
+          <% if @flag_stocks&.any? %>
+            <span class="badge bg-info ms-2"><%= @flag_stocks.size %></span>
+          <% end %>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab">
+          All Results
+          <span class="badge bg-secondary ms-2"><%= @candidates.size %></span>
+        </button>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <!-- Recommendations Tab -->
+      <div class="tab-pane fade show active" id="recommendations" role="tabpanel">
+        <% if @recommendations&.any? %>
+          <%= render partial: "longterm_screener_table", locals: { candidates: @recommendations, show_recommendation: true } %>
+        <% else %>
+          <div class="card">
+            <div class="card-body text-center py-5">
+              <i class="bi bi-star" style="font-size: 3rem; color: #ccc;"></i>
+              <p class="text-muted mt-3">No high-scoring recommendations yet</p>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+      <!-- Bullish Stocks Tab -->
+      <div class="tab-pane fade" id="bullish" role="tabpanel">
+        <% if @bullish_stocks&.any? %>
+          <%= render partial: "longterm_screener_table", locals: { candidates: @bullish_stocks, show_recommendation: true } %>
+        <% else %>
+          <div class="card">
+            <div class="card-body text-center py-5">
+              <i class="bi bi-arrow-up-circle" style="font-size: 3rem; color: #ccc;"></i>
+              <p class="text-muted mt-3">No bullish stocks found</p>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+      <!-- Bearish Stocks Tab -->
+      <div class="tab-pane fade" id="bearish" role="tabpanel">
+        <% if @bearish_stocks&.any? %>
+          <%= render partial: "longterm_screener_table", locals: { candidates: @bearish_stocks, show_recommendation: true } %>
+        <% else %>
+          <div class="card">
+            <div class="card-body text-center py-5">
+              <i class="bi bi-arrow-down-circle" style="font-size: 3rem; color: #ccc;"></i>
+              <p class="text-muted mt-3">No bearish stocks to avoid</p>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+      <!-- Flag Stocks Tab -->
+      <div class="tab-pane fade" id="flags" role="tabpanel">
+        <% if @flag_stocks&.any? %>
+          <%= render partial: "longterm_screener_table", locals: { candidates: @flag_stocks, show_recommendation: true, show_position: true } %>
+        <% else %>
+          <div class="card">
+            <div class="card-body text-center py-5">
+              <i class="bi bi-flag" style="font-size: 3rem; color: #ccc;"></i>
+              <p class="text-muted mt-3">No positions found in screener results</p>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+      <!-- All Results Tab -->
+      <div class="tab-pane fade" id="all" role="tabpanel">
+        <%= render partial: "longterm_screener_table", locals: { candidates: @candidates, show_recommendation: false } %>
+      </div>
+    </div>
+  <% elsif @last_run.nil? %>
+    <div class="card">
+      <div class="card-body text-center py-5">
+        <i class="bi bi-search" style="font-size: 3rem; color: #ccc;"></i>
+        <p class="text-muted mt-3">No screener results yet. Click "Run Screener" to start.</p>
+      </div>
+    </div>
+  <% else %>
+    <div class="card">
+      <div class="card-body text-center py-5">
+        <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+        <p class="text-muted mt-3">No candidates found in the last run.</p>
+      </div>
+    </div>
+  <% end %>
+</div>
+
+<script>
+  // Simple screener controller for running screeners
+  document.addEventListener('DOMContentLoaded', function() {
+    const forms = document.querySelectorAll('form[data-controller="screener"]');
+
+    forms.forEach(form => {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const formData = new FormData(form);
+        const button = form.querySelector('[type="submit"]');
+        const statusCard = document.querySelector('[data-screener-target="statusCard"]');
+        const statusMessage = document.querySelector('[data-screener-target="statusMessage"]');
+        const spinner = document.querySelector('[data-screener-target="spinner"]');
+
+        // Show status card immediately - use multiple methods to ensure visibility
+        if (statusCard) {
+          // Remove d-none class first (Bootstrap utility)
+          statusCard.classList.remove('d-none');
+          // Then set display with !important via style
+          statusCard.setAttribute('style',
+            'display: block !important; ' +
+            'visibility: visible !important; ' +
+            'opacity: 1 !important; ' +
+            'position: relative !important; ' +
+            'z-index: 1000 !important; ' +
+            'margin-top: 1rem !important; ' +
+            'margin-bottom: 1rem !important;'
+          );
+          statusCard.classList.add('show');
+
+          // Scroll into view to ensure user sees it
+          statusCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+          // Force a reflow to ensure changes take effect
+          void statusCard.offsetHeight;
+        }
+        if (button) {
+          button.disabled = true;
+          button.textContent = 'Running...';
+        }
+        if (statusMessage) {
+          statusMessage.textContent = 'Running screener... This may take a few minutes.';
+        }
+
+        fetch(form.action, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (statusMessage) {
+            statusMessage.textContent = data.message || 'Screener queued successfully. Waiting for results...';
+          }
+          if (statusCard) {
+            statusCard.classList.remove('alert-danger', 'alert-success');
+            statusCard.classList.add('alert-info');
+          }
+
+          // Poll for results instead of immediate refresh
+          let pollCount = 0;
+          const maxPolls = 60; // Poll for up to 5 minutes (60 * 5 seconds)
+
+          const pollForResults = setInterval(() => {
+            pollCount++;
+
+            if (pollCount >= maxPolls) {
+              clearInterval(pollForResults);
+              if (statusMessage) {
+                statusMessage.textContent = 'Screener is taking longer than expected. Please refresh the page manually.';
+              }
+              if (statusCard) {
+                statusCard.classList.remove('alert-info');
+                statusCard.classList.add('alert-warning');
+              }
+              return;
+            }
+
+            // Check if results are available via API endpoint
+            fetch('<%= check_screener_results_path %>?type=longterm', {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+                'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+              }
+            })
+            .then(response => response.json())
+            .then(data => {
+              // Check if we have results
+              if (data.ready && data.candidate_count > 0) {
+                clearInterval(pollForResults);
+                if (statusMessage) {
+                  statusMessage.textContent = `Results ready! Found ${data.candidate_count} candidates. Refreshing page...`;
+                }
+                if (statusCard) {
+                  statusCard.classList.remove('alert-info');
+                  statusCard.classList.add('alert-success');
+                }
+                setTimeout(() => {
+                  location.reload();
+                }, 1000);
+              } else {
+                // Update status message with poll count
+                if (statusMessage) {
+                  const elapsed = Math.floor(pollCount * 5 / 60);
+                  statusMessage.textContent = `Screener running... (${elapsed} min elapsed, checking every 5 seconds)`;
+                }
+              }
+            })
+            .catch(error => {
+              console.error('Poll error:', error);
+            });
+          }, 5000); // Poll every 5 seconds
+        })
+        .catch(error => {
+          console.error('Screener error:', error);
+          if (statusMessage) {
+            statusMessage.textContent = 'Error: ' + error.message;
+          }
+          if (statusCard) {
+            statusCard.classList.remove('alert-success');
+            statusCard.classList.add('alert-danger');
+          }
+          if (button) {
+            button.disabled = false;
+            button.textContent = 'Run Screener';
+          }
+        });
+      });
+    });
+  });
+</script>

@@ -132,53 +132,91 @@ class DashboardController < ApplicationController
     @limit = params[:limit]&.to_i || 50
     @candidates = []
     @running = false
-    
+
     # Check if there's a recent run stored in session or cache
     cache_key = "swing_screener_results_#{Date.current}"
     @candidates = Rails.cache.read(cache_key) || []
     @last_run = Rails.cache.read("#{cache_key}_timestamp")
+
+    # Also check previous days for last run
+    if @candidates.empty? && @last_run.nil?
+      (1..7).each do |days_ago|
+        prev_key = "swing_screener_results_#{Date.current - days_ago.days}"
+        prev_candidates = Rails.cache.read(prev_key)
+        next unless prev_candidates&.any?
+
+        @candidates = prev_candidates
+        @last_run = Rails.cache.read("#{prev_key}_timestamp")
+        break
+      end
+    end
+
+    # Categorize candidates
+    categorize_candidates(@candidates, "swing")
   end
 
   def longterm_screener
     @limit = params[:limit]&.to_i || 10
     @candidates = []
     @running = false
-    
+
     # Check if there's a recent run stored in session or cache
     cache_key = "longterm_screener_results_#{Date.current}"
     @candidates = Rails.cache.read(cache_key) || []
     @last_run = Rails.cache.read("#{cache_key}_timestamp")
+
+    # Also check previous days for last run
+    if @candidates.empty? && @last_run.nil?
+      (1..7).each do |days_ago|
+        prev_key = "longterm_screener_results_#{Date.current - days_ago.days}"
+        prev_candidates = Rails.cache.read(prev_key)
+        next unless prev_candidates&.any?
+
+        @candidates = prev_candidates
+        @last_run = Rails.cache.read("#{prev_key}_timestamp")
+        break
+      end
+    end
+
+    # Categorize candidates
+    categorize_candidates(@candidates, "longterm")
   end
 
   def run_swing_screener
     limit = params[:limit]&.to_i || 50
-    
+
     # Run screener in background
     Screeners::SwingScreenerJob.perform_later(limit: limit)
-    
+
     # Return immediately with status
     render json: { status: "queued", message: "Swing screener job queued. Results will appear shortly." }
   rescue StandardError => e
-    render json: { status: "error", message: e.message }, status: :unprocessable_entity
+    render json: { status: "error", message: e.message }, status: :unprocessable_content
   end
 
   def run_longterm_screener
     limit = params[:limit]&.to_i || 10
-    
+
     # Run screener in background
-    Screeners::LongtermScreenerJob.perform_later(limit: limit) if defined?(Screeners::LongtermScreenerJob)
-    
-    # For now, run synchronously if job doesn't exist
-    unless defined?(Screeners::LongtermScreenerJob)
-      candidates = Screeners::LongtermScreener.call(limit: limit)
-      cache_key = "longterm_screener_results_#{Date.current}"
-      Rails.cache.write(cache_key, candidates, expires_in: 24.hours)
-      Rails.cache.write("#{cache_key}_timestamp", Time.current, expires_in: 24.hours)
-    end
-    
+    Screeners::LongtermScreenerJob.perform_later(limit: limit)
+
     render json: { status: "queued", message: "Long-term screener job queued. Results will appear shortly." }
   rescue StandardError => e
-    render json: { status: "error", message: e.message }, status: :unprocessable_entity
+    render json: { status: "error", message: e.message }, status: :unprocessable_content
+  end
+
+  def check_screener_results
+    screener_type = params[:type] || "swing"
+    cache_key = "#{screener_type}_screener_results_#{Date.current}"
+    candidates = Rails.cache.read(cache_key) || []
+    last_run = Rails.cache.read("#{cache_key}_timestamp")
+
+    render json: {
+      ready: candidates.any?,
+      candidate_count: candidates.size,
+      last_run: last_run&.iso8601,
+      message: candidates.any? ? "Results ready" : "Still processing...",
+    }
   end
 
   private
@@ -277,5 +315,109 @@ class DashboardController < ApplicationController
   def get_recent_errors
     # Would query error logs or error tracking system
     []
+  end
+
+  def categorize_candidates(candidates, screener_type)
+    return if candidates.empty?
+
+    # Get symbols that have open positions
+    candidate_symbols = candidates.map { |c| c[:symbol] }
+    open_positions = Position.open.where(symbol: candidate_symbols)
+    paper_positions = PaperPosition.open.where(instrument_id: Instrument.where(symbol_name: candidate_symbols).pluck(:id))
+
+    # Create position lookup
+    @position_lookup = {}
+    open_positions.each { |pos| @position_lookup[pos.symbol] = { mode: pos.live? ? "live" : "paper", position: pos } }
+    paper_positions.each do |pos|
+      symbol = pos.instrument&.symbol_name
+      next unless symbol
+
+      @position_lookup[symbol] ||= { mode: "paper", position: pos }
+    end
+
+    # Categorize candidates
+    @bullish_stocks = []
+    @bearish_stocks = []
+    @flag_stocks = []
+    @recommendations = []
+
+    candidates.each do |candidate|
+      symbol = candidate[:symbol]
+      score = candidate[:score] || 0
+      indicators = candidate[:indicators] || candidate[:daily_indicators] || {}
+
+      # Check if already in position (Flag stock)
+      if @position_lookup[symbol]
+        position_info = @position_lookup[symbol]
+        @flag_stocks << candidate.merge(
+          position_mode: position_info[:mode],
+          position: position_info[:position],
+          recommendation: "Already in #{position_info[:mode].upcase} position",
+        )
+        next
+      end
+
+      # Determine if bullish or bearish
+      is_bullish = determine_bullish(candidate, indicators, screener_type)
+
+      # Generate recommendation
+      recommendation = generate_recommendation(candidate, indicators, score, is_bullish, screener_type)
+
+      candidate_with_rec = candidate.merge(recommendation: recommendation)
+
+      if is_bullish
+        @bullish_stocks << candidate_with_rec
+      else
+        @bearish_stocks << candidate_with_rec
+      end
+
+      # Add to recommendations if score is high
+      @recommendations << candidate_with_rec if score >= 60
+    end
+
+    # Sort by score
+    @bullish_stocks.sort_by! { |c| -(c[:score] || 0) }
+    @bearish_stocks.sort_by! { |c| -(c[:score] || 0) }
+    @recommendations.sort_by! { |c| -(c[:score] || 0) }
+    @flag_stocks.sort_by! { |c| -(c[:score] || 0) }
+  end
+
+  def determine_bullish(candidate, indicators, screener_type)
+    # Check supertrend
+    st = indicators[:supertrend] || candidate.dig(:weekly_indicators, :supertrend)
+    return false if st && st[:direction] == :bearish
+
+    # Check EMA trend
+    if screener_type == "longterm"
+      weekly_ema20 = candidate.dig(:weekly_indicators, :ema20)
+      weekly_ema50 = candidate.dig(:weekly_indicators, :ema50)
+      return false if weekly_ema20 && weekly_ema50 && weekly_ema20 < weekly_ema50
+    end
+
+    ema20 = indicators[:ema20]
+    ema50 = indicators[:ema50]
+    return false if ema20 && ema50 && ema20 < ema50
+
+    # Check RSI (not overbought)
+    rsi = indicators[:rsi] || candidate.dig(:daily_indicators, :rsi)
+    return false if rsi && rsi > 75
+
+    # Check score
+    score = candidate[:score] || 0
+    score >= 50
+  end
+
+  def generate_recommendation(_candidate, _indicators, score, is_bullish, _screener_type)
+    return "Avoid - Bearish signals" unless is_bullish
+
+    if score >= 75
+      "Strong Buy - High score with bullish indicators"
+    elsif score >= 60
+      "Buy - Good opportunity with strong signals"
+    elsif score >= 50
+      "Watch - Moderate signals, wait for confirmation"
+    else
+      "Wait - Weak signals, monitor for improvement"
+    end
   end
 end

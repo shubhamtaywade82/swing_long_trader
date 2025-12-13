@@ -160,6 +160,7 @@ RSpec.describe Screeners::LongtermScreener, type: :service do
     end
 
     describe "private methods" do
+      let(:instruments) { Instrument.where(id: instrument.id) }
       let(:screener) { described_class.new(instruments: instruments) }
       let(:daily_series) { CandleSeries.new(symbol: instrument.symbol_name, interval: "1D") }
       let(:weekly_series) { CandleSeries.new(symbol: instrument.symbol_name, interval: "1W") }

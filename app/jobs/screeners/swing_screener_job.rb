@@ -11,6 +11,21 @@ module Screeners
 
       Rails.logger.info("[Screeners::SwingScreenerJob] Found #{candidates.size} candidates")
 
+      # Cache results for dashboard display
+      cache_key = "swing_screener_results_#{Date.current}"
+      Rails.cache.write(cache_key, candidates, expires_in: 24.hours)
+      Rails.cache.write("#{cache_key}_timestamp", Time.current, expires_in: 24.hours)
+
+      # Broadcast update to dashboard
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "screener_update",
+          screener_type: "swing",
+          candidate_count: candidates.size,
+        },
+      )
+
       # Send top 10 to Telegram
       if candidates.any? && AlgoConfig.fetch(%i[notifications telegram notify_screener_results])
         Telegram::Notifier.send_daily_candidates(candidates.first(10))
