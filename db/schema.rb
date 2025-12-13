@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_12_190827) do
+ActiveRecord::Schema[8.1].define(version: 2025_12_13_120128) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -73,6 +73,24 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_190827) do
     t.index ["instrument_id", "timeframe"], name: "index_candle_series_on_instrument_id_and_timeframe"
     t.index ["instrument_id"], name: "index_candle_series_on_instrument_id"
     t.index ["timestamp"], name: "index_candle_series_on_timestamp"
+  end
+
+  create_table "capital_allocation_portfolios", force: :cascade do |t|
+    t.decimal "available_cash", precision: 15, scale: 2, default: "0.0", null: false
+    t.datetime "created_at", null: false
+    t.decimal "long_term_capital", precision: 15, scale: 2, default: "0.0", null: false
+    t.decimal "max_drawdown", precision: 10, scale: 2, default: "0.0", null: false
+    t.text "metadata"
+    t.string "mode", default: "paper", null: false
+    t.string "name", null: false
+    t.decimal "peak_equity", precision: 15, scale: 2, default: "0.0", null: false
+    t.decimal "realized_pnl", precision: 15, scale: 2, default: "0.0", null: false
+    t.decimal "swing_capital", precision: 15, scale: 2, default: "0.0", null: false
+    t.decimal "total_equity", precision: 15, scale: 2, default: "0.0", null: false
+    t.decimal "unrealized_pnl", precision: 15, scale: 2, default: "0.0", null: false
+    t.datetime "updated_at", null: false
+    t.index ["mode"], name: "index_capital_allocation_portfolios_on_mode"
+    t.index ["name"], name: "index_capital_allocation_portfolios_on_name", unique: true
   end
 
   create_table "index_constituents", force: :cascade do |t|
@@ -138,6 +156,42 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_190827) do
     t.index ["security_id"], name: "index_instruments_on_security_id"
     t.index ["symbol_name"], name: "index_instruments_on_symbol_name"
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
+  end
+
+  create_table "ledger_entries", force: :cascade do |t|
+    t.decimal "amount", precision: 15, scale: 2, null: false
+    t.datetime "created_at", null: false
+    t.string "entry_type", null: false
+    t.bigint "long_term_holding_id"
+    t.text "metadata"
+    t.bigint "portfolio_id", null: false
+    t.string "reason", null: false
+    t.bigint "swing_position_id"
+    t.datetime "updated_at", null: false
+    t.index ["long_term_holding_id"], name: "index_ledger_entries_on_long_term_holding_id"
+    t.index ["portfolio_id", "created_at"], name: "index_ledger_entries_on_portfolio_id_and_created_at"
+    t.index ["portfolio_id", "reason"], name: "index_ledger_entries_on_portfolio_id_and_reason"
+    t.index ["portfolio_id"], name: "index_ledger_entries_on_portfolio_id"
+    t.index ["reason"], name: "index_ledger_entries_on_reason"
+    t.index ["swing_position_id"], name: "index_ledger_entries_on_swing_position_id"
+  end
+
+  create_table "long_term_holdings", force: :cascade do |t|
+    t.decimal "allocation_pct", precision: 5, scale: 2, null: false
+    t.decimal "avg_price", precision: 15, scale: 5, null: false
+    t.datetime "created_at", null: false
+    t.decimal "current_value", precision: 15, scale: 2, default: "0.0"
+    t.bigint "instrument_id", null: false
+    t.date "last_rebalanced_at"
+    t.text "metadata"
+    t.bigint "portfolio_id", null: false
+    t.date "purchased_at", null: false
+    t.integer "quantity", null: false
+    t.decimal "unrealized_pnl", precision: 15, scale: 2, default: "0.0"
+    t.datetime "updated_at", null: false
+    t.index ["instrument_id"], name: "index_long_term_holdings_on_instrument_id"
+    t.index ["portfolio_id", "instrument_id"], name: "index_long_term_holdings_on_portfolio_id_and_instrument_id", unique: true
+    t.index ["portfolio_id"], name: "index_long_term_holdings_on_portfolio_id"
   end
 
   create_table "optimization_runs", force: :cascade do |t|
@@ -263,6 +317,19 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_190827) do
     t.index ["status"], name: "index_paper_positions_on_status"
   end
 
+  create_table "portfolio_capital_buckets", force: :cascade do |t|
+    t.boolean "auto_rebalance", default: true, null: false
+    t.decimal "cash_pct", precision: 5, scale: 2, default: "20.0", null: false
+    t.datetime "created_at", null: false
+    t.decimal "long_term_pct", precision: 5, scale: 2, default: "0.0", null: false
+    t.bigint "portfolio_id", null: false
+    t.decimal "swing_pct", precision: 5, scale: 2, default: "80.0", null: false
+    t.decimal "threshold_3l", precision: 15, scale: 2, default: "300000.0"
+    t.decimal "threshold_5l", precision: 15, scale: 2, default: "500000.0"
+    t.datetime "updated_at", null: false
+    t.index ["portfolio_id"], name: "index_portfolio_capital_buckets_on_portfolio_id"
+  end
+
   create_table "positions", force: :cascade do |t|
     t.decimal "available_capital", precision: 15, scale: 2
     t.decimal "average_entry_price", precision: 15, scale: 2
@@ -340,6 +407,44 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_190827) do
     t.index ["key"], name: "index_settings_on_key", unique: true
   end
 
+  create_table "swing_positions", force: :cascade do |t|
+    t.datetime "closed_at"
+    t.datetime "created_at", null: false
+    t.decimal "current_price", precision: 15, scale: 5, null: false
+    t.decimal "entry_price", precision: 15, scale: 5, null: false
+    t.decimal "exit_price", precision: 15, scale: 5
+    t.string "exit_reason"
+    t.bigint "instrument_id", null: false
+    t.text "metadata"
+    t.datetime "opened_at", null: false
+    t.bigint "portfolio_id", null: false
+    t.integer "quantity", null: false
+    t.decimal "realized_pnl", precision: 15, scale: 2, default: "0.0"
+    t.string "status", default: "open", null: false
+    t.decimal "stop_loss", precision: 15, scale: 5
+    t.decimal "take_profit", precision: 15, scale: 5
+    t.decimal "unrealized_pnl", precision: 15, scale: 2, default: "0.0"
+    t.datetime "updated_at", null: false
+    t.index ["instrument_id"], name: "index_swing_positions_on_instrument_id"
+    t.index ["portfolio_id", "opened_at"], name: "index_swing_positions_on_portfolio_id_and_opened_at"
+    t.index ["portfolio_id", "status"], name: "index_swing_positions_on_portfolio_id_and_status"
+    t.index ["portfolio_id"], name: "index_swing_positions_on_portfolio_id"
+    t.index ["status"], name: "index_swing_positions_on_status"
+  end
+
+  create_table "swing_risk_configs", force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.decimal "max_daily_risk", precision: 5, scale: 2, default: "2.0", null: false
+    t.integer "max_open_positions", default: 5, null: false
+    t.decimal "max_portfolio_dd", precision: 5, scale: 2, default: "10.0", null: false
+    t.decimal "max_position_exposure", precision: 5, scale: 2, default: "15.0", null: false
+    t.bigint "portfolio_id", null: false
+    t.decimal "risk_per_trade", precision: 5, scale: 2, default: "1.0", null: false
+    t.datetime "updated_at", null: false
+    t.index ["portfolio_id"], name: "index_swing_risk_configs_on_portfolio_id"
+  end
+
   create_table "trading_signals", force: :cascade do |t|
     t.decimal "available_balance", precision: 15, scale: 2
     t.decimal "balance_shortfall", precision: 15, scale: 2
@@ -396,16 +501,25 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_190827) do
   add_foreign_key "backtest_positions", "backtest_runs"
   add_foreign_key "backtest_positions", "instruments"
   add_foreign_key "candle_series", "instruments"
+  add_foreign_key "ledger_entries", "capital_allocation_portfolios", column: "portfolio_id"
+  add_foreign_key "ledger_entries", "long_term_holdings"
+  add_foreign_key "ledger_entries", "swing_positions"
+  add_foreign_key "long_term_holdings", "capital_allocation_portfolios", column: "portfolio_id"
+  add_foreign_key "long_term_holdings", "instruments"
   add_foreign_key "orders", "instruments"
   add_foreign_key "paper_ledgers", "paper_portfolios"
   add_foreign_key "paper_ledgers", "paper_positions"
   add_foreign_key "paper_positions", "instruments"
   add_foreign_key "paper_positions", "paper_portfolios"
+  add_foreign_key "portfolio_capital_buckets", "capital_allocation_portfolios", column: "portfolio_id"
   add_foreign_key "positions", "instruments"
   add_foreign_key "positions", "orders"
   add_foreign_key "positions", "orders", column: "exit_order_id"
   add_foreign_key "positions", "paper_portfolios"
   add_foreign_key "positions", "trading_signals"
+  add_foreign_key "swing_positions", "capital_allocation_portfolios", column: "portfolio_id"
+  add_foreign_key "swing_positions", "instruments"
+  add_foreign_key "swing_risk_configs", "capital_allocation_portfolios", column: "portfolio_id"
   add_foreign_key "trading_signals", "instruments"
   add_foreign_key "trading_signals", "orders"
   add_foreign_key "trading_signals", "paper_positions"

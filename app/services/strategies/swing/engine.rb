@@ -29,7 +29,13 @@ module Strategies
           return { success: false, error: "SMC validation failed: #{smc_validation[:reasons].join(', ')}" }
         end
 
-        # Build signal
+        # Multi-timeframe analysis (optional, enhances signal quality)
+        mtf_result = Swing::MultiTimeframeAnalyzer.call(
+          instrument: @instrument,
+          include_intraday: @config.dig(:multi_timeframe, :include_intraday) != false,
+        )
+
+        # Build signal (SignalBuilder will use MTF data internally)
         signal = SignalBuilder.call(
           instrument: @instrument,
           daily_series: @daily_series,

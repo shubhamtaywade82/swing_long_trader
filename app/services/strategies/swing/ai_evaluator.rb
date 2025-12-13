@@ -38,6 +38,8 @@ module Strategies
           ai_confidence: parsed[:confidence],
           ai_summary: parsed[:summary],
           ai_risk: parsed[:risk],
+          timeframe_alignment: parsed[:timeframe_alignment],
+          entry_timing: parsed[:entry_timing],
           cached: result[:cached],
         }
       end
@@ -45,8 +47,11 @@ module Strategies
       private
 
       def build_prompt
+        mtf_data = @signal[:metadata]&.dig(:multi_timeframe) || {}
+        mtf_summary = build_mtf_summary(mtf_data)
+
         <<~PROMPT
-          Analyze this swing trading signal and provide JSON response:
+          Analyze this swing trading signal using multi-timeframe analysis (15m, 1h, 1d, 1w) and provide JSON response:
 
           Symbol: #{@signal[:symbol]}
           Direction: #{@signal[:direction]}
@@ -57,14 +62,57 @@ module Strategies
           Confidence: #{@signal[:confidence]}/100
           Holding Days: #{@signal[:holding_days_estimate]}
 
+          #{mtf_summary}
+
+          Consider:
+          - Multi-timeframe trend alignment (higher timeframes should align)
+          - Support/resistance levels from weekly and daily charts
+          - Entry timing from 15m and 1h charts
+          - Overall structure across all timeframes
+
           Provide JSON:
           {
             "score": 0-100,
             "confidence": 0-100,
-            "summary": "brief analysis",
-            "risk": "low|medium|high"
+            "summary": "brief multi-timeframe analysis",
+            "risk": "low|medium|high",
+            "timeframe_alignment": "excellent|good|fair|poor",
+            "entry_timing": "optimal|good|fair|poor"
           }
         PROMPT
+      end
+
+      def build_mtf_summary(mtf_data)
+        return "" if mtf_data.empty?
+
+        summary = "\nMulti-Timeframe Analysis:\n"
+        summary += "- MTF Score: #{mtf_data[:score] || 'N/A'}/100\n"
+
+        if mtf_data[:trend_alignment]
+          ta = mtf_data[:trend_alignment]
+          summary += "- Trend Alignment: #{ta[:aligned] ? 'ALIGNED' : 'NOT ALIGNED'} "
+          summary += "(Bullish: #{ta[:bullish_count]}, Bearish: #{ta[:bearish_count]})\n"
+        end
+
+        if mtf_data[:momentum_alignment]
+          ma = mtf_data[:momentum_alignment]
+          summary += "- Momentum Alignment: #{ma[:aligned] ? 'ALIGNED' : 'NOT ALIGNED'} "
+          summary += "(Bullish: #{ma[:bullish_count]}, Bearish: #{ma[:bearish_count]})\n"
+        end
+
+        if mtf_data[:support_levels]&.any?
+          summary += "- Support Levels: #{mtf_data[:support_levels].first(3).map { |s| s.round(2) }.join(', ')}\n"
+        end
+
+        if mtf_data[:resistance_levels]&.any?
+          summary += "- Resistance Levels: #{mtf_data[:resistance_levels].first(3).map { |r| r.round(2) }.join(', ')}\n"
+        end
+
+        if mtf_data[:timeframes_analyzed]&.any?
+          summary += "- Timeframes Analyzed: #{mtf_data[:timeframes_analyzed].join(', ')}\n"
+        end
+
+        summary
       end
 
       def parse_response(content)
@@ -80,6 +128,8 @@ module Strategies
           confidence: parsed["confidence"]&.to_f || 0,
           summary: parsed["summary"] || "",
           risk: parsed["risk"]&.downcase || "medium",
+          timeframe_alignment: parsed["timeframe_alignment"]&.downcase || "fair",
+          entry_timing: parsed["entry_timing"]&.downcase || "fair",
         }
       rescue JSON::ParserError => e
         Rails.logger.error("[Strategies::Swing::AIEvaluator] JSON parse error: #{e.message}")
