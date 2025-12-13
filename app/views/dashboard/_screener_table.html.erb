@@ -18,6 +18,11 @@
             <th>Supertrend</th>
             <th>EMA Trend</th>
             <th>MACD</th>
+            <% has_ai_data = candidates.any? { |c| c[:ai_score] || c[:ai_confidence] } %>
+            <% if has_ai_data %>
+              <th>AI Score</th>
+              <th>AI Confidence</th>
+            <% end %>
             <% if show_recommendation %>
               <th>Recommendation</th>
             <% end %>
@@ -92,6 +97,26 @@
                   <span class="text-muted">-</span>
                 <% end %>
               </td>
+              <% if candidate[:ai_score] || candidate[:ai_confidence] %>
+                <td>
+                  <% if candidate[:ai_score] %>
+                    <span class="badge bg-<%= candidate[:ai_score] >= 80 ? 'success' : candidate[:ai_score] >= 60 ? 'warning' : 'secondary' %>">
+                      <%= number_with_precision(candidate[:ai_score], precision: 1) %>
+                    </span>
+                  <% else %>
+                    <span class="text-muted">-</span>
+                  <% end %>
+                </td>
+                <td>
+                  <% if candidate[:ai_confidence] %>
+                    <span class="badge bg-info">
+                      <%= number_with_precision(candidate[:ai_confidence], precision: 1) %>
+                    </span>
+                  <% else %>
+                    <span class="text-muted">-</span>
+                  <% end %>
+                </td>
+              <% end %>
               <% if show_recommendation %>
                 <td>
                   <% rec = candidate[:recommendation] || "N/A" %>

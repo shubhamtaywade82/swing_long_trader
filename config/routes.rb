@@ -18,6 +18,7 @@ Rails.application.routes.draw do
   get "positions", to: "dashboard#positions", as: :positions
   get "portfolio", to: "dashboard#portfolio", as: :portfolio
   get "signals", to: "dashboard#signals", as: :signals
+  get "ai-evaluations", to: "dashboard#ai_evaluations", as: :ai_evaluations
   get "orders", to: "dashboard#orders", as: :orders
   get "monitoring", to: "dashboard#monitoring", as: :monitoring
   get "screeners/swing", to: "dashboard#swing_screener", as: :swing_screener

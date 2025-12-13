@@ -12,6 +12,8 @@ export default class extends Controller {
     "livePositionsTable",
     "paperPositionsTable",
     "tradingModeBtn",
+    "sidebarTitle",
+    "sidebarCollapseBtn",
   ];
 
   static values = {
@@ -22,6 +24,13 @@ export default class extends Controller {
     this.updateTime();
     this.timeInterval = setInterval(() => this.updateTime(), 1000);
 
+    // Restore sidebar collapse state from localStorage
+    this.restoreSidebarState();
+
+    // Handle window resize
+    this.handleResize = () => this.onWindowResize();
+    window.addEventListener("resize", this.handleResize);
+
     // Connect to ActionCable
     if (this.channelValue) {
       this.connectToChannel();
@@ -31,6 +40,10 @@ export default class extends Controller {
   disconnect() {
     if (this.timeInterval) {
       clearInterval(this.timeInterval);
+    }
+
+    if (this.handleResize) {
+      window.removeEventListener("resize", this.handleResize);
     }
 
     if (this.subscription) {
@@ -50,6 +63,49 @@ export default class extends Controller {
   closeSidebar() {
     this.sidebarTarget.classList.remove("active");
     this.overlayTarget.classList.remove("active");
+  }
+
+  toggleSidebarCollapse() {
+    const isCollapsed = this.sidebarTarget.classList.toggle("collapsed");
+    this.saveSidebarState(isCollapsed);
+    this.updateCollapseButtonIcon(isCollapsed);
+  }
+
+  restoreSidebarState() {
+    // Only restore on desktop (md and up)
+    if (window.innerWidth < 768) return;
+
+    const savedState = localStorage.getItem("sidebarCollapsed");
+    if (savedState === "true") {
+      this.sidebarTarget.classList.add("collapsed");
+      this.updateCollapseButtonIcon(true);
+    }
+  }
+
+  saveSidebarState(isCollapsed) {
+    localStorage.setItem("sidebarCollapsed", isCollapsed.toString());
+  }
+
+  updateCollapseButtonIcon(isCollapsed) {
+    if (!this.hasSidebarCollapseBtnTarget) return;
+
+    const icon = this.sidebarCollapseBtnTarget.querySelector("i");
+    if (icon) {
+      icon.className = isCollapsed
+        ? "bi bi-chevron-right"
+        : "bi bi-chevron-left";
+    }
+  }
+
+  onWindowResize() {
+    // On mobile, ensure sidebar is not collapsed (use slide-in/out behavior)
+    if (window.innerWidth < 768) {
+      this.sidebarTarget.classList.remove("collapsed");
+      this.updateCollapseButtonIcon(false);
+    } else {
+      // On desktop, restore saved state
+      this.restoreSidebarState();
+    }
   }
 
   updateTime() {

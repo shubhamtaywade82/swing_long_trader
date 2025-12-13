@@ -24,65 +24,79 @@
       <!-- Side Navigation -->
       <nav class="sidebar" data-dashboard-target="sidebar">
         <div class="sidebar-header">
-          <h4 class="sidebar-title">
+          <h4 class="sidebar-title" data-dashboard-target="sidebarTitle">
             <i class="bi bi-graph-up-arrow"></i>
-            Swing Trader
+            <span class="sidebar-title-text">Swing Trader</span>
           </h4>
-          <button class="btn btn-link sidebar-toggle d-md-none" data-action="click->dashboard#toggleSidebar">
-            <i class="bi bi-x-lg"></i>
-          </button>
+          <div class="sidebar-header-actions">
+            <button class="btn btn-link sidebar-collapse-toggle d-none d-md-block"
+                    data-action="click->dashboard#toggleSidebarCollapse"
+                    data-dashboard-target="sidebarCollapseBtn"
+                    title="Collapse sidebar">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <button class="btn btn-link sidebar-toggle d-md-none" data-action="click->dashboard#toggleSidebar">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
         </div>
 
         <ul class="sidebar-nav">
           <li class="nav-item">
-            <%= link_to dashboard_path, class: "nav-link #{'active' if current_page?(dashboard_path)}" do %>
+            <%= link_to dashboard_path, class: "nav-link #{'active' if current_page?(dashboard_path)}", data: { tooltip: "Dashboard" } do %>
               <i class="bi bi-speedometer2"></i>
-              <span>Dashboard</span>
+              <span class="nav-link-text">Dashboard</span>
             <% end %>
           </li>
           <li class="nav-item">
-            <%= link_to positions_path, class: "nav-link #{'active' if current_page?(positions_path)}" do %>
+            <%= link_to positions_path, class: "nav-link #{'active' if current_page?(positions_path)}", data: { tooltip: "Positions" } do %>
               <i class="bi bi-briefcase"></i>
-              <span>Positions</span>
+              <span class="nav-link-text">Positions</span>
             <% end %>
           </li>
           <li class="nav-item">
-            <%= link_to portfolio_path, class: "nav-link #{'active' if current_page?(portfolio_path)}" do %>
+            <%= link_to portfolio_path, class: "nav-link #{'active' if current_page?(portfolio_path)}", data: { tooltip: "Portfolio" } do %>
               <i class="bi bi-pie-chart"></i>
-              <span>Portfolio</span>
+              <span class="nav-link-text">Portfolio</span>
             <% end %>
           </li>
           <li class="nav-item">
-            <%= link_to signals_path, class: "nav-link #{'active' if current_page?(signals_path)}" do %>
+            <%= link_to signals_path, class: "nav-link #{'active' if current_page?(signals_path)}", data: { tooltip: "Trading Signals" } do %>
               <i class="bi bi-bullseye"></i>
-              <span>Trading Signals</span>
+              <span class="nav-link-text">Trading Signals</span>
             <% end %>
           </li>
           <li class="nav-item">
-            <%= link_to orders_path, class: "nav-link #{'active' if current_page?(orders_path)}" do %>
+            <%= link_to ai_evaluations_path, class: "nav-link #{'active' if current_page?(ai_evaluations_path)}", data: { tooltip: "AI Evaluations" } do %>
+              <i class="bi bi-robot"></i>
+              <span class="nav-link-text">AI Evaluations</span>
+            <% end %>
+          </li>
+          <li class="nav-item">
+            <%= link_to orders_path, class: "nav-link #{'active' if current_page?(orders_path)}", data: { tooltip: "Orders" } do %>
               <i class="bi bi-list-check"></i>
-              <span>Orders</span>
+              <span class="nav-link-text">Orders</span>
             <% end %>
           </li>
           <li class="nav-item">
-            <%= link_to monitoring_path, class: "nav-link #{'active' if current_page?(monitoring_path)}" do %>
+            <%= link_to monitoring_path, class: "nav-link #{'active' if current_page?(monitoring_path)}", data: { tooltip: "Monitoring" } do %>
               <i class="bi bi-activity"></i>
-              <span>Monitoring</span>
+              <span class="nav-link-text">Monitoring</span>
             <% end %>
           </li>
           <li class="nav-item nav-section-header">
             <span class="nav-section-title">Screeners</span>
           </li>
           <li class="nav-item">
-            <%= link_to swing_screener_path, class: "nav-link #{'active' if current_page?(swing_screener_path)}" do %>
+            <%= link_to swing_screener_path, class: "nav-link #{'active' if current_page?(swing_screener_path)}", data: { tooltip: "Swing Screener" } do %>
               <i class="bi bi-graph-up"></i>
-              <span>Swing Screener</span>
+              <span class="nav-link-text">Swing Screener</span>
             <% end %>
           </li>
           <li class="nav-item">
-            <%= link_to longterm_screener_path, class: "nav-link #{'active' if current_page?(longterm_screener_path)}" do %>
+            <%= link_to longterm_screener_path, class: "nav-link #{'active' if current_page?(longterm_screener_path)}", data: { tooltip: "Long-Term Screener" } do %>
               <i class="bi bi-graph-up-arrow"></i>
-              <span>Long-Term Screener</span>
+              <span class="nav-link-text">Long-Term Screener</span>
             <% end %>
           </li>
         </ul>
