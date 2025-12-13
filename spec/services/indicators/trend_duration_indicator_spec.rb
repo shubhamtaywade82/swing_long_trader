@@ -176,12 +176,15 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
 
       it "limits duration samples" do
         indicator_with_samples = described_class.new(series: series, config: { samples: 5 })
-        10.times { indicator_with_samples.send(:update_trend_duration, :bullish) }
-        indicator_with_samples.send(:update_trend_duration, :bearish)
-        10.times { indicator_with_samples.send(:update_trend_duration, :bullish) }
+        # Create 6 bullish trends (each followed by bearish to trigger save)
+        # This should result in 5 samples (limited by samples: 5)
+        6.times do
+          10.times { indicator_with_samples.send(:update_trend_duration, :bullish) }
+          indicator_with_samples.send(:update_trend_duration, :bearish) # Switch to save bullish duration
+        end
 
         bullish_durations = indicator_with_samples.instance_variable_get(:@bullish_durations)
-        expect(bullish_durations.size).to eq(5)
+        expect(bullish_durations.size).to eq(5) # Should be limited to 5 samples
       end
 
       it "does not increment count for neutral trend" do
