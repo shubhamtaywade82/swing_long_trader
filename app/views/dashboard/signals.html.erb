@@ -1,17 +1,12 @@
 <% content_for :page_title, "Trading Signals" %>
 
 <div class="signals-page">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-      <h2>Trading Signals</h2>
-      <p class="text-muted mb-0">View and manage trading signals</p>
-    </div>
-  </div>
+  <p class="text-muted mb-3 small">View and manage trading signals</p>
 
   <!-- Filters -->
-  <div class="card mb-4">
-    <div class="card-body">
-      <div class="row g-3">
+  <div class="card mb-3">
+    <div class="card-body p-2">
+      <div class="row g-2">
         <div class="col-md-4">
           <label class="form-label">Status</label>
           <div class="btn-group w-100" role="group">
@@ -56,7 +51,7 @@
 
   <!-- Signals Table -->
   <div class="card">
-    <div class="card-body">
+    <div class="card-body p-2">
       <% if @signals.any? %>
         <div class="table-responsive">
           <table class="table table-hover">

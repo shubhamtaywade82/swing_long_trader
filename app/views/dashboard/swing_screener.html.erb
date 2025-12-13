@@ -1,11 +1,8 @@
 <% content_for :page_title, "Swing Screener" %>
 
 <div class="screener-page">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-      <h2>Swing Trading Screener</h2>
-      <p class="text-muted mb-0 small">Find swing trading opportunities based on technical indicators</p>
-    </div>
+  <p class="text-muted mb-3 small">Find swing trading opportunities based on technical indicators</p>
+  <div class="d-flex justify-content-end align-items-center mb-3">
     <div>
       <%= form_with url: run_swing_screener_path, method: :post, local: false, class: "d-inline", data: { controller: "screener" } do |f| %>
         <%= f.number_field :limit, value: @limit, min: 0, placeholder: "All", class: "form-control d-inline-block", style: "width: 100px; margin-right: 10px;", title: "Leave empty to screen full universe" %>

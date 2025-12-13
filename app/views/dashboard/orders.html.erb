@@ -1,17 +1,12 @@
 <% content_for :page_title, "Orders" %>
 
 <div class="orders-page">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-      <h2>Orders</h2>
-      <p class="text-muted mb-0">Monitor order status and execution</p>
-    </div>
-  </div>
+  <p class="text-muted mb-3 small">Monitor order status and execution</p>
 
   <!-- Filters -->
-  <div class="card mb-4">
-    <div class="card-body">
-      <div class="row g-3">
+  <div class="card mb-3">
+    <div class="card-body p-2">
+      <div class="row g-2">
         <div class="col-md-4">
           <label class="form-label">Status</label>
           <div class="btn-group w-100" role="group">
@@ -60,7 +55,7 @@
 
   <!-- Orders Table -->
   <div class="card">
-    <div class="card-body">
+    <div class="card-body p-2">
       <% if @orders.any? %>
         <div class="table-responsive">
           <table class="table table-hover">

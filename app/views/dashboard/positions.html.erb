@@ -1,17 +1,12 @@
 <% content_for :page_title, "Positions" %>
 
 <div class="positions-page">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-      <h2>Positions</h2>
-      <p class="text-muted mb-0">Monitor all your trading positions</p>
-    </div>
-  </div>
+  <p class="text-muted mb-3 small">Monitor all your trading positions</p>
 
   <!-- Filters -->
-  <div class="card mb-4">
-    <div class="card-body">
-      <div class="row g-3">
+  <div class="card mb-3">
+    <div class="card-body p-2">
+      <div class="row g-2">
         <div class="col-md-3">
           <label class="form-label">Trading Mode</label>
           <div class="btn-group w-100" role="group">
@@ -55,7 +50,7 @@
     <div class="card-body">
       <% if @positions.any? %>
         <div class="table-responsive">
-          <table class="table table-hover">
+          <table class="table table-sm table-hover mb-0">
             <thead>
               <tr>
                 <th>Symbol</th>

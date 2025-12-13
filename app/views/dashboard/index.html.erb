@@ -2,7 +2,7 @@
 
 <div class="dashboard-page">
   <!-- Mode Indicator Banner -->
-  <div class="alert alert-<%= current_trading_mode == 'live' ? 'danger' : 'info' %> mb-4 d-flex align-items-center justify-content-between" role="alert">
+  <div class="alert alert-<%= current_trading_mode == 'live' ? 'danger' : 'info' %> mb-3 d-flex align-items-center justify-content-between" role="alert">
     <div class="d-flex align-items-center gap-2">
       <i class="bi bi-<%= current_trading_mode == 'live' ? 'lightning-charge' : 'file-earmark-text' %>"></i>
       <strong>Current Mode: <%= current_trading_mode.upcase %></strong>
@@ -14,7 +14,7 @@
   </div>
 
   <!-- Balance/Wallet Cards -->
-  <div class="row g-3 mb-4">
+  <div class="row g-3 mb-3">
     <div class="col-md-3 col-sm-6">
       <div class="stat-card <%= 'stat-card-active' if current_trading_mode == @balance_info[:type] %>">
         <div class="stat-icon bg-success">
@@ -161,10 +161,10 @@
             View All <i class="bi bi-arrow-right"></i>
           <% end %>
         </div>
-        <div class="card-body">
+        <div class="card-body p-2">
           <% if @live_positions.any? %>
             <div class="table-responsive">
-              <table class="table table-sm table-hover">
+              <table class="table table-sm table-hover mb-0">
                 <thead>
                   <tr>
                     <th>Symbol</th>
@@ -217,10 +217,10 @@
             View All <i class="bi bi-arrow-right"></i>
           <% end %>
         </div>
-        <div class="card-body">
+        <div class="card-body p-2">
           <% if @paper_positions.any? %>
             <div class="table-responsive">
-              <table class="table table-sm table-hover">
+              <table class="table table-sm table-hover mb-0">
                 <thead>
                   <tr>
                     <th>Symbol</th>
@@ -270,7 +270,7 @@
             View All <i class="bi bi-arrow-right"></i>
           <% end %>
         </div>
-        <div class="card-body">
+        <div class="card-body p-2">
           <% if @recent_signals.any? %>
             <div class="list-group list-group-flush">
               <% @recent_signals.each do |signal| %>
@@ -314,7 +314,7 @@
             View All <i class="bi bi-arrow-right"></i>
           <% end %>
         </div>
-        <div class="card-body">
+        <div class="card-body p-2">
           <% if @pending_orders.any? %>
             <div class="list-group list-group-flush">
               <% @pending_orders.each do |order| %>
