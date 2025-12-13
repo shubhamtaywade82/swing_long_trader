@@ -29,6 +29,9 @@ class DashboardController < ApplicationController
     @live_portfolio = Portfolio.live.recent.first
     @paper_portfolio = PaperPortfolio.active.first
 
+    # Get balance/wallet information
+    @balance_info = get_balance_info(mode)
+
     # Calculate dashboard stats
     @stats = calculate_dashboard_stats
   end
@@ -381,6 +384,87 @@ class DashboardController < ApplicationController
   end
 
   private
+
+  def get_balance_info(mode)
+    if mode == "paper"
+      portfolio = PaperPortfolio.active.first || PaperTrading::Portfolio.find_or_create_default
+
+      # Recalculate from actual positions (unified Position model)
+      open_positions = Position.paper.open.includes(:instrument)
+      calculated_reserved = open_positions.sum { |pos| (pos.entry_price || 0) * (pos.quantity || 0) }
+      calculated_unrealized = open_positions.sum { |pos| pos.unrealized_pnl || 0 }
+      calculated_exposure = open_positions.sum { |pos| (pos.current_price || 0) * (pos.quantity || 0) }
+
+      # Update portfolio if values differ
+      if portfolio.reserved_capital != calculated_reserved
+        portfolio.update_column(:reserved_capital, calculated_reserved)
+      end
+      if portfolio.pnl_unrealized != calculated_unrealized
+        portfolio.update_column(:pnl_unrealized, calculated_unrealized)
+      end
+
+      # Update equity to ensure it's current
+      portfolio.update_equity! if portfolio.respond_to?(:update_equity!)
+
+      {
+        available_balance: portfolio.available_capital || 0,
+        total_equity: portfolio.total_equity || portfolio.capital || 0,
+        capital: portfolio.capital || 0,
+        reserved_capital: portfolio.reserved_capital || 0,
+        unrealized_pnl: portfolio.pnl_unrealized || 0,
+        realized_pnl: portfolio.pnl_realized || 0,
+        total_exposure: calculated_exposure,
+        utilization_pct: portfolio.capital.positive? ? (calculated_exposure / portfolio.capital * 100).round(2) : 0,
+        type: "paper",
+      }
+    else
+      # Get live balance from DhanHQ API
+      balance_result = Dhan::Balance.check_available_balance
+
+      available_balance = balance_result[:success] ? balance_result[:balance] : 0
+
+      # Calculate total equity from portfolio if available
+      portfolio = Portfolio.live.recent.first
+      total_equity = if portfolio
+                       portfolio.total_equity || available_balance
+                     else
+                       available_balance
+                     end
+
+      # Calculate exposure from open positions
+      open_positions = Position.live.open
+      total_exposure = open_positions.sum { |pos| (pos.current_price || 0) * (pos.quantity || 0) }
+      unrealized_pnl = open_positions.sum { |pos| pos.unrealized_pnl || 0 }
+
+      {
+        available_balance: available_balance,
+        total_equity: total_equity,
+        capital: total_equity - unrealized_pnl,
+        reserved_capital: total_exposure,
+        unrealized_pnl: unrealized_pnl,
+        realized_pnl: portfolio&.realized_pnl || 0,
+        total_exposure: total_exposure,
+        utilization_pct: total_equity.positive? ? (total_exposure / total_equity * 100).round(2) : 0,
+        type: "live",
+        api_success: balance_result[:success],
+        api_error: balance_result[:error],
+      }
+    end
+  rescue StandardError => e
+    Rails.logger.error("[DashboardController] Failed to get balance info: #{e.message}")
+    {
+      available_balance: 0,
+      total_equity: 0,
+      capital: 0,
+      reserved_capital: 0,
+      unrealized_pnl: 0,
+      realized_pnl: 0,
+      total_exposure: 0,
+      utilization_pct: 0,
+      type: mode,
+      error: e.message,
+    }
+  end
 
   def calculate_dashboard_stats
     {

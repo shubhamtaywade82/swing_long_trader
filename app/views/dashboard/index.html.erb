@@ -13,6 +13,78 @@
     <small class="text-muted">All data below is filtered for <%= current_trading_mode.upcase %> mode</small>
   </div>
 
+  <!-- Balance/Wallet Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3 col-sm-6">
+      <div class="stat-card <%= 'stat-card-active' if current_trading_mode == @balance_info[:type] %>">
+        <div class="stat-icon bg-success">
+          <i class="bi bi-wallet2"></i>
+        </div>
+        <div class="stat-content">
+          <h3 class="stat-value">
+            <%= number_to_currency(@balance_info[:available_balance], unit: "₹", precision: 0) %>
+          </h3>
+          <p class="stat-label">Available Balance</p>
+          <small class="text-muted"><%= @balance_info[:type].upcase %> Mode</small>
+          <% if @balance_info[:type] == "live" && @balance_info[:api_success] == false %>
+            <br><small class="text-danger"><i class="bi bi-exclamation-triangle"></i> API Error</small>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+      <div class="stat-card <%= 'stat-card-active' if current_trading_mode == @balance_info[:type] %>">
+        <div class="stat-icon bg-primary">
+          <i class="bi bi-graph-up-arrow"></i>
+        </div>
+        <div class="stat-content">
+          <h3 class="stat-value">
+            <%= number_to_currency(@balance_info[:total_equity], unit: "₹", precision: 0) %>
+          </h3>
+          <p class="stat-label">Total Equity</p>
+          <small class="text-muted">
+            Capital: <%= number_to_currency(@balance_info[:capital], unit: "₹", precision: 0) %>
+          </small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+      <div class="stat-card">
+        <div class="stat-icon bg-info">
+          <i class="bi bi-cash-stack"></i>
+        </div>
+        <div class="stat-content">
+          <h3 class="stat-value">
+            <%= number_to_currency(@balance_info[:total_exposure], unit: "₹", precision: 0) %>
+          </h3>
+          <p class="stat-label">Total Exposure</p>
+          <small class="text-muted">
+            Utilization: <%= @balance_info[:utilization_pct] %>%
+          </small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+      <div class="stat-card">
+        <div class="stat-icon bg-<%= @balance_info[:unrealized_pnl] >= 0 ? 'success' : 'danger' %>">
+          <i class="bi bi-<%= @balance_info[:unrealized_pnl] >= 0 ? 'arrow-up-circle' : 'arrow-down-circle' %>"></i>
+        </div>
+        <div class="stat-content">
+          <h3 class="stat-value">
+            <%= number_to_currency(@balance_info[:unrealized_pnl], unit: "₹", precision: 0) %>
+          </h3>
+          <p class="stat-label">Unrealized P&L</p>
+          <small class="text-muted">
+            Realized: <%= number_to_currency(@balance_info[:realized_pnl], unit: "₹", precision: 0) %>
+          </small>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Stats Cards -->
   <div class="row g-3 mb-4">
     <div class="col-md-3 col-sm-6">
@@ -45,20 +117,6 @@
 
     <div class="col-md-3 col-sm-6">
       <div class="stat-card">
-        <div class="stat-icon bg-success">
-          <i class="bi bi-arrow-up-circle"></i>
-        </div>
-        <div class="stat-content">
-          <h3 class="stat-value" data-dashboard-target="statValue" data-stat="unrealizedPnl">
-            <%= number_to_currency(@stats[:total_unrealized_pnl_live] + @stats[:total_unrealized_pnl_paper], unit: "₹", precision: 0) %>
-          </h3>
-          <p class="stat-label">Unrealized P&L</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-3 col-sm-6">
-      <div class="stat-card">
         <div class="stat-icon bg-warning">
           <i class="bi bi-hourglass-split"></i>
         </div>
@@ -67,6 +125,20 @@
             <%= @stats[:pending_orders] %>
           </h3>
           <p class="stat-label">Pending Orders</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+      <div class="stat-card">
+        <div class="stat-icon bg-secondary">
+          <i class="bi bi-bell"></i>
+        </div>
+        <div class="stat-content">
+          <h3 class="stat-value" data-dashboard-target="statValue" data-stat="pendingSignals">
+            <%= @stats[:pending_signals] %>
+          </h3>
+          <p class="stat-label">Pending Signals</p>
         </div>
       </div>
     </div>
