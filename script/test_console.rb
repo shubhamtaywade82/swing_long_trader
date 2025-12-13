@@ -115,6 +115,44 @@ class TestConsole
       puts "❌ Failed: #{result[:error]}"
     end
   end
+
+  def ai_eval(symbol = "RELIANCE")
+    puts "\n🤖 AI Evaluator Test: #{symbol}\n"
+    instrument = Instrument.find_by(symbol_name: symbol.upcase)
+    return puts "❌ Instrument not found" unless instrument
+
+    # Generate signal first
+    daily_series = instrument.load_daily_candles(limit: 100)
+    weekly_series = instrument.load_weekly_candles(limit: 52)
+
+    signal = Strategies::Swing::SignalBuilder.call(
+      instrument: instrument,
+      daily_series: daily_series,
+      weekly_series: weekly_series,
+    )
+
+    unless signal
+      puts "❌ Failed to generate signal"
+      return
+    end
+
+    puts "📊 Signal: Entry ₹#{signal[:entry_price]}, SL ₹#{signal[:sl]}, TP ₹#{signal[:tp]}"
+    puts "🤖 Calling AI Evaluator...\n"
+
+    result = Strategies::Swing::AIEvaluator.call(signal)
+
+    if result[:success]
+      puts "✅ AI Score: #{result[:ai_score]}/100"
+      puts "✅ AI Confidence: #{result[:ai_confidence]}/100"
+      puts "✅ Timeframe Alignment: #{result[:timeframe_alignment]&.upcase || 'N/A'}"
+      puts "✅ Entry Timing: #{result[:entry_timing]&.upcase || 'N/A'}"
+      puts "✅ Risk: #{result[:ai_risk]&.upcase || 'N/A'}"
+      puts "\n📝 Summary: #{result[:ai_summary]}"
+      puts "💾 Cached: #{result[:cached] ? 'Yes' : 'No'}"
+    else
+      puts "❌ Failed: #{result[:error]}"
+    end
+  end
 end
 
 # Run command if executed directly
