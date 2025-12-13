@@ -7,7 +7,7 @@
       <p class="text-muted mb-0">Find long-term investment opportunities based on multi-timeframe analysis</p>
     </div>
     <div>
-      <%= form_with url: run_longterm_screener_path, method: :post, local: false, class: "d-inline", data: { controller: "screener" } do |f| %>
+      <%= form_with url: run_longterm_screener_path, method: :post, local: false, class: "d-inline screener-form" do |f| %>
         <%= f.number_field :limit, value: @limit, min: 5, max: 50, class: "form-control d-inline-block", style: "width: 80px; margin-right: 10px;" %>
         <%= f.hidden_field :sync, value: "false", id: "sync_mode_lt" %>
         <%= f.submit "Run Screener", class: "btn btn-primary", data: { screener_target: "runButton" } %>
@@ -31,6 +31,14 @@
         <i class="bi bi-info-circle"></i>
         Note: Ensure SolidQueue worker is running (<code>bin/rails solid_queue:start</code>)
       </small>
+    </div>
+  </div>
+
+  <!-- Progressive Results Container (hidden initially) -->
+  <div id="progressive-results" class="d-none mb-4">
+    <div class="alert alert-warning">
+      <i class="bi bi-hourglass-split"></i>
+      <strong>Live Results (Updating...)</strong> - Showing partial results as they're found. Results will update automatically.
     </div>
   </div>
 
@@ -174,7 +182,7 @@
 <script>
   // Simple screener controller for running screeners
   document.addEventListener('DOMContentLoaded', function() {
-    const forms = document.querySelectorAll('form[data-controller="screener"]');
+    const forms = document.querySelectorAll('form.screener-form');
 
     forms.forEach(form => {
       form.addEventListener('submit', function(e) {
@@ -295,8 +303,13 @@
             })
             .then(response => response.json())
             .then(data => {
-              // Check if we have results
-              if (data.ready && data.candidate_count > 0) {
+              // Show partial results if available
+              if (data.has_partial && data.candidates && data.candidates.length > 0) {
+                updateProgressiveResults(data.candidates, data.progress);
+              }
+
+              // Check if we have final results
+              if (data.is_complete && data.candidate_count > 0) {
                 clearInterval(pollForResults);
                 if (statusMessage) {
                   statusMessage.textContent = `Results ready! Found ${data.candidate_count} candidates. Refreshing page...`;
@@ -307,10 +320,22 @@
                 }
                 setTimeout(() => {
                   location.reload();
-                }, 1000);
+                }, 2000);
               } else {
-                // Update status message with poll count
-                if (statusMessage) {
+                // Update status message with progress info
+                if (statusMessage && data.progress && data.progress.status === 'running') {
+                  const progress = data.progress;
+                  const pct = progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
+                  const elapsed = progress.elapsed || Math.floor(pollCount * 5);
+                  const remaining = progress.remaining || 0;
+                  const candidateCount = data.candidate_count || 0;
+
+                  statusMessage.textContent =
+                    `Processing: ${progress.processed}/${progress.total} (${pct}%) - ` +
+                    `${progress.analyzed} analyzed, ${candidateCount} candidates found - ` +
+                    `${elapsed}s elapsed${remaining > 0 ? `, ~${remaining}s remaining` : ''}`;
+                } else {
+                  // Fallback message
                   const elapsed = Math.floor(pollCount * 5 / 60);
                   statusMessage.textContent = `Screener running... (${elapsed} min elapsed, checking every 5 seconds)`;
                 }
@@ -337,5 +362,56 @@
         });
       });
     });
+
+    // Function to update progressive results display
+    function updateProgressiveResults(candidates, progress) {
+      const container = document.getElementById('progressive-results');
+      if (!container) return;
+
+      // Show container if hidden
+      container.classList.remove('d-none');
+
+      // Create or update results display
+      let resultsDiv = document.getElementById('progressive-results-content');
+      if (!resultsDiv) {
+        resultsDiv = document.createElement('div');
+        resultsDiv.id = 'progressive-results-content';
+        container.appendChild(resultsDiv);
+      }
+
+      // Build HTML for candidates table
+      let html = '<div class="card"><div class="card-body">';
+      html += '<h5 class="card-title">Top Candidates (Live - ' + candidates.length + ' found so far)</h5>';
+      html += '<div class="table-responsive"><table class="table table-sm table-hover">';
+      html += '<thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Price</th><th>Weekly Trend</th><th>Daily Trend</th></tr></thead><tbody>';
+
+      candidates.slice(0, 20).forEach((candidate, index) => {
+        const price = candidate.daily_indicators?.latest_close || candidate.weekly_indicators?.latest_close || 0;
+        const weeklySt = candidate.weekly_indicators?.supertrend;
+        const dailySt = candidate.daily_indicators?.supertrend;
+        const weeklyTrend = weeklySt ? (weeklySt.direction === 'bullish' ? 'BULL' : 'BEAR') : '-';
+        const dailyTrend = dailySt ? (dailySt.direction === 'bullish' ? 'BULL' : 'BEAR') : '-';
+
+        html += '<tr>';
+        html += '<td><strong>#' + (index + 1) + '</strong></td>';
+        html += '<td><strong>' + candidate.symbol + '</strong></td>';
+        html += '<td><span class="badge bg-' + (candidate.score >= 70 ? 'success' : candidate.score >= 50 ? 'warning' : 'secondary') + '">' + candidate.score.toFixed(1) + '</span></td>';
+        html += '<td>₹' + price.toFixed(2) + '</td>';
+        html += '<td><span class="badge bg-' + (weeklyTrend === 'BULL' ? 'success' : 'secondary') + '">' + weeklyTrend + '</span></td>';
+        html += '<td><span class="badge bg-' + (dailyTrend === 'BULL' ? 'success' : 'secondary') + '">' + dailyTrend + '</span></td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table></div>';
+      if (progress && progress.status === 'running') {
+        html += '<div class="mt-2"><small class="text-muted">Still processing... Results update every 5 seconds</small></div>';
+      }
+      html += '</div></div>';
+
+      resultsDiv.innerHTML = html;
+
+      // Scroll to results if not visible
+      container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   });
 </script>

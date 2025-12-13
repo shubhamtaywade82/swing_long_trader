@@ -41,6 +41,15 @@ module Screeners
       candidates
     rescue StandardError => e
       Rails.logger.error("[Screeners::SwingScreenerJob] Failed: #{e.message}")
+
+      # Mark as failed
+      progress_key = "swing_screener_progress_#{Date.current}"
+      Rails.cache.write(progress_key, {
+        status: "failed",
+        error: e.message,
+        failed_at: Time.current.iso8601,
+      }, expires_in: 1.hour)
+
       Telegram::Notifier.send_error_alert("Swing screener failed: #{e.message}", context: "SwingScreenerJob")
       raise
     end

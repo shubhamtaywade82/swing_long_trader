@@ -37,6 +37,14 @@
     </div>
   </div>
 
+  <!-- Progressive Results Container (hidden initially) -->
+  <div id="progressive-results" class="d-none mb-4">
+    <div class="alert alert-warning">
+      <i class="bi bi-hourglass-split"></i>
+      <strong>Live Results (Updating...)</strong> - Showing partial results as they're found. Results will update automatically.
+    </div>
+  </div>
+
   <!-- Results Info -->
   <% if @last_run %>
     <div class="alert alert-info mb-4" data-candidates-count="<%= @candidates.size %>">
@@ -183,75 +191,14 @@
       form.addEventListener('submit', function(e) {
         e.preventDefault();
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            location: 'swing_screener.html.erb:form_submit',
-            message: 'Form submit triggered',
-            data: { action: form.action },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'A'
-          })
-        }).catch(() => {});
-        // #endregion
-
         const formData = new FormData(form);
         const button = form.querySelector('[type="submit"]');
         const statusCard = document.querySelector('[data-screener-target="statusCard"]');
         const statusMessage = document.querySelector('[data-screener-target="statusMessage"]');
         const spinner = document.querySelector('[data-screener-target="spinner"]');
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            location: 'swing_screener.html.erb:element_check',
-            message: 'Checking elements',
-            data: {
-              statusCard: !!statusCard,
-              statusMessage: !!statusMessage,
-              spinner: !!spinner,
-              button: !!button
-            },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'A'
-          })
-        }).catch(() => {});
-        // #endregion
-
         // Show status card immediately - use multiple methods to ensure visibility
         if (statusCard) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'swing_screener.html.erb:before_show_status',
-              message: 'Before showing status card',
-              data: {
-                statusCardExists: !!statusCard,
-                currentDisplay: statusCard.style.display,
-                computedDisplay: window.getComputedStyle(statusCard).display,
-                hasDNone: statusCard.classList.contains('d-none'),
-                offsetHeight: statusCard.offsetHeight,
-                offsetWidth: statusCard.offsetWidth,
-                parentElement: statusCard.parentElement?.tagName,
-                nextSibling: statusCard.nextElementSibling?.tagName
-              },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'run1',
-              hypothesisId: 'B'
-            })
-          }).catch(() => {});
-          // #endregion
 
           // Remove d-none class first (Bootstrap utility)
           statusCard.classList.remove('d-none');
@@ -272,34 +219,6 @@
 
           // Force a reflow to ensure changes take effect
           void statusCard.offsetHeight;
-
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'swing_screener.html.erb:after_show_status',
-              message: 'After showing status card',
-              data: {
-                display: statusCard.style.display,
-                computedDisplay: window.getComputedStyle(statusCard).display,
-                visibility: statusCard.style.visibility,
-                opacity: statusCard.style.opacity,
-                zIndex: statusCard.style.zIndex,
-                hasDNone: statusCard.classList.contains('d-none'),
-                hasShowClass: statusCard.classList.contains('show'),
-                offsetHeight: statusCard.offsetHeight,
-                offsetWidth: statusCard.offsetWidth,
-                isVisible: statusCard.offsetHeight > 0 && statusCard.offsetWidth > 0,
-                boundingRect: statusCard.getBoundingClientRect()
-              },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'run1',
-              hypothesisId: 'B'
-            })
-          }).catch(() => {});
-          // #endregion
         }
         if (button) {
           button.disabled = true;
@@ -308,22 +227,6 @@
         if (statusMessage) {
           statusMessage.textContent = 'Running screener... This may take a few minutes.';
         }
-
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            location: 'swing_screener.html.erb:before_fetch',
-            message: 'Before fetch call',
-            data: { url: form.action },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'A'
-          })
-        }).catch(() => {});
-        // #endregion
 
         fetch(form.action, {
           method: 'POST',
@@ -334,44 +237,12 @@
           }
         })
         .then(response => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'swing_screener.html.erb:fetch_response',
-              message: 'Fetch response received',
-              data: { status: response.status, ok: response.ok },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'run1',
-              hypothesisId: 'A'
-            })
-          }).catch(() => {});
-          // #endregion
-
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
           return response.json();
         })
         .then(data => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'swing_screener.html.erb:fetch_success',
-              message: 'Fetch success',
-              data: data,
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'run1',
-              hypothesisId: 'A'
-            })
-          }).catch(() => {});
-          // #endregion
-
           if (statusMessage) {
             let message = data.message || 'Screener queued successfully. Waiting for results...';
 
@@ -414,22 +285,6 @@
           const pollForResults = setInterval(() => {
             pollCount++;
 
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                location: 'swing_screener.html.erb:poll_attempt',
-                message: 'Polling for results',
-                data: { pollCount: pollCount, maxPolls: maxPolls },
-                timestamp: Date.now(),
-                sessionId: 'debug-session',
-                runId: 'run1',
-                hypothesisId: 'D'
-              })
-            }).catch(() => {});
-            // #endregion
-
             if (pollCount >= maxPolls) {
               clearInterval(pollForResults);
               if (statusMessage) {
@@ -452,29 +307,13 @@
             })
             .then(response => response.json())
             .then(data => {
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  location: 'swing_screener.html.erb:poll_check',
-                  message: 'Checking poll results',
-                  data: {
-                    pollCount: pollCount,
-                    ready: data.ready,
-                    candidateCount: data.candidate_count,
-                    lastRun: data.last_run
-                  },
-                  timestamp: Date.now(),
-                  sessionId: 'debug-session',
-                  runId: 'run1',
-                  hypothesisId: 'D'
-                })
-              }).catch(() => {});
-              // #endregion
+              // Show partial results if available
+              if (data.has_partial && data.candidates && data.candidates.length > 0) {
+                updateProgressiveResults(data.candidates, data.progress);
+              }
 
-              // Check if we have results
-              if (data.ready && data.candidate_count > 0) {
+              // Check if we have final results
+              if (data.is_complete && data.candidate_count > 0) {
                 clearInterval(pollForResults);
                 if (statusMessage) {
                   statusMessage.textContent = `Results ready! Found ${data.candidate_count} candidates. Refreshing page...`;
@@ -485,10 +324,22 @@
                 }
                 setTimeout(() => {
                   location.reload();
-                }, 1000);
+                }, 2000);
               } else {
-                // Update status message with poll count
-                if (statusMessage) {
+                // Update status message with progress info
+                if (statusMessage && data.progress && data.progress.status === 'running') {
+                  const progress = data.progress;
+                  const pct = progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
+                  const elapsed = progress.elapsed || Math.floor(pollCount * 5);
+                  const remaining = progress.remaining || 0;
+                  const candidateCount = data.candidate_count || 0;
+
+                  statusMessage.textContent =
+                    `Processing: ${progress.processed}/${progress.total} (${pct}%) - ` +
+                    `${progress.analyzed} analyzed, ${candidateCount} candidates found - ` +
+                    `${elapsed}s elapsed${remaining > 0 ? `, ~${remaining}s remaining` : ''}`;
+                } else {
+                  // Fallback message
                   const elapsed = Math.floor(pollCount * 5 / 60);
                   statusMessage.textContent = `Screener running... (${elapsed} min elapsed, checking every 5 seconds)`;
                 }
@@ -496,41 +347,10 @@
             })
             .catch(error => {
               console.error('Poll error:', error);
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  location: 'swing_screener.html.erb:poll_error',
-                  message: 'Poll error occurred',
-                  data: { error: error.message },
-                  timestamp: Date.now(),
-                  sessionId: 'debug-session',
-                  runId: 'run1',
-                  hypothesisId: 'D'
-                })
-              }).catch(() => {});
-              // #endregion
             });
           }, 5000); // Poll every 5 seconds
         })
         .catch(error => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/23ea7b90-f023-436d-a541-962b182ec5fd', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'swing_screener.html.erb:fetch_error',
-              message: 'Fetch error',
-              data: { error: error.message, stack: error.stack },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'run1',
-              hypothesisId: 'A'
-            })
-          }).catch(() => {});
-          // #endregion
-
           console.error('Screener error:', error);
           if (statusMessage) {
             statusMessage.textContent = 'Error: ' + error.message;
@@ -546,5 +366,55 @@
         });
       });
     });
+
+    // Function to update progressive results display
+    function updateProgressiveResults(candidates, progress) {
+      const container = document.getElementById('progressive-results');
+      if (!container) return;
+
+      // Show container if hidden
+      container.classList.remove('d-none');
+
+      // Create or update results display
+      let resultsDiv = document.getElementById('progressive-results-content');
+      if (!resultsDiv) {
+        resultsDiv = document.createElement('div');
+        resultsDiv.id = 'progressive-results-content';
+        container.appendChild(resultsDiv);
+      }
+
+      // Build HTML for candidates table
+      let html = '<div class="card"><div class="card-body">';
+      html += '<h5 class="card-title">Top Candidates (Live - ' + candidates.length + ' found so far)</h5>';
+      html += '<div class="table-responsive"><table class="table table-sm table-hover">';
+      html += '<thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Price</th><th>RSI</th><th>Trend</th></tr></thead><tbody>';
+
+      candidates.slice(0, 20).forEach((candidate, index) => {
+        const rsi = candidate.indicators?.rsi || candidate.daily_indicators?.rsi || '-';
+        const price = candidate.indicators?.latest_close || candidate.daily_indicators?.latest_close || 0;
+        const st = candidate.indicators?.supertrend || candidate.weekly_indicators?.supertrend;
+        const trend = st ? (st.direction === 'bullish' ? 'BULL' : 'BEAR') : '-';
+
+        html += '<tr>';
+        html += '<td><strong>#' + (index + 1) + '</strong></td>';
+        html += '<td><strong>' + candidate.symbol + '</strong></td>';
+        html += '<td><span class="badge bg-' + (candidate.score >= 70 ? 'success' : candidate.score >= 50 ? 'warning' : 'secondary') + '">' + candidate.score.toFixed(1) + '</span></td>';
+        html += '<td>₹' + price.toFixed(2) + '</td>';
+        html += '<td>' + (rsi !== '-' ? '<span class="badge bg-' + (rsi > 70 ? 'danger' : rsi < 30 ? 'success' : 'info') + '">' + rsi.toFixed(1) + '</span>' : '-') + '</td>';
+        html += '<td><span class="badge bg-' + (trend === 'BULL' ? 'success' : 'secondary') + '">' + trend + '</span></td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table></div>';
+      if (progress && progress.status === 'running') {
+        html += '<div class="mt-2"><small class="text-muted">Still processing... Results update every 5 seconds</small></div>';
+      }
+      html += '</div></div>';
+
+      resultsDiv.innerHTML = html;
+
+      // Scroll to results if not visible
+      container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   });
 </script>

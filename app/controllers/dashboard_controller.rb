@@ -292,12 +292,58 @@ class DashboardController < ApplicationController
     candidates = Rails.cache.read(cache_key) || []
     last_run = Rails.cache.read("#{cache_key}_timestamp")
 
+    # Get progress information
+    progress_key = "#{screener_type}_screener_progress_#{Date.current}"
+    progress = Rails.cache.read(progress_key) || {}
+
+    # Check if job is still running
+    job_status = check_screener_job_status(screener_type)
+
+    # Determine if we have partial or final results
+    is_complete = progress[:status] == "completed"
+    has_partial = candidates.any? && progress[:status] == "running"
+
     render json: {
       ready: candidates.any?,
       candidate_count: candidates.size,
       last_run: last_run&.iso8601,
-      message: candidates.any? ? "Results ready" : "Still processing...",
+      message: if is_complete
+                 "Results ready (#{candidates.size} candidates)"
+               elsif has_partial
+                 "Partial results available (#{candidates.size} candidates so far, still processing...)"
+               else
+                 "Still processing..."
+               end,
+      job_status: job_status,
+      progress: progress,
+      is_complete: is_complete,
+      has_partial: has_partial,
+      candidates: candidates, # Include candidates for progressive display
     }
+  end
+
+  def check_screener_job_status(screener_type)
+    return { running: false } unless solid_queue_installed?
+
+    job_class = screener_type == "swing" ? "Screeners::SwingScreenerJob" : "Screeners::LongtermScreenerJob"
+
+    # Find the most recent job of this type
+    recent_job = SolidQueue::Job
+                 .where("class_name LIKE ?", "%#{job_class.split('::').last}%")
+                 .order(created_at: :desc)
+                 .first
+
+    return { running: false } unless recent_job
+
+    {
+      running: recent_job.finished_at.nil?,
+      created_at: recent_job.created_at&.iso8601,
+      finished_at: recent_job.finished_at&.iso8601,
+      job_id: recent_job.id,
+    }
+  rescue StandardError => e
+    Rails.logger.error("Error checking job status: #{e.message}")
+    { running: false, error: e.message }
   end
 
   private

@@ -18,37 +18,151 @@ module Screeners
 
     def call
       candidates = []
+      start_time = Time.current
+      total_count = @instruments.count
+      processed_count = 0
+      analyzed_count = 0
+      progress_key = "swing_screener_progress_#{Date.current}"
+
+      Rails.logger.info("[Screeners::SwingScreener] Starting screener: #{total_count} instruments, limit: #{@limit}")
+
+      # Initialize progress
+      Rails.cache.write(progress_key, {
+        total: total_count,
+        processed: 0,
+        analyzed: 0,
+        candidates: 0,
+        started_at: start_time.iso8601,
+        status: "running",
+      }, expires_in: 1.hour)
 
       @instruments.find_each(batch_size: 50) do |instrument|
+        processed_count += 1
+
+        # Update progress cache every 10 instruments
+        if processed_count % 10 == 0
+          elapsed = Time.current - start_time
+          rate = begin
+            processed_count / elapsed
+          rescue StandardError
+            0
+          end
+          remaining = rate > 0 ? (total_count - processed_count) / rate : 0
+
+          Rails.cache.write(progress_key, {
+            total: total_count,
+            processed: processed_count,
+            analyzed: analyzed_count,
+            candidates: candidates.size,
+            started_at: start_time.iso8601,
+            status: "running",
+            elapsed: elapsed.round(1),
+            remaining: remaining.round(0),
+            rate: rate.round(2),
+          }, expires_in: 1.hour)
+
+          Rails.logger.info(
+            "[Screeners::SwingScreener] Progress: #{processed_count}/#{total_count} " \
+            "(#{analyzed_count} analyzed, #{candidates.size} candidates, " \
+            "#{elapsed.round(1)}s elapsed, ~#{remaining.round(0)}s remaining)",
+          )
+        end
+
         next unless passes_basic_filters?(instrument)
 
+        instrument_start = Time.current
         analysis = analyze_instrument(instrument)
+        instrument_time = Time.current - instrument_start
+
+        # Log slow instruments
+        if instrument_time > 2.0
+          Rails.logger.warn(
+            "[Screeners::SwingScreener] Slow instrument: #{instrument.symbol} " \
+            "took #{instrument_time.round(2)}s",
+          )
+        end
+
         next unless analysis
 
+        analyzed_count += 1
         candidates << analysis
+
+        # Cache partial results incrementally (every 5 new candidates)
+        # This allows UI to show results as they're found
+        if candidates.size % 5 == 0
+          # Sort and keep top N candidates
+          sorted_candidates = candidates.sort_by { |c| -c[:score] }.first(@limit)
+
+          # Cache partial results
+          results_key = "swing_screener_results_#{Date.current}"
+          Rails.cache.write(results_key, sorted_candidates, expires_in: 24.hours)
+          Rails.cache.write("#{results_key}_timestamp", Time.current, expires_in: 24.hours)
+
+          # Update progress with current candidate count
+          Rails.cache.write(progress_key, {
+            total: total_count,
+            processed: processed_count,
+            analyzed: analyzed_count,
+            candidates: sorted_candidates.size,
+            started_at: start_time.iso8601,
+            status: "running",
+            elapsed: (Time.current - start_time).round(1),
+            partial_results: true,
+          }, expires_in: 1.hour)
+        end
       end
 
-      # Sort by score (descending) and return top N
-      candidates.sort_by { |c| -c[:score] }.first(@limit)
+      duration = Time.current - start_time
+
+      # Final sort and cache
+      sorted_candidates = candidates.sort_by { |c| -c[:score] }.first(@limit)
+      results_key = "swing_screener_results_#{Date.current}"
+      Rails.cache.write(results_key, sorted_candidates, expires_in: 24.hours)
+      Rails.cache.write("#{results_key}_timestamp", Time.current, expires_in: 24.hours)
+
+      # Mark as completed
+      Rails.cache.write(progress_key, {
+        total: total_count,
+        processed: processed_count,
+        analyzed: analyzed_count,
+        candidates: sorted_candidates.size,
+        started_at: start_time.iso8601,
+        completed_at: Time.current.iso8601,
+        duration: duration.round(1),
+        status: "completed",
+      }, expires_in: 1.hour)
+
+      Rails.logger.info(
+        "[Screeners::SwingScreener] Completed: #{processed_count} processed, " \
+        "#{analyzed_count} analyzed, #{sorted_candidates.size} candidates found in #{duration.round(1)}s",
+      )
+
+      # Return sorted top N candidates
+      sorted_candidates
     end
 
     private
 
     def load_universe
       # Load from IndexConstituent database table (preferred)
-      if IndexConstituent.exists?
-        universe_symbols = IndexConstituent.distinct.pluck(:symbol).map(&:upcase)
-        Instrument.where(symbol_name: universe_symbols)
-                 .or(Instrument.where(isin: IndexConstituent.where.not(isin_code: nil).distinct.pluck(:isin_code).map(&:upcase)))
-      else
-        # Fallback: use all equity/index instruments from NSE
-        Instrument.where(segment: %w[equity index], exchange: "NSE")
-      end
+      base_scope = if IndexConstituent.exists?
+                     universe_symbols = IndexConstituent.distinct.pluck(:symbol).map(&:upcase)
+                     Instrument.where(symbol_name: universe_symbols)
+                               .or(Instrument.where(isin: IndexConstituent.where.not(isin_code: nil).distinct.pluck(:isin_code).map(&:upcase)))
+                   else
+                     # Fallback: use all equity/index instruments from NSE
+                     Instrument.where(segment: %w[equity index], exchange: "NSE")
+                   end
+
+      # Pre-filter instruments that have daily candles to avoid N+1 queries
+      base_scope.joins(:candle_series_records)
+                .where(candle_series_records: { timeframe: "1D" })
+                .distinct
     end
 
     def passes_basic_filters?(instrument)
-      # Check if instrument has candles
-      return false unless instrument.has_candles?(timeframe: "1D")
+      # Candles check is already done in load_universe via join
+      # Just check price range (if LTP available)
 
       # Check price range (if LTP available)
       ltp = instrument.ltp
@@ -65,18 +179,31 @@ module Screeners
     end
 
     def analyze_instrument(instrument)
-      # Multi-timeframe analysis
+      # Multi-timeframe analysis (DISABLE intraday by default for performance)
+      # Intraday fetching makes API calls which are very slow
+      # Only enable if explicitly configured
+      include_intraday = @config.dig(:multi_timeframe, :include_intraday) == true
+
       mtf_result = Swing::MultiTimeframeAnalyzer.call(
         instrument: instrument,
-        include_intraday: @config.dig(:multi_timeframe, :include_intraday) != false,
+        include_intraday: include_intraday,
       )
 
       return nil unless mtf_result[:success]
 
       mtf_analysis = mtf_result[:analysis]
 
-      # Load daily candles for backward compatibility
-      daily_series = instrument.load_daily_candles(limit: 100)
+      # Load daily candles once (reuse from MTF if available, otherwise load)
+      # MTF analyzer already loads daily candles, so try to reuse
+      daily_series = if mtf_analysis[:timeframes] && mtf_analysis[:timeframes][:d1]
+                       # Try to get series from MTF analysis
+                       nil # Will load below if needed
+                     else
+                       instrument.load_daily_candles(limit: 100)
+                     end
+
+      # Load if not available from MTF
+      daily_series ||= instrument.load_daily_candles(limit: 100)
       return nil unless daily_series&.candles&.any?
 
       # Need at least 50 candles for reliable analysis
@@ -91,7 +218,7 @@ module Screeners
       mtf_score = mtf_analysis[:multi_timeframe_score] || 0
 
       # Combined score: 60% base score, 40% MTF score
-      combined_score = (base_score * 0.6 + mtf_score * 0.4).round(2)
+      combined_score = ((base_score * 0.6) + (mtf_score * 0.4)).round(2)
 
       # Validate SMC structure (optional)
       smc_validation = validate_smc_structure(daily_series, indicators)
