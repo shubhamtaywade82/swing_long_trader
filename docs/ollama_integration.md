@@ -12,15 +12,9 @@ The swing trading system now supports **Ollama** - a local LLM server that runs 
 
 ## Installation
 
-### 1. Install the Gem
+### 1. Install Ollama Server
 
-The system uses the `ollama-ai` gem for Ollama integration. It's already added to the Gemfile:
-
-```bash
-bundle install
-```
-
-### 2. Install Ollama Server
+**Note**: The system uses the `ruby-openai` gem (already installed) which supports Ollama via its OpenAI-compatible API. No additional gems needed!
 
 **macOS/Linux:**
 ```bash

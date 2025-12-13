@@ -2,15 +2,9 @@
 
 ## 5-Minute Setup
 
-### Step 1: Install the Gem
+### Step 1: Install Ollama Server
 
-```bash
-bundle install
-```
-
-This installs the `ollama-ai` gem used for Ollama integration.
-
-### Step 2: Install Ollama Server
+**Note**: No additional gems needed! The system uses `ruby-openai` (already installed) which supports Ollama via OpenAI-compatible API.
 
 ```bash
 # macOS/Linux
@@ -19,14 +13,14 @@ curl -fsSL https://ollama.com/install.sh | sh
 # Windows: Download from https://ollama.com/download
 ```
 
-### Step 3: Pull a Model
+### Step 2: Pull a Model
 
 ```bash
 # Recommended: Fast and good quality (3B parameters)
 ollama pull llama3.2
 ```
 
-### Step 4: Verify It Works
+### Step 3: Verify It Works
 
 ```bash
 # Test Ollama
@@ -35,7 +29,7 @@ curl http://localhost:11434/api/tags
 # Should return list of models including llama3.2
 ```
 
-### Step 5: Update Config
+### Step 4: Update Config
 
 Edit `config/algo.yml`:
 
@@ -47,7 +41,7 @@ swing_trading:
     model: llama3.2    # Ollama model name
 ```
 
-### Step 6: Test
+### Step 5: Test
 
 ```bash
 # Start Rails console

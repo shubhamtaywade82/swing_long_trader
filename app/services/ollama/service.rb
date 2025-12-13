@@ -5,7 +5,6 @@ module Ollama
     DEFAULT_BASE_URL = "http://localhost:11434"
     DEFAULT_MODEL = "llama3.2" # Good default for trading analysis
     DEFAULT_TEMPERATURE = 0.3
-    DEFAULT_TIMEOUT = 30 # seconds
 
     # Recommended models for trading:
     # - llama3.2 (3B) - Fast, good for simple analysis
@@ -31,7 +30,7 @@ module Ollama
       @temperature = temperature || DEFAULT_TEMPERATURE
       @base_url = base_url || ENV.fetch("OLLAMA_BASE_URL", DEFAULT_BASE_URL)
       @cache = cache
-      @timeout = timeout || DEFAULT_TIMEOUT
+      @timeout = timeout
     end
 
     def call
@@ -43,7 +42,7 @@ module Ollama
         return cached if cached
       end
 
-      # Call Ollama API using gem
+      # Call Ollama API using ruby-openai gem (Ollama has OpenAI-compatible API)
       response = call_api
       return { success: false, error: "API call failed" } unless response
 
@@ -86,30 +85,36 @@ module Ollama
     end
 
     def perform_health_check
-      require "ollama-ai" unless defined?(Ollama)
+      require "ruby/openai" unless defined?(Ruby::OpenAI)
 
-      client = Ollama.new(
-        credentials: { address: @base_url },
-        options: { timeout: 5 },
+      # Use ruby-openai to check if Ollama is available
+      # Ollama exposes OpenAI-compatible API at /v1/models
+      client = Ruby::OpenAI::Client.new(
+        access_token: "ollama", # Dummy token, Ollama doesn't require auth
+        uri_base: "#{@base_url}/v1",
+        request_timeout: 5,
       )
-      client.models.tags
+
+      # Try to list models (Ollama's OpenAI-compatible endpoint)
+      client.models.list
       true
     rescue StandardError
       false
     end
 
     def call_api
-      require "ollama-ai" unless defined?(Ollama)
+      require "ruby/openai" unless defined?(Ruby::OpenAI)
 
-      client = Ollama.new(
-        credentials: { address: @base_url },
-        options: { timeout: @timeout },
+      # Use ruby-openai gem with Ollama's OpenAI-compatible API
+      # Ollama exposes OpenAI API at /v1/chat/completions
+      client = Ruby::OpenAI::Client.new(
+        access_token: "ollama", # Dummy token, Ollama doesn't require auth
+        uri_base: "#{@base_url}/v1",
+        request_timeout: @timeout || 30,
       )
 
-      # Use chat endpoint (more reliable than generate for structured outputs)
-      # The gem returns an array of events, we need the last one with done: true
-      events = client.chat(
-        {
+      response = client.chat(
+        parameters: {
           model: @model,
           messages: [
             {
@@ -121,30 +126,24 @@ module Ollama
               content: @prompt,
             },
           ],
-          options: {
-            temperature: @temperature,
-          },
+          temperature: @temperature,
         },
       )
 
-      # Find the last event (done: true) which contains the full response
-      final_event = events.find { |e| e["done"] == true } || events.last
-      return nil unless final_event
-
-      # Extract content from message
-      content = final_event.dig("message", "content")
+      content = response.dig("choices", 0, "message", "content")
       return nil unless content
 
-      # Estimate token usage (rough approximation)
-      prompt_tokens = estimate_tokens(@prompt)
-      completion_tokens = estimate_tokens(content)
+      # Extract usage information if available
+      usage = response["usage"] || {}
+      prompt_tokens = usage["prompt_tokens"] || estimate_tokens(@prompt)
+      completion_tokens = usage["completion_tokens"] || estimate_tokens(content)
 
       {
         content: content,
         usage: {
           prompt_tokens: prompt_tokens,
           completion_tokens: completion_tokens,
-          total_tokens: prompt_tokens + completion_tokens,
+          total_tokens: usage["total_tokens"] || (prompt_tokens + completion_tokens),
         },
       }
     rescue StandardError => e

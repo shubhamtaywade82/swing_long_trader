@@ -49,11 +49,8 @@ gem "DhanHQ", git: "https://github.com/shubhamtaywade82/dhanhq-client.git", bran
 # Telegram bot for notifications
 gem "telegram-bot-ruby", "~> 0.19"
 
-# OpenAI API client
+# OpenAI API client (also supports Ollama via OpenAI-compatible API)
 gem "ruby-openai", "~> 8.0"
-
-# Ollama API client for local LLM inference
-gem "ollama-ai", "~> 1.3"
 
 # CORS support for API
 gem "rack-cors"
