@@ -13,3 +13,28 @@ production:
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
+
+  # Automated screening during market hours (9:15 AM - 3:30 PM IST, Monday-Friday)
+  # Runs every 30 minutes to keep results up-to-date
+  # Note: Job checks MarketHours::Checker.market_open? before running
+  automated_swing_screener:
+    class: Screeners::AutomatedScreenerJob
+    args: [{ screener_type: "swing" }]
+    schedule: "15,45 9-15 * * 1-5" # At :15 and :45 past each hour, 9 AM - 3 PM, weekdays (covers 9:15 AM - 3:45 PM)
+
+  automated_longterm_screener:
+    class: Screeners::AutomatedScreenerJob
+    args: [{ screener_type: "longterm" }]
+    schedule: "15,45 9-15 * * 1-5" # At :15 and :45 past each hour, 9 AM - 3 PM, weekdays
+
+development:
+  # Same schedule for development (can be adjusted)
+  automated_swing_screener:
+    class: Screeners::AutomatedScreenerJob
+    args: [{ screener_type: "swing" }]
+    schedule: "15,45 9-15 * * 1-5"
+
+  automated_longterm_screener:
+    class: Screeners::AutomatedScreenerJob
+    args: [{ screener_type: "longterm" }]
+    schedule: "15,45 9-15 * * 1-5"

@@ -7,7 +7,8 @@ module Screeners
     queue_as :default
 
     def perform(instruments: nil, limit: nil)
-      candidates = LongtermScreener.call(instruments: instruments, limit: limit)
+      # Enable persistence by default for background jobs
+      candidates = LongtermScreener.call(instruments: instruments, limit: limit, persist_results: true)
 
       Rails.logger.info("[Screeners::LongtermScreenerJob] Found #{candidates.size} candidates")
 

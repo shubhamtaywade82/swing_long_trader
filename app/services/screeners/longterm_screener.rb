@@ -2,17 +2,18 @@
 
 module Screeners
   class LongtermScreener < ApplicationService
-    DEFAULT_LIMIT = 10
-
-    def self.call(instruments: nil, limit: nil)
-      new(instruments: instruments, limit: limit).call
+    def self.call(instruments: nil, limit: nil, persist_results: true)
+      new(instruments: instruments, limit: limit, persist_results: persist_results).call
     end
 
-    def initialize(instruments: nil, limit: nil)
+    def initialize(instruments: nil, limit: nil, persist_results: true)
       @instruments = instruments || load_universe
-      @limit = limit || DEFAULT_LIMIT
+      @limit = limit # Remove default limit to screen full universe
+      @persist_results = persist_results
       @config = AlgoConfig.fetch[:long_term_trading] || {}
       @strategy_config = @config[:strategy] || {}
+      @candle_cache = {} # Cache candles to avoid N+1 queries
+      @analyzed_at = Time.current # Use same timestamp for all results in this run
     end
 
     def call
@@ -22,7 +23,10 @@ module Screeners
       processed_count = 0
       analyzed_count = 0
 
-      Rails.logger.info("[Screeners::LongtermScreener] Starting screener: #{total_count} instruments, limit: #{@limit}")
+      Rails.logger.info("[Screeners::LongtermScreener] Starting screener: #{total_count} instruments, limit: #{@limit || 'unlimited'}")
+
+      # Preload candles for all instruments to avoid N+1 queries
+      preload_candles_for_instruments
 
       progress_key = "longterm_screener_progress_#{Date.current}"
 
@@ -35,6 +39,15 @@ module Screeners
         started_at: start_time.iso8601,
         status: "running",
       }, expires_in: 1.hour)
+
+      # Broadcast initial status
+      broadcast_progress(progress_key, {
+        total: total_count,
+        processed: 0,
+        analyzed: 0,
+        candidates: 0,
+        status: "running",
+      })
 
       @instruments.find_each(batch_size: 50) do |instrument|
         processed_count += 1
@@ -87,19 +100,29 @@ module Screeners
         analyzed_count += 1
         candidates << analysis
 
-        # Cache partial results incrementally (every 3 new candidates)
+        # Persist result to database immediately (incremental updates)
+        if @persist_results
+          persist_result(analysis)
+        end
+
+        # Cache and broadcast partial results incrementally (every 3 new candidates)
         # This allows UI to show results as they're found
         if candidates.size % 3 == 0
-          # Sort and keep top N candidates
-          sorted_candidates = candidates.sort_by { |c| -c[:score] }.first(@limit)
+          # Get top candidates from database if persisting, otherwise from memory
+          sorted_candidates = if @persist_results
+                                ScreenerResult.latest_for(screener_type: "longterm", limit: @limit)
+                                              .map(&:to_candidate_hash)
+                              else
+                                candidates.sort_by { |c| -c[:score] }.first(@limit || candidates.size)
+                              end
 
-          # Cache partial results
+          # Cache partial results for backward compatibility
           results_key = "longterm_screener_results_#{Date.current}"
           Rails.cache.write(results_key, sorted_candidates, expires_in: 24.hours)
           Rails.cache.write("#{results_key}_timestamp", Time.current, expires_in: 24.hours)
 
-          # Update progress with current candidate count
-          Rails.cache.write(progress_key, {
+          # Update progress
+          progress_data = {
             total: total_count,
             processed: processed_count,
             analyzed: analyzed_count,
@@ -108,21 +131,33 @@ module Screeners
             status: "running",
             elapsed: (Time.current - start_time).round(1),
             partial_results: true,
-          }, expires_in: 1.hour)
+          }
+          Rails.cache.write(progress_key, progress_data, expires_in: 1.hour)
+
+          # Broadcast progress and partial results via ActionCable
+          broadcast_progress(progress_key, progress_data)
+          broadcast_partial_results(results_key, sorted_candidates)
         end
       end
 
       duration = Time.current - start_time
 
-      # Final sort and cache
-      sorted_candidates = candidates.sort_by { |c| -c[:score] }.first(@limit)
+      # Get final results from database if persisting, otherwise from memory
+      sorted_candidates = if @persist_results
+                            ScreenerResult.latest_for(screener_type: "longterm", limit: @limit)
+                                          .map(&:to_candidate_hash)
+                          else
+                            candidates.sort_by { |c| -c[:score] }.first(@limit || candidates.size)
+                          end
+
+      # Cache final results for backward compatibility
       results_key = "longterm_screener_results_#{Date.current}"
       Rails.cache.write(results_key, sorted_candidates, expires_in: 24.hours)
       Rails.cache.write("#{results_key}_timestamp", Time.current, expires_in: 24.hours)
 
       # Mark as completed
       progress_key = "longterm_screener_progress_#{Date.current}"
-      Rails.cache.write(progress_key, {
+      progress_data = {
         total: total_count,
         processed: processed_count,
         analyzed: analyzed_count,
@@ -131,7 +166,12 @@ module Screeners
         completed_at: Time.current.iso8601,
         duration: duration.round(1),
         status: "completed",
-      }, expires_in: 1.hour)
+      }
+      Rails.cache.write(progress_key, progress_data, expires_in: 1.hour)
+
+      # Broadcast completion
+      broadcast_progress(progress_key, progress_data)
+      broadcast_complete_results(results_key, sorted_candidates)
 
       Rails.logger.info(
         "[Screeners::LongtermScreener] Completed: #{processed_count} processed, " \
@@ -156,10 +196,148 @@ module Screeners
                    end
 
       # Pre-filter instruments that have both daily and weekly candles
+      # NO LIMIT - Screen the complete universe
       base_scope.joins(:candle_series_records)
                 .where(candle_series_records: { timeframe: %w[1D 1W] })
                 .group("instruments.id")
                 .having("COUNT(DISTINCT candle_series_records.timeframe) = 2")
+                .includes(:candle_series_records) # Eager load to reduce queries
+    end
+
+    def preload_candles_for_instruments
+      # Batch load all daily and weekly candles for all instruments to avoid N+1 queries
+      Rails.logger.info("[Screeners::LongtermScreener] Preloading candles for #{@instruments.count} instruments...")
+
+      instrument_ids = @instruments.pluck(:id)
+
+      # Load all daily and weekly candles in one query
+      candle_records = CandleSeriesRecord
+                       .for_timeframe(%w[1D 1W])
+                       .where(instrument_id: instrument_ids)
+                       .recent(200) # Get last 200 candles per instrument
+                       .order(instrument_id: :asc, timeframe: :asc, timestamp: :desc)
+                       .to_a
+
+      # Group candles by instrument_id and timeframe
+      candles_by_instrument = candle_records.group_by { |r| [r.instrument_id, r.timeframe] }
+
+      # Build CandleSeries for each instrument
+      @instruments.each do |instrument|
+        daily_records = candles_by_instrument[[instrument.id, "1D"]] || []
+        weekly_records = candles_by_instrument[[instrument.id, "1W"]] || []
+
+        # Build daily series
+        if daily_records.any?
+          daily_series = CandleSeries.new(symbol: instrument.symbol_name, interval: "1D")
+          daily_records.sort_by(&:timestamp).each do |record|
+            candle = Candle.new(
+              timestamp: record.timestamp,
+              open: record.open,
+              high: record.high,
+              low: record.low,
+              close: record.close,
+              volume: record.volume,
+            )
+            daily_series.add_candle(candle)
+          end
+          @candle_cache[instrument.id] ||= {}
+          @candle_cache[instrument.id]["1D"] = daily_series
+        end
+
+        # Build weekly series
+        if weekly_records.any?
+          weekly_series = CandleSeries.new(symbol: instrument.symbol_name, interval: "1W")
+          weekly_records.sort_by(&:timestamp).each do |record|
+            candle = Candle.new(
+              timestamp: record.timestamp,
+              open: record.open,
+              high: record.high,
+              low: record.low,
+              close: record.close,
+              volume: record.volume,
+            )
+            weekly_series.add_candle(candle)
+          end
+          @candle_cache[instrument.id] ||= {}
+          @candle_cache[instrument.id]["1W"] = weekly_series
+        end
+      end
+
+      Rails.logger.info("[Screeners::LongtermScreener] Preloaded candles for #{@candle_cache.size} instruments")
+    end
+
+    def get_cached_candles(instrument, timeframe)
+      cached = @candle_cache[instrument.id]&.[](timeframe)
+      return cached if cached
+
+      # Fallback: load if not in cache
+      Rails.logger.warn("[Screeners::LongtermScreener] Cache miss for #{instrument.symbol_name} #{timeframe}, loading...")
+      case timeframe
+      when "1D"
+        instrument.load_daily_candles(limit: 200)
+      when "1W"
+        instrument.load_weekly_candles(limit: 52)
+      end
+    end
+
+    def persist_result(analysis)
+      # Persist each result immediately to database
+      ScreenerResult.upsert_result(
+        instrument_id: analysis[:instrument_id],
+        screener_type: "longterm",
+        symbol: analysis[:symbol],
+        score: analysis[:score],
+        base_score: analysis[:base_score] || 0,
+        mtf_score: analysis[:mtf_score] || 0,
+        indicators: (analysis[:daily_indicators] || {}).merge(weekly_indicators: analysis[:weekly_indicators] || {}),
+        metadata: analysis[:metadata] || {},
+        multi_timeframe: analysis[:multi_timeframe] || {},
+        analyzed_at: @analyzed_at,
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::LongtermScreener] Failed to persist result for #{analysis[:symbol]}: #{e.message}")
+      # Don't fail the entire screener if one save fails
+    end
+
+    def broadcast_progress(_progress_key, progress_data)
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "screener_progress",
+          screener_type: "longterm",
+          progress: progress_data,
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::LongtermScreener] Failed to broadcast progress: #{e.message}")
+    end
+
+    def broadcast_partial_results(_results_key, candidates)
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "screener_partial_results",
+          screener_type: "longterm",
+          candidate_count: candidates.size,
+          candidates: candidates.first(20), # Send top 20 for progressive display
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::LongtermScreener] Failed to broadcast partial results: #{e.message}")
+    end
+
+    def broadcast_complete_results(_results_key, candidates)
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "screener_complete",
+          screener_type: "longterm",
+          candidate_count: candidates.size,
+          message: "Long-term screener completed successfully",
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::LongtermScreener] Failed to broadcast completion: #{e.message}")
     end
 
     def passes_basic_filters?(_instrument)
@@ -169,19 +347,9 @@ module Screeners
     end
 
     def analyze_instrument(instrument)
-      # Multi-timeframe analysis (long-term: 1w, 1d, 1h - NO 15m)
-      mtf_result = LongTerm::MultiTimeframeAnalyzer.call(
-        instrument: instrument,
-        include_intraday: @config.dig(:multi_timeframe, :include_intraday) != false,
-      )
-
-      return nil unless mtf_result[:success]
-
-      mtf_analysis = mtf_result[:analysis]
-
-      # Load daily and weekly candles for backward compatibility
-      daily_series = instrument.load_daily_candles(limit: 200)
-      weekly_series = instrument.load_weekly_candles(limit: 52)
+      # Use cached candles to avoid N+1 queries
+      daily_series = get_cached_candles(instrument, "1D")
+      weekly_series = get_cached_candles(instrument, "1W")
 
       return nil unless daily_series&.candles&.any?
       return nil unless weekly_series&.candles&.any?
@@ -189,6 +357,17 @@ module Screeners
       # Need sufficient data
       return nil if daily_series.candles.size < 100
       return nil if weekly_series.candles.size < 20
+
+      # Multi-timeframe analysis (long-term: 1w, 1d, 1h - NO 15m)
+      mtf_result = LongTerm::MultiTimeframeAnalyzer.call(
+        instrument: instrument,
+        include_intraday: @config.dig(:multi_timeframe, :include_intraday) != false,
+        cached_candles: @candle_cache,
+      )
+
+      return nil unless mtf_result[:success]
+
+      mtf_analysis = mtf_result[:analysis]
 
       # Calculate indicators for both timeframes
       daily_indicators = calculate_indicators(daily_series)

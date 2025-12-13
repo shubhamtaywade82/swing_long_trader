@@ -222,25 +222,32 @@ class DashboardController < ApplicationController
   end
 
   def swing_screener
-    @limit = params[:limit]&.to_i || 50
+    @limit = params[:limit]&.to_i # No default - show all if not specified
     @candidates = []
     @running = false
 
-    # Check if there's a recent run stored in session or cache
-    cache_key = "swing_screener_results_#{Date.current}"
-    @candidates = Rails.cache.read(cache_key) || []
-    @last_run = Rails.cache.read("#{cache_key}_timestamp")
+    # Read from database (persisted results)
+    latest_results = ScreenerResult.latest_for(screener_type: "swing", limit: @limit)
+    @candidates = latest_results.map(&:to_candidate_hash)
+    @last_run = latest_results.first&.analyzed_at
 
-    # Also check previous days for last run
-    if @candidates.empty? && @last_run.nil?
-      (1..7).each do |days_ago|
-        prev_key = "swing_screener_results_#{Date.current - days_ago.days}"
-        prev_candidates = Rails.cache.read(prev_key)
-        next unless prev_candidates&.any?
+    # Fallback to cache if no database results (backward compatibility)
+    if @candidates.empty?
+      cache_key = "swing_screener_results_#{Date.current}"
+      @candidates = Rails.cache.read(cache_key) || []
+      @last_run = Rails.cache.read("#{cache_key}_timestamp")
 
-        @candidates = prev_candidates
-        @last_run = Rails.cache.read("#{prev_key}_timestamp")
-        break
+      # Also check previous days for last run
+      if @candidates.empty? && @last_run.nil?
+        (1..7).each do |days_ago|
+          prev_key = "swing_screener_results_#{Date.current - days_ago.days}"
+          prev_candidates = Rails.cache.read(prev_key)
+          next unless prev_candidates&.any?
+
+          @candidates = prev_candidates
+          @last_run = Rails.cache.read("#{prev_key}_timestamp")
+          break
+        end
       end
     end
 
@@ -249,25 +256,32 @@ class DashboardController < ApplicationController
   end
 
   def longterm_screener
-    @limit = params[:limit]&.to_i || 10
+    @limit = params[:limit].present? ? params[:limit].to_i : nil # nil = show all
     @candidates = []
     @running = false
 
-    # Check if there's a recent run stored in session or cache
-    cache_key = "longterm_screener_results_#{Date.current}"
-    @candidates = Rails.cache.read(cache_key) || []
-    @last_run = Rails.cache.read("#{cache_key}_timestamp")
+    # Read from database (persisted results)
+    latest_results = ScreenerResult.latest_for(screener_type: "longterm", limit: @limit)
+    @candidates = latest_results.map(&:to_candidate_hash)
+    @last_run = latest_results.first&.analyzed_at
 
-    # Also check previous days for last run
-    if @candidates.empty? && @last_run.nil?
-      (1..7).each do |days_ago|
-        prev_key = "longterm_screener_results_#{Date.current - days_ago.days}"
-        prev_candidates = Rails.cache.read(prev_key)
-        next unless prev_candidates&.any?
+    # Fallback to cache if no database results (backward compatibility)
+    if @candidates.empty?
+      cache_key = "longterm_screener_results_#{Date.current}"
+      @candidates = Rails.cache.read(cache_key) || []
+      @last_run = Rails.cache.read("#{cache_key}_timestamp")
 
-        @candidates = prev_candidates
-        @last_run = Rails.cache.read("#{prev_key}_timestamp")
-        break
+      # Also check previous days for last run
+      if @candidates.empty? && @last_run.nil?
+        (1..7).each do |days_ago|
+          prev_key = "longterm_screener_results_#{Date.current - days_ago.days}"
+          prev_candidates = Rails.cache.read(prev_key)
+          next unless prev_candidates&.any?
+
+          @candidates = prev_candidates
+          @last_run = Rails.cache.read("#{prev_key}_timestamp")
+          break
+        end
       end
     end
 
@@ -276,13 +290,13 @@ class DashboardController < ApplicationController
   end
 
   def run_swing_screener
-    limit = params[:limit]&.to_i || 50
+    limit = params[:limit].present? ? params[:limit].to_i : nil # nil = full universe
     sync = params[:sync] == "true"
 
     if sync
       # Run synchronously for testing (bypasses queue)
       begin
-        candidates = Screeners::SwingScreener.call(limit: limit)
+        candidates = Screeners::SwingScreener.call(limit: limit, persist_results: true)
 
         # Cache results
         cache_key = "swing_screener_results_#{Date.current}"
@@ -328,13 +342,13 @@ class DashboardController < ApplicationController
   end
 
   def run_longterm_screener
-    limit = params[:limit]&.to_i || 10
+    limit = params[:limit].present? ? params[:limit].to_i : nil # nil = full universe
     sync = params[:sync] == "true"
 
     if sync
       # Run synchronously for testing (bypasses queue)
       begin
-        candidates = Screeners::LongtermScreener.call(limit: limit)
+        candidates = Screeners::LongtermScreener.call(limit: limit, persist_results: true)
 
         # Cache results
         cache_key = "longterm_screener_results_#{Date.current}"
@@ -381,9 +395,18 @@ class DashboardController < ApplicationController
 
   def check_screener_results
     screener_type = params[:type] || "swing"
-    cache_key = "#{screener_type}_screener_results_#{Date.current}"
-    candidates = Rails.cache.read(cache_key) || []
-    last_run = Rails.cache.read("#{cache_key}_timestamp")
+    
+    # Read from database first (persisted results)
+    latest_results = ScreenerResult.latest_for(screener_type: screener_type, limit: nil)
+    candidates = latest_results.map(&:to_candidate_hash)
+    last_run = latest_results.first&.analyzed_at
+
+    # Fallback to cache if no database results (backward compatibility)
+    if candidates.empty?
+      cache_key = "#{screener_type}_screener_results_#{Date.current}"
+      candidates = Rails.cache.read(cache_key) || []
+      last_run = Rails.cache.read("#{cache_key}_timestamp")
+    end
 
     # Get progress information
     progress_key = "#{screener_type}_screener_progress_#{Date.current}"
@@ -393,7 +416,7 @@ class DashboardController < ApplicationController
     job_status = check_screener_job_status(screener_type)
 
     # Determine if we have partial or final results
-    is_complete = progress[:status] == "completed"
+    is_complete = progress[:status] == "completed" || (candidates.any? && last_run && last_run > 5.minutes.ago)
     has_partial = candidates.any? && progress[:status] == "running"
 
     render json: {
@@ -411,7 +434,8 @@ class DashboardController < ApplicationController
       progress: progress,
       is_complete: is_complete,
       has_partial: has_partial,
-      candidates: candidates, # Include candidates for progressive display
+      candidates: candidates.first(20), # Include top 20 candidates for progressive display
+      source: latest_results.any? ? "database" : "cache", # Indicate data source
     }
   end
 

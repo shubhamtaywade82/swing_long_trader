@@ -8,13 +8,15 @@ module Screeners
       new(instruments: instruments, limit: limit).call
     end
 
-    def initialize(instruments: nil, limit: nil)
+    def initialize(instruments: nil, limit: nil, persist_results: true)
       @instruments = instruments || load_universe
-      @limit = limit || DEFAULT_LIMIT
+      @limit = limit # Remove default limit to screen full universe
+      @persist_results = persist_results
       @config = AlgoConfig.fetch[:swing_trading] || {}
       @screening_config = @config[:screening] || {}
       @strategy_config = @config[:strategy] || {}
       @candle_cache = {} # Cache candles to avoid N+1 queries
+      @analyzed_at = Time.current # Use same timestamp for all results in this run
     end
 
     def call
@@ -100,13 +102,23 @@ module Screeners
         analyzed_count += 1
         candidates << analysis
 
+        # Persist result to database immediately (incremental updates)
+        if @persist_results
+          persist_result(analysis)
+        end
+
         # Cache and broadcast partial results incrementally (every 5 new candidates)
         # This allows UI to show results as they're found
         if candidates.size % 5 == 0
-          # Sort and keep top N candidates
-          sorted_candidates = candidates.sort_by { |c| -c[:score] }.first(@limit)
+          # Get top candidates from database if persisting, otherwise from memory
+          sorted_candidates = if @persist_results
+                                ScreenerResult.latest_for(screener_type: "swing", limit: @limit)
+                                              .map(&:to_candidate_hash)
+                              else
+                                candidates.sort_by { |c| -c[:score] }.first(@limit || candidates.size)
+                              end
 
-          # Cache partial results
+          # Cache partial results for backward compatibility
           results_key = "swing_screener_results_#{Date.current}"
           Rails.cache.write(results_key, sorted_candidates, expires_in: 24.hours)
           Rails.cache.write("#{results_key}_timestamp", Time.current, expires_in: 24.hours)
@@ -132,8 +144,15 @@ module Screeners
 
       duration = Time.current - start_time
 
-      # Final sort and cache
-      sorted_candidates = candidates.sort_by { |c| -c[:score] }.first(@limit)
+      # Get final results from database if persisting, otherwise from memory
+      sorted_candidates = if @persist_results
+                            ScreenerResult.latest_for(screener_type: "swing", limit: @limit)
+                                          .map(&:to_candidate_hash)
+                          else
+                            candidates.sort_by { |c| -c[:score] }.first(@limit || candidates.size)
+                          end
+
+      # Cache final results for backward compatibility
       results_key = "swing_screener_results_#{Date.current}"
       Rails.cache.write(results_key, sorted_candidates, expires_in: 24.hours)
       Rails.cache.write("#{results_key}_timestamp", Time.current, expires_in: 24.hours)
@@ -179,6 +198,7 @@ module Screeners
 
       # Pre-filter instruments that have daily candles to avoid N+1 queries
       # Use distinct to avoid duplicates from joins
+      # NO LIMIT - Screen the complete universe
       base_scope.joins(:candle_series_records)
                 .where(candle_series_records: { timeframe: "1D" })
                 .distinct

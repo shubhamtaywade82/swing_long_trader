@@ -8,13 +8,14 @@ module LongTerm
       w1: "1W",    # Weekly
     }.freeze
 
-    def self.call(instrument:, include_intraday: true)
-      new(instrument: instrument, include_intraday: include_intraday).call
+    def self.call(instrument:, include_intraday: true, cached_candles: nil)
+      new(instrument: instrument, include_intraday: include_intraday, cached_candles: cached_candles).call
     end
 
-    def initialize(instrument:, include_intraday: true)
+    def initialize(instrument:, include_intraday: true, cached_candles: nil)
       @instrument = instrument
       @include_intraday = include_intraday
+      @cached_candles = cached_candles
       @config = AlgoConfig.fetch(%i[long_term_trading multi_timeframe]) || {}
     end
 
@@ -100,6 +101,11 @@ module LongTerm
     end
 
     def load_timeframe_candles(tf_value)
+      # Check cache first to avoid N+1 queries
+      if @cached_candles && @cached_candles[@instrument.id] && @cached_candles[@instrument.id][tf_value]
+        return @cached_candles[@instrument.id][tf_value]
+      end
+
       case tf_value
       when "60"
         # Load 1h candles (on-demand)

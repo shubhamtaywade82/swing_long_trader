@@ -8,7 +8,8 @@
     </div>
     <div>
       <%= form_with url: run_swing_screener_path, method: :post, local: false, class: "d-inline", data: { controller: "screener" } do |f| %>
-        <%= f.number_field :limit, value: @limit, min: 10, max: 100, class: "form-control d-inline-block", style: "width: 80px; margin-right: 10px;" %>
+        <%= f.number_field :limit, value: @limit, min: 0, placeholder: "All", class: "form-control d-inline-block", style: "width: 100px; margin-right: 10px;", title: "Leave empty to screen full universe" %>
+        <small class="text-muted me-2" title="Leave empty to screen all instruments">Limit (optional)</small>
         <%= f.hidden_field :sync, value: "false", id: "sync_mode" %>
         <%= f.submit "Run Screener", class: "btn btn-primary", data: { screener_target: "runButton" } %>
         <button type="button" class="btn btn-outline-secondary ms-2" onclick="document.getElementById('sync_mode').value='true'; this.form.requestSubmit();" title="Run synchronously (bypasses queue, for testing)">

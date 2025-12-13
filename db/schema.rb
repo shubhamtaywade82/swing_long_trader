@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_13_155439) do
+ActiveRecord::Schema[8.1].define(version: 2025_12_13_190044) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -399,6 +399,25 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_13_155439) do
     t.index ["type"], name: "index_positions_on_type"
   end
 
+  create_table "screener_results", force: :cascade do |t|
+    t.datetime "analyzed_at", null: false
+    t.decimal "base_score", precision: 8, scale: 2, default: "0.0"
+    t.datetime "created_at", null: false
+    t.text "indicators"
+    t.bigint "instrument_id", null: false
+    t.text "metadata"
+    t.decimal "mtf_score", precision: 8, scale: 2, default: "0.0"
+    t.text "multi_timeframe"
+    t.decimal "score", precision: 8, scale: 2, null: false
+    t.string "screener_type", null: false
+    t.string "symbol", null: false
+    t.datetime "updated_at", null: false
+    t.index ["instrument_id"], name: "index_screener_results_on_instrument_id"
+    t.index ["screener_type", "analyzed_at"], name: "index_screener_results_on_screener_type_and_analyzed_at", order: { analyzed_at: :desc }
+    t.index ["screener_type", "score"], name: "index_screener_results_on_screener_type_and_score", order: { score: :desc }
+    t.index ["symbol", "screener_type", "analyzed_at"], name: "index_screener_results_on_symbol_type_analyzed"
+  end
+
   create_table "settings", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "key", null: false
@@ -638,6 +657,7 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_13_155439) do
   add_foreign_key "positions", "orders", column: "exit_order_id"
   add_foreign_key "positions", "paper_portfolios"
   add_foreign_key "positions", "trading_signals"
+  add_foreign_key "screener_results", "instruments"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
