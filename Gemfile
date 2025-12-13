@@ -52,6 +52,9 @@ gem "telegram-bot-ruby", "~> 0.19"
 # OpenAI API client
 gem "ruby-openai", "~> 8.0"
 
+# Ollama API client for local LLM inference
+gem "ollama-ai", "~> 1.3"
+
 # CORS support for API
 gem "rack-cors"
 

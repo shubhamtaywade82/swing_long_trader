@@ -43,7 +43,7 @@ module Ollama
         return cached if cached
       end
 
-      # Call Ollama API
+      # Call Ollama API using gem
       response = call_api
       return { success: false, error: "API call failed" } unless response
 
@@ -86,55 +86,53 @@ module Ollama
     end
 
     def perform_health_check
-      uri = URI("#{@base_url}/api/tags")
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.read_timeout = 5
-      http.open_timeout = 5
+      require "ollama-ai" unless defined?(Ollama)
 
-      response = http.get(uri.path)
-      response.code == "200"
+      client = Ollama.new(
+        credentials: { address: @base_url },
+        options: { timeout: 5 },
+      )
+      client.models.tags
+      true
     rescue StandardError
       false
     end
 
     def call_api
-      uri = URI("#{@base_url}/api/chat")
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.read_timeout = @timeout
-      http.open_timeout = 5
+      require "ollama-ai" unless defined?(Ollama)
 
-      request_body = {
-        model: @model,
-        messages: [
-          {
-            role: "system",
-            content: "You are a technical analysis expert specializing in swing trading. Always respond with valid JSON only. Be concise and analytical.",
+      client = Ollama.new(
+        credentials: { address: @base_url },
+        options: { timeout: @timeout },
+      )
+
+      # Use chat endpoint (more reliable than generate for structured outputs)
+      # The gem returns an array of events, we need the last one with done: true
+      events = client.chat(
+        {
+          model: @model,
+          messages: [
+            {
+              role: "system",
+              content: "You are a technical analysis expert specializing in swing trading. Always respond with valid JSON only. Be concise and analytical.",
+            },
+            {
+              role: "user",
+              content: @prompt,
+            },
+          ],
+          options: {
+            temperature: @temperature,
           },
-          {
-            role: "user",
-            content: @prompt,
-          },
-        ],
-        options: {
-          temperature: @temperature,
         },
-        stream: false,
-      }
+      )
 
-      request = Net::HTTP::Post.new(uri.path)
-      request["Content-Type"] = "application/json"
-      request.body = request_body.to_json
+      # Find the last event (done: true) which contains the full response
+      final_event = events.find { |e| e["done"] == true } || events.last
+      return nil unless final_event
 
-      response = http.request(request)
-
-      unless response.code == "200"
-        Rails.logger.error("[Ollama::Service] API error: #{response.code} - #{response.body}")
-        return nil
-      end
-
-      parsed_response = JSON.parse(response.body)
-
-      content = parsed_response.dig("message", "content")
+      # Extract content from message
+      content = final_event.dig("message", "content")
       return nil unless content
 
       # Estimate token usage (rough approximation)
@@ -149,12 +147,9 @@ module Ollama
           total_tokens: prompt_tokens + completion_tokens,
         },
       }
-    rescue JSON::ParserError => e
-      Rails.logger.error("[Ollama::Service] JSON parse error: #{e.message}")
-      Rails.logger.debug { "[Ollama::Service] Response body: #{response&.body}" }
-      nil
     rescue StandardError => e
       Rails.logger.error("[Ollama::Service] API call failed: #{e.message}")
+      Rails.logger.debug { "[Ollama::Service] Error details: #{e.class} - #{e.message}" }
       nil
     end
 
