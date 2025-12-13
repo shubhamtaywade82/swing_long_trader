@@ -19,10 +19,11 @@ module Strategies
         # Build compact prompt
         prompt = build_prompt
 
-        # Call OpenAI
-        result = Openai::Service.call(
+        # Call AI service (OpenAI or Ollama based on config)
+        result = AI::UnifiedService.call(
           prompt: prompt,
-          model: @config[:model] || "gpt-4o-mini",
+          provider: @config[:provider] || "auto",
+          model: @config[:model],
           temperature: @config[:temperature] || 0.3,
         )
 
