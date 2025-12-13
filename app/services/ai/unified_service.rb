@@ -29,15 +29,21 @@ module AI
     def call
       case @provider.to_s.downcase
       when "ollama", "local"
+        Rails.logger.info("[AI::UnifiedService] Using provider: Ollama")
         call_ollama
       when "openai", "open_ai"
+        Rails.logger.info("[AI::UnifiedService] Using provider: OpenAI")
         call_openai
       else
         # Auto-detect: try OpenAI first, fallback to Ollama
+        Rails.logger.info("[AI::UnifiedService] Auto-detecting provider (trying OpenAI first)")
         result = call_openai
-        return result if result[:success]
+        if result[:success]
+          Rails.logger.info("[AI::UnifiedService] Successfully using OpenAI")
+          return result
+        end
 
-        Rails.logger.info("[AI::UnifiedService] OpenAI failed, falling back to Ollama")
+        Rails.logger.info("[AI::UnifiedService] OpenAI failed (#{result[:error]}), falling back to Ollama")
         call_ollama
       end
     end
