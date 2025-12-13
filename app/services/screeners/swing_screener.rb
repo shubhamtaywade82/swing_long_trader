@@ -65,30 +65,47 @@ module Screeners
     end
 
     def analyze_instrument(instrument)
-      # Load daily candles
+      # Multi-timeframe analysis
+      mtf_result = Swing::MultiTimeframeAnalyzer.call(
+        instrument: instrument,
+        include_intraday: @config.dig(:multi_timeframe, :include_intraday) != false,
+      )
+
+      return nil unless mtf_result[:success]
+
+      mtf_analysis = mtf_result[:analysis]
+
+      # Load daily candles for backward compatibility
       daily_series = instrument.load_daily_candles(limit: 100)
       return nil unless daily_series&.candles&.any?
 
       # Need at least 50 candles for reliable analysis
       return nil if daily_series.candles.size < 50
 
-      # Calculate indicators
+      # Calculate indicators (from daily for backward compatibility)
       indicators = calculate_indicators(daily_series)
       return nil unless indicators
 
-      # Calculate score based on filters
-      score = calculate_score(daily_series, indicators)
+      # Calculate score based on filters (enhanced with MTF)
+      base_score = calculate_score(daily_series, indicators)
+      mtf_score = mtf_analysis[:multi_timeframe_score] || 0
+
+      # Combined score: 60% base score, 40% MTF score
+      combined_score = (base_score * 0.6 + mtf_score * 0.4).round(2)
 
       # Validate SMC structure (optional)
       smc_validation = validate_smc_structure(daily_series, indicators)
 
-      # Build candidate hash
+      # Build candidate hash with multi-timeframe data
       {
         instrument_id: instrument.id,
         symbol: instrument.symbol_name,
-        score: score,
+        score: combined_score,
+        base_score: base_score,
+        mtf_score: mtf_score,
         indicators: indicators,
-        metadata: build_metadata(instrument, daily_series, indicators, smc_validation),
+        multi_timeframe: mtf_analysis,
+        metadata: build_metadata(instrument, daily_series, indicators, smc_validation, mtf_analysis),
       }
     end
 
@@ -217,7 +234,7 @@ module Screeners
       max_score.positive? ? (score / max_score * 100).round(2) : 0.0
     end
 
-    def build_metadata(instrument, series, indicators, smc_validation = nil)
+    def build_metadata(instrument, series, indicators, smc_validation = nil, mtf_analysis = nil)
       metadata = {
         ltp: instrument.ltp,
         candles_count: series.candles.size,
@@ -226,6 +243,17 @@ module Screeners
         volatility: calculate_volatility(series, indicators),
         momentum: calculate_momentum(series, indicators),
       }
+
+      # Add multi-timeframe metadata
+      if mtf_analysis
+        metadata[:multi_timeframe] = {
+          score: mtf_analysis[:multi_timeframe_score],
+          trend_alignment: mtf_analysis[:trend_alignment],
+          momentum_alignment: mtf_analysis[:momentum_alignment],
+          timeframes_analyzed: mtf_analysis[:timeframes].keys,
+          entry_recommendations: mtf_analysis[:entry_recommendations],
+        }
+      end
 
       # Add SMC validation if available
       if smc_validation
