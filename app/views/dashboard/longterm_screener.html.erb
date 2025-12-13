@@ -1,10 +1,10 @@
 <% content_for :page_title, "Long-Term Screener" %>
 
 <div class="screener-page">
-  <div class="d-flex justify-content-between align-items-center mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
       <h2>Long-Term Trading Screener</h2>
-      <p class="text-muted mb-0">Find long-term investment opportunities based on multi-timeframe analysis</p>
+      <p class="text-muted mb-0 small">Find long-term investment opportunities based on multi-timeframe analysis</p>
     </div>
     <div>
       <%= form_with url: run_longterm_screener_path, method: :post, local: false, class: "d-inline screener-form" do |f| %>
@@ -20,7 +20,7 @@
   </div>
 
   <!-- Status Card -->
-  <div class="alert alert-info mb-4 d-none" data-screener-target="statusCard" id="screener-status-card">
+  <div class="alert alert-info mb-3 d-none" data-screener-target="statusCard" id="screener-status-card">
     <div class="d-flex align-items-center justify-content-between">
       <div class="d-flex align-items-center">
         <div class="spinner-border spinner-border-sm me-2" role="status" data-screener-target="spinner">
@@ -36,7 +36,7 @@
   </div>
 
   <!-- Progressive Results Container (hidden initially) -->
-  <div id="progressive-results" class="d-none mb-4">
+  <div id="progressive-results" class="d-none mb-3">
     <div class="alert alert-warning">
       <i class="bi bi-hourglass-split"></i>
       <strong>Live Results (Updating...)</strong> - Showing partial results as they're found. Results will update automatically.
@@ -60,7 +60,7 @@
 
   <!-- Tabs for Categories -->
   <% if @candidates.any? %>
-    <ul class="nav nav-tabs mb-4" role="tablist">
+    <ul class="nav nav-tabs mb-3" role="tablist">
       <li class="nav-item" role="presentation">
         <button class="nav-link active" id="recommendations-tab" data-bs-toggle="tab" data-bs-target="#recommendations" type="button" role="tab">
           Recommendations

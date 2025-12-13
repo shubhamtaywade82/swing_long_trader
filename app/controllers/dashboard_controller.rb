@@ -256,7 +256,7 @@ class DashboardController < ApplicationController
   end
 
   def longterm_screener
-    @limit = params[:limit].present? ? params[:limit].to_i : nil # nil = show all
+    @limit = params[:limit].presence&.to_i # nil = show all
     @candidates = []
     @running = false
 
@@ -290,7 +290,7 @@ class DashboardController < ApplicationController
   end
 
   def run_swing_screener
-    limit = params[:limit].present? ? params[:limit].to_i : nil # nil = full universe
+    limit = params[:limit].presence&.to_i # nil = full universe
     sync = params[:sync] == "true"
 
     if sync
@@ -342,7 +342,7 @@ class DashboardController < ApplicationController
   end
 
   def run_longterm_screener
-    limit = params[:limit].present? ? params[:limit].to_i : nil # nil = full universe
+    limit = params[:limit].presence&.to_i # nil = full universe
     sync = params[:sync] == "true"
 
     if sync
@@ -395,7 +395,7 @@ class DashboardController < ApplicationController
 
   def check_screener_results
     screener_type = params[:type] || "swing"
-    
+
     # Read from database first (persisted results)
     latest_results = ScreenerResult.latest_for(screener_type: screener_type, limit: nil)
     candidates = latest_results.map(&:to_candidate_hash)

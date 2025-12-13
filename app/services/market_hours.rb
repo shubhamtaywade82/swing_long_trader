@@ -54,7 +54,7 @@ module MarketHours
 
     def next_market_open
       now = Time.current.in_time_zone("Asia/Kolkata")
-      
+
       # If it's a trading day and before market open, return today's open
       if trading_day? && (now.hour < MARKET_OPEN_HOUR || (now.hour == MARKET_OPEN_HOUR && now.min < MARKET_OPEN_MINUTE))
         return now.change(hour: MARKET_OPEN_HOUR, min: MARKET_OPEN_MINUTE, sec: 0)
@@ -63,7 +63,7 @@ module MarketHours
       # Otherwise, find next trading day
       days_ahead = 1
       days_ahead += 1 until (now + days_ahead.days).wday.between?(1, 5)
-      
+
       (now + days_ahead.days).change(hour: MARKET_OPEN_HOUR, min: MARKET_OPEN_MINUTE, sec: 0)
     end
 

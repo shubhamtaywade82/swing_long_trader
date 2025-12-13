@@ -2,9 +2,9 @@
 <% show_position = local_assigns.fetch(:show_position, false) %>
 
 <div class="card">
-  <div class="card-body">
+  <div class="card-body p-2">
     <div class="table-responsive">
-      <table class="table table-hover">
+      <table class="table table-sm table-hover mb-0">
         <thead>
           <tr>
             <th>Rank</th>
@@ -139,8 +139,7 @@
                   <span class="badge bg-<%= mode == 'live' ? 'danger' : 'info' %>">
                     <%= mode.upcase %>
                   </span>
-                  <br>
-                  <small class="text-muted">
+                  <small class="text-muted d-block" style="font-size: 0.75rem; line-height: 1.2;">
                     Entry: ₹<%= number_with_precision(pos.entry_price, precision: 2) %>
                     <% if pos.respond_to?(:unrealized_pnl) %>
                       | P&L: <span class="<%= pos.unrealized_pnl >= 0 ? 'text-success' : 'text-danger' %>">

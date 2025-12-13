@@ -214,12 +214,13 @@
 
 .dashboard-header {
   background-color: #fff;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   border-bottom: 1px solid #dee2e6;
   display: flex;
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  font-size: 0.9rem;
 
   .header-left {
     display: flex;
@@ -246,9 +247,10 @@
 
 .page-title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 600;
   color: #212529;
+  line-height: 1.3;
 }
 
 .trading-mode-toggle {
@@ -340,8 +342,10 @@
 
 .content-area {
   flex: 1;
-  padding: 1.5rem;
+  padding: 1rem 1.25rem;
   overflow-y: auto;
+  font-size: 0.9rem;
+  line-height: 1.4;
 }
 
 // Sidebar Overlay for Mobile
@@ -414,29 +418,33 @@
   letter-spacing: 0.5px;
 }
 
-// Card Styles
+// Card Styles - Compact
 .card {
   border: none;
   border-radius: 0.5rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
 }
 
 .card-header {
   background-color: #f8f9fa;
   border-bottom: 1px solid #dee2e6;
-  padding: 1rem 1.5rem;
+  padding: 0.6rem 1rem;
   border-radius: 0.5rem 0.5rem 0 0;
 
   h5 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 600;
+    line-height: 1.3;
   }
 }
 
 .card-body {
-  padding: 1.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
 }
 
 // Table Styles
@@ -480,10 +488,12 @@
   }
 }
 
-// Badge Styles
+// Badge Styles - Compact
 .badge {
   font-weight: 500;
-  padding: 0.35em 0.65em;
+  padding: 0.25em 0.5em;
+  font-size: 0.8rem;
+  line-height: 1.2;
 }
 
 // Responsive Design
@@ -530,11 +540,13 @@
   }
 }
 
-// List Group Styles
+// List Group Styles - Compact
 .list-group-item {
   border: none;
   border-bottom: 1px solid #dee2e6;
-  padding: 1rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
 
   &:last-child {
     border-bottom: none;
@@ -601,19 +613,43 @@
 }
 
 .screener-page {
+  font-size: 0.9rem;
+  line-height: 1.4;
+
+  h2 {
+    font-size: 1.4rem;
+    margin-bottom: 0.5rem;
+    line-height: 1.3;
+  }
+
+  .text-muted {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+
   .form-control {
     display: inline-block;
+    font-size: 0.875rem;
+    padding: 0.35rem 0.5rem;
+  }
+
+  .btn {
+    font-size: 0.875rem;
+    padding: 0.4rem 0.75rem;
   }
 
   .nav-tabs {
     border-bottom: 2px solid #dee2e6;
+    margin-bottom: 0.75rem;
 
     .nav-link {
       color: #6c757d;
       border: none;
       border-bottom: 3px solid transparent;
-      padding: 0.75rem 1.5rem;
+      padding: 0.5rem 1rem;
       font-weight: 500;
+      font-size: 0.85rem;
+      line-height: 1.3;
 
       &:hover {
         border-bottom-color: #dee2e6;
@@ -625,11 +661,24 @@
         border-bottom-color: #0d6efd;
         background-color: transparent;
       }
+
+      .badge {
+        font-size: 0.7rem;
+        padding: 0.2em 0.4em;
+        margin-left: 0.4rem;
+      }
     }
   }
 
   .tab-content {
-    margin-top: 1rem;
+    margin-top: 0.5rem;
+  }
+
+  .alert {
+    padding: 0.6rem 1rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    margin-bottom: 0.75rem;
   }
 
   // Ensure status card is visible when shown
@@ -646,11 +695,21 @@
       opacity: 1 !important;
       position: relative !important;
       z-index: 1000 !important;
-      margin-bottom: 1rem !important;
+      margin-bottom: 0.75rem !important;
     }
 
     &.d-none {
       display: none !important;
     }
+  }
+
+  // Compact spacing for info alerts
+  .alert-info {
+    margin-bottom: 0.75rem;
+  }
+
+  // Compact tabs spacing
+  .nav-tabs {
+    margin-bottom: 0.75rem;
   }
 }

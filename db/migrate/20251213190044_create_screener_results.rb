@@ -27,7 +27,7 @@ class CreateScreenerResults < ActiveRecord::Migration[8.1]
     end
 
     unless index_exists?(:screener_results, [:symbol, :screener_type, :analyzed_at])
-      add_index :screener_results, [:symbol, :screener_type, :analyzed_at], 
+      add_index :screener_results, [:symbol, :screener_type, :analyzed_at],
                  name: "index_screener_results_on_symbol_type_analyzed"
     end
 
