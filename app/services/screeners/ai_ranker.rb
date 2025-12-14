@@ -37,10 +37,21 @@ module Screeners
     end
 
     def call
-      return @candidates.first(@limit) unless @enabled
+      # If AI is disabled, return candidates sorted by combined score (highest first)
+      unless @enabled
+        Rails.logger.info("[Screeners::AIEvaluator] AI evaluation disabled, returning top candidates by score")
+        return @candidates.sort_by do |c|
+          screener_score = c[:score] || 0
+          quality_score = c[:trade_quality_score] || 0
+          -(screener_score * 0.5 + quality_score * 0.5)
+        end.first(@limit)
+      end
 
       # Check rate limit
-      return handle_rate_limit if rate_limit_exceeded?
+      if rate_limit_exceeded?
+        Rails.logger.warn("[Screeners::AIEvaluator] Rate limit exceeded, falling back to score-based ranking")
+        return handle_rate_limit
+      end
 
       # Ensure candidates are sorted by score (highest first) before AI evaluation
       # This ensures best candidates are evaluated first

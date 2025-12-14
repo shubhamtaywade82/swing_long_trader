@@ -43,9 +43,10 @@ module Screeners
         "(evaluating #{layer2_candidates.size} screener results, highest scores first)"
       )
       layer3_candidates = AIEvaluator.call(candidates: layer2_candidates, limit: 15)
+      top_ai_confidence = layer3_candidates.first&.dig(:ai_confidence)
       Rails.logger.info(
-        "[Screeners::SwingScreenerJob] Layer 3 complete: #{layer3_candidates.size} candidates " \
-        "(top AI confidence: #{layer3_candidates.first&.dig(:ai_confidence)&.round(1)})"
+        "[Screeners::SwingScreenerJob] Layer 3 complete: #{layer3_candidates.size} candidates" +
+        (top_ai_confidence ? " (top AI confidence: #{top_ai_confidence.round(1)})" : " (AI disabled or rate limited)")
       )
 
       return handle_empty_results if layer3_candidates.empty?
