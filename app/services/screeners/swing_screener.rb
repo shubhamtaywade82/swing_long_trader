@@ -602,5 +602,24 @@ module Screeners
                end,
       }
     end
+
+    def persist_result(analysis)
+      # Persist each result immediately to database (incremental updates)
+      ScreenerResult.upsert_result(
+        instrument_id: analysis[:instrument_id],
+        screener_type: "swing",
+        symbol: analysis[:symbol],
+        score: analysis[:score],
+        base_score: analysis[:base_score] || 0,
+        mtf_score: analysis[:mtf_score] || 0,
+        indicators: analysis[:indicators] || {},
+        metadata: analysis[:metadata] || {},
+        multi_timeframe: analysis[:multi_timeframe] || {},
+        analyzed_at: @analyzed_at,
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::SwingScreener] Failed to persist result for #{analysis[:symbol]}: #{e.message}")
+      # Don't fail the entire screener if one save fails
+    end
   end
 end
