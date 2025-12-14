@@ -1,9 +1,24 @@
 # frozen_string_literal: true
 
 module Screeners
-  class AIRanker < ApplicationService
+  # Layer 3: AI Evaluation & Ranking
+  # Reduces 30-40 high-quality setups → 10-15 AI-approved candidates
+  #
+  # AI evaluates:
+  # - Market context
+  # - Overcrowding detection
+  # - Late-stage trend warnings
+  # - Risk narratives
+  # - Holding period estimation
+  # - Confidence scoring
+  #
+  # Filters out candidates with:
+  # - avoid: true
+  # - confidence < 6.5
+  class AIEvaluator < ApplicationService
     MAX_CALLS_PER_DAY = 50
     CACHE_TTL = 24.hours
+    MIN_CONFIDENCE_THRESHOLD = 6.5
 
     def self.call(candidates: nil, limit: nil, **kwargs)
       # Support both positional and keyword arguments for backward compatibility
@@ -13,11 +28,12 @@ module Screeners
 
     def initialize(candidates:, limit: nil)
       @candidates = candidates
-      @limit = limit || AlgoConfig.fetch(%i[swing_trading ai_ranking max_candidates]) || 20
-      @config = AlgoConfig.fetch(%i[swing_trading ai_ranking]) || {}
+      @limit = limit || AlgoConfig.fetch(%i[swing_trading ai_evaluation max_candidates]) || 15
+      @config = AlgoConfig.fetch(%i[swing_trading ai_evaluation]) || {}
       @enabled = @config[:enabled] != false
       @model = @config[:model] || "gpt-4o-mini"
       @temperature = @config[:temperature] || 0.3
+      @min_confidence = @config[:min_confidence] || MIN_CONFIDENCE_THRESHOLD
     end
 
     def call
@@ -26,38 +42,44 @@ module Screeners
       # Check rate limit
       return handle_rate_limit if rate_limit_exceeded?
 
-      ranked = []
+      evaluated = []
 
       @candidates.each do |candidate|
-        result = rank_candidate(candidate)
+        result = evaluate_candidate(candidate)
         next unless result
 
-        ranked << candidate.merge(
-          ai_score: result[:score],
+        # Filter: drop if avoid flag is true or confidence too low
+        next if result[:avoid] == true
+        next if result[:confidence] < @min_confidence
+
+        evaluated << candidate.merge(
           ai_confidence: result[:confidence],
-          ai_summary: result[:summary],
-          ai_holding_days: result[:holding_days],
           ai_risk: result[:risk],
-          ai_timeframe_alignment: result[:timeframe_alignment],
+          ai_holding_days: result[:holding_days],
+          ai_comment: result[:comment],
+          ai_avoid: result[:avoid] || false,
         )
       end
 
-      # Sort by combined score (screener score + AI score)
-      ranked.sort_by { |c| -(c[:score] + (c[:ai_score] || 0)) }.first(@limit)
+      # Sort by confidence (highest first)
+      evaluated.sort_by { |c| -c[:ai_confidence] }.first(@limit)
     end
 
     private
 
-    def rank_candidate(candidate)
+    def evaluate_candidate(candidate)
       # Check cache first
-      cache_key = "ai_rank:#{candidate[:instrument_id]}:#{candidate[:symbol]}"
+      cache_key = "ai_eval:#{candidate[:instrument_id]}:#{candidate[:symbol]}"
       cached = Rails.cache.read(cache_key)
       return cached if cached
 
-      # Build prompt
-      prompt = build_prompt(candidate)
+      # Build structured input
+      structured_input = build_structured_input(candidate)
 
-      # Call AI service (OpenAI or Ollama based on config)
+      # Build prompt
+      prompt = build_prompt(structured_input)
+
+      # Call AI service
       ai_result = AI::UnifiedService.call(
         prompt: prompt,
         provider: @config[:provider] || "auto",
@@ -79,92 +101,164 @@ module Screeners
 
       result
     rescue StandardError => e
-      Rails.logger.error("[Screeners::AIRanker] Failed to rank candidate #{candidate[:symbol]}: #{e.message}")
+      Rails.logger.error("[Screeners::AIEvaluator] Failed to evaluate candidate #{candidate[:symbol]}: #{e.message}")
       nil
     end
 
-    def build_prompt(candidate)
-      indicators = candidate[:indicators] || candidate[:daily_indicators] || {}
+    def build_structured_input(candidate)
+      indicators = candidate[:indicators] || {}
       metadata = candidate[:metadata] || {}
-      mtf_data = candidate[:multi_timeframe] || metadata[:multi_timeframe] || {}
+      mtf_data = candidate[:multi_timeframe] || {}
+      quality_data = candidate[:trade_quality_breakdown] || {}
 
-      mtf_summary = build_mtf_summary(mtf_data)
+      # Extract key metrics
+      latest_close = indicators[:latest_close] || metadata[:ltp]
+      ema20 = indicators[:ema20]
+      ema50 = indicators[:ema50]
+      atr = indicators[:atr]
 
-      <<~PROMPT
-        You are a technical analysis expert for swing trading (holding period: 5-20 days).
-        Analyze this stock using MULTI-TIMEFRAME analysis (15m, 1h, 1d, 1w).
+      # Calculate distance from breakout/EMA
+      distance_from_breakout = if ema20 && latest_close
+                                  ((latest_close - ema20) / ema20 * 100).round(2)
+                                else
+                                  nil
+                                end
 
-        Provide a JSON response with:
-        - score: 0-100 (overall quality score considering all timeframes)
-        - confidence: 0-100 (confidence in the analysis)
-        - summary: Brief 2-3 sentence multi-timeframe summary
-        - holding_days: Estimated holding period (5-20 days)
-        - risk: "low", "medium", or "high"
-        - timeframe_alignment: "excellent", "good", "fair", or "poor"
+      # Calculate ATR %
+      atr_percent = if atr && latest_close
+                      (atr / latest_close * 100).round(2)
+                    else
+                      nil
+                    end
 
-        Stock: #{candidate[:symbol]}
-        Current Score: #{candidate[:score]}/100
-        MTF Score: #{mtf_data[:score] || candidate[:mtf_score] || 'N/A'}/100
+      # Estimate RR potential
+      rr_potential = estimate_rr_potential(candidate)
 
-        Daily Timeframe Indicators:
-        - EMA20: #{indicators[:ema20]&.round(2) || 'N/A'}
-        - EMA50: #{indicators[:ema50]&.round(2) || 'N/A'}
-        - EMA200: #{indicators[:ema200]&.round(2) || 'N/A'}
-        - RSI: #{indicators[:rsi]&.round(2) || 'N/A'}
-        - ADX: #{indicators[:adx]&.round(2) || 'N/A'}
-        - ATR: #{indicators[:atr]&.round(2) || 'N/A'}
-        - Supertrend: #{indicators[:supertrend]&.dig(:direction) || 'N/A'}
+      # Extract volume trend
+      volume = indicators[:volume] || {}
+      volume_metrics = volume.is_a?(Hash) ? volume : {}
+      volume_trend = if volume_metrics[:spike_ratio]
+                       volume_metrics[:spike_ratio] >= 1.2 ? "increasing" : "stable"
+                     else
+                       "unknown"
+                     end
 
-        #{mtf_summary}
+      # Extract sector trend (if available)
+      sector_trend = extract_sector_trend(candidate)
 
-        #{"Trend Alignment: #{metadata[:trend_alignment].join(', ')}" if metadata[:trend_alignment]}
+      # Check recent runup
+      momentum = metadata[:momentum] || {}
+      recent_runup = momentum[:change_5d] || 0
+      recent_runup_status = if recent_runup > 15
+                               "high"
+                             elsif recent_runup > 10
+                               "moderate"
+                             else
+                               "no"
+                             end
 
-        #{"Momentum: #{metadata[:momentum][:change_5d] || 'N/A'}% (5-day change)" if metadata[:momentum]}
-
-        Consider:
-        - Higher timeframes (weekly, daily) should show bullish trend
-        - Lower timeframes (1h, 15m) should confirm entry timing
-        - Support/resistance levels from weekly and daily charts
-        - Overall structure alignment across all timeframes
-
-        Provide ONLY valid JSON in this format:
-        {
-          "score": 75,
-          "confidence": 80,
-          "summary": "Strong bullish trend across all timeframes with good momentum...",
-          "holding_days": 12,
-          "risk": "medium",
-          "timeframe_alignment": "excellent"
-        }
-      PROMPT
+      {
+        symbol: candidate[:symbol],
+        weekly_trend: mtf_data.dig(:trend_alignment, :aligned) ? "bullish" : "unknown",
+        daily_structure: extract_structure_pattern(mtf_data, metadata),
+        distance_from_breakout: distance_from_breakout ? "#{distance_from_breakout}%" : "unknown",
+        atr_percent: atr_percent ? "#{atr_percent}%" : "unknown",
+        rr_potential: rr_potential ? rr_potential.round(2).to_s : "unknown",
+        volume_trend: volume_trend,
+        sector_trend: sector_trend,
+        recent_runup: recent_runup_status,
+        trade_quality_score: candidate[:trade_quality_score] || candidate[:score] || 0,
+        mtf_score: candidate[:mtf_score] || mtf_data[:multi_timeframe_score] || 0,
+      }
     end
 
-    def build_mtf_summary(mtf_data)
-      return "" if mtf_data.empty?
+    def extract_structure_pattern(mtf_data, metadata)
+      # Check for HH-HL pattern
+      return "HH-HL" if metadata[:structure_pattern] == "HH-HL"
 
-      summary = "\nMulti-Timeframe Analysis:\n"
-
-      if mtf_data[:trend_alignment]
-        ta = mtf_data[:trend_alignment]
-        summary += "- Trend Alignment: #{ta[:aligned] ? 'ALIGNED' : 'NOT ALIGNED'} "
-        summary += "(Bullish: #{ta[:bullish_count]}, Bearish: #{ta[:bearish_count]})\n"
+      # Check for BOS
+      if mtf_data[:structure] && mtf_data[:structure][:bos]
+        return "BOS-#{mtf_data[:structure][:bos][:type]}"
       end
 
-      if mtf_data[:momentum_alignment]
-        ma = mtf_data[:momentum_alignment]
-        summary += "- Momentum Alignment: #{ma[:aligned] ? 'ALIGNED' : 'NOT ALIGNED'} "
-        summary += "(Bullish: #{ma[:bullish_count]}, Bearish: #{ma[:bearish_count]})\n"
-      end
+      "trending"
+    end
 
-      if mtf_data[:timeframes_analyzed]&.any?
-        summary += "- Timeframes Analyzed: #{mtf_data[:timeframes_analyzed].join(', ')}\n"
-      end
+    def extract_sector_trend(candidate)
+      # TODO: Implement sector trend analysis
+      # For now, return neutral
+      "neutral"
+    end
 
-      if mtf_data[:entry_recommendations]&.any?
-        summary += "- Entry Recommendations: #{mtf_data[:entry_recommendations].size} found\n"
-      end
+    def estimate_rr_potential(candidate)
+      indicators = candidate[:indicators] || {}
+      metadata = candidate[:metadata] || {}
+      series_data = {
+        latest_close: indicators[:latest_close] || metadata[:ltp],
+        ema20: indicators[:ema20],
+        ema50: indicators[:ema50],
+        atr: indicators[:atr],
+      }
 
-      summary
+      latest_close = series_data[:latest_close]
+      ema20 = series_data[:ema20]
+      atr = series_data[:atr]
+
+      return nil unless latest_close && atr
+
+      entry_price = ema20 || latest_close
+      stop_loss = entry_price - (atr * 2)
+      risk = (entry_price - stop_loss).abs
+      return nil if risk.zero?
+
+      target_price = entry_price + (risk * 2.5)
+      reward = (target_price - entry_price).abs
+      reward / risk
+    end
+
+    def build_prompt(structured_input)
+      <<~PROMPT
+        You are a professional swing trading analyst evaluating trade setups.
+
+        Analyze this candidate using structured data and provide judgment on:
+        1. Market context (sector momentum, overall market phase)
+        2. Overcrowding (too many similar setups = lower edge)
+        3. Late-stage trend warnings (extended moves, exhaustion signals)
+        4. Risk narratives (what could go wrong)
+        5. Holding period estimation (realistic timeframe)
+        6. Confidence scoring (0-10 scale)
+
+        Structured Input:
+        {
+          "symbol": "#{structured_input[:symbol]}",
+          "weekly_trend": "#{structured_input[:weekly_trend]}",
+          "daily_structure": "#{structured_input[:daily_structure]}",
+          "distance_from_breakout": "#{structured_input[:distance_from_breakout]}",
+          "atr_percent": "#{structured_input[:atr_percent]}",
+          "rr_potential": "#{structured_input[:rr_potential]}",
+          "volume_trend": "#{structured_input[:volume_trend]}",
+          "sector_trend": "#{structured_input[:sector_trend]}",
+          "recent_runup": "#{structured_input[:recent_runup]}",
+          "trade_quality_score": #{structured_input[:trade_quality_score]},
+          "mtf_score": #{structured_input[:mtf_score]}
+        }
+
+        Provide ONLY valid JSON in this exact format:
+        {
+          "confidence": 8.2,
+          "risk": "low",
+          "holding_days": "7-15",
+          "comment": "Fresh continuation setup with good structure and not extended. Sector momentum supports further upside.",
+          "avoid": false
+        }
+
+        Rules:
+        - confidence: 0-10 scale (6.5+ required to pass)
+        - risk: "low", "medium", or "high"
+        - holding_days: realistic range like "7-15" or "10-20"
+        - comment: 1-2 sentence explanation
+        - avoid: true if setup should be skipped (overcrowded, late-stage, high risk)
+      PROMPT
     end
 
     def parse_response(response)
@@ -174,42 +268,45 @@ module Screeners
       json_text = response.strip
       json_text = json_text.gsub(/```json\s*/, "").gsub(/```\s*$/, "") if json_text.include?("```")
 
-        parsed = JSON.parse(json_text)
-        {
-          score: parsed["score"]&.to_f || 0,
-          confidence: parsed["confidence"]&.to_f || 0,
-          summary: parsed["summary"] || "",
-          holding_days: parsed["holding_days"]&.to_i || 10,
-          risk: parsed["risk"]&.downcase || "medium",
-          timeframe_alignment: parsed["timeframe_alignment"]&.downcase || "fair",
-        }
+      parsed = JSON.parse(json_text)
+      {
+        confidence: parsed["confidence"]&.to_f || 0,
+        risk: parsed["risk"]&.downcase || "medium",
+        holding_days: parsed["holding_days"] || "10-15",
+        comment: parsed["comment"] || "",
+        avoid: parsed["avoid"] == true,
+      }
     rescue JSON::ParserError => e
-      Rails.logger.error("[Screeners::AIRanker] Failed to parse JSON response: #{e.message}")
-      Rails.logger.debug { "[Screeners::AIRanker] Response: #{response}" }
+      Rails.logger.error("[Screeners::AIEvaluator] Failed to parse JSON response: #{e.message}")
+      Rails.logger.debug { "[Screeners::AIEvaluator] Response: #{response}" }
       nil
     rescue StandardError => e
-      Rails.logger.error("[Screeners::AIRanker] Error parsing response: #{e.message}")
+      Rails.logger.error("[Screeners::AIEvaluator] Error parsing response: #{e.message}")
       nil
     end
 
     def rate_limit_exceeded?
       today = Time.zone.today.to_s
-      cache_key = "ai_ranker_calls:#{today}"
+      cache_key = "ai_evaluator_calls:#{today}"
       calls_today = Rails.cache.read(cache_key) || 0
       calls_today >= MAX_CALLS_PER_DAY
     end
 
     def track_api_call
       today = Time.zone.today.to_s
-      cache_key = "ai_ranker_calls:#{today}"
+      cache_key = "ai_evaluator_calls:#{today}"
       calls_today = Rails.cache.read(cache_key) || 0
       Rails.cache.write(cache_key, calls_today + 1, expires_in: 1.day)
     end
 
     def handle_rate_limit
-      Rails.logger.warn("[Screeners::AIRanker] Rate limit exceeded (#{MAX_CALLS_PER_DAY} calls/day)")
-      # Return candidates sorted by screener score only
-      @candidates.sort_by { |c| -c[:score] }.first(@limit)
+      Rails.logger.warn("[Screeners::AIEvaluator] Rate limit exceeded (#{MAX_CALLS_PER_DAY} calls/day)")
+      # Return candidates sorted by trade quality score only
+      @candidates.sort_by { |c| -(c[:trade_quality_score] || c[:score] || 0) }.first(@limit)
     end
   end
+
+  # Backward compatibility alias
+  AIRanker = AIEvaluator
 end
+

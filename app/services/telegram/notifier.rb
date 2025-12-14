@@ -6,6 +6,10 @@ module Telegram
       new.send_daily_candidates(candidates)
     end
 
+    def self.send_tiered_candidates(final_result)
+      new.send_tiered_candidates(final_result)
+    end
+
     def self.send_signal_alert(signal)
       new.send_signal_alert(signal)
     end
@@ -33,6 +37,15 @@ module Telegram
       send_message(message)
     rescue StandardError => e
       Rails.logger.error("[Telegram::Notifier] Failed to send daily candidates: #{e.message}")
+    end
+
+    def send_tiered_candidates(final_result)
+      return unless enabled?
+
+      message = AlertFormatter.format_tiered_candidates(final_result)
+      send_message(message)
+    rescue StandardError => e
+      Rails.logger.error("[Telegram::Notifier] Failed to send tiered candidates: #{e.message}")
     end
 
     def send_signal_alert(signal)
