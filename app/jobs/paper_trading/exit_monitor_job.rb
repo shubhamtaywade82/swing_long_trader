@@ -6,7 +6,11 @@ module PaperTrading
   class ExitMonitorJob < ApplicationJob
     include JobLogging
 
-    queue_as :default
+    # Use monitoring queue for periodic checks
+    queue_as :monitoring
+
+    # Retry strategy: exponential backoff, max 2 attempts
+    retry_on StandardError, wait: :exponentially_longer, attempts: 2
 
     def perform(portfolio_id: nil)
       return unless Rails.configuration.x.paper_trading.enabled

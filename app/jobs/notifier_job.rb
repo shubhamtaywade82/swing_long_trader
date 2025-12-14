@@ -6,7 +6,11 @@
 class NotifierJob < ApplicationJob
   include JobLogging
 
-  queue_as :default
+  # Use dedicated notifier queue (low priority, failures are non-critical)
+  queue_as :notifier
+
+  # Don't retry notification failures - they're non-critical
+  discard_on StandardError
 
   def perform(notification_type, payload = {})
     case notification_type.to_sym

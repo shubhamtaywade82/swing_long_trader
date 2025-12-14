@@ -6,7 +6,14 @@ module Orders
   class ProcessApprovedJob < ApplicationJob
     include JobLogging
 
-    queue_as :default
+    # Use execution queue for order processing
+    queue_as :execution
+
+    # Retry strategy: exponential backoff, max 3 attempts
+    retry_on StandardError, wait: :exponentially_longer, attempts: 3
+
+    # Don't retry on validation errors
+    discard_on ArgumentError, if: ->(error) { error.message.include?("validation") }
 
     def perform(order_id: nil)
       # If specific order ID provided, process only that order

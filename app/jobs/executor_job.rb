@@ -5,7 +5,14 @@
 class ExecutorJob < ApplicationJob
   include JobLogging
 
-  queue_as :default
+  # Use dedicated execution queue for order placement
+  queue_as :execution
+
+  # Retry strategy: exponential backoff, max 3 attempts
+  retry_on StandardError, wait: :exponentially_longer, attempts: 3
+
+  # Don't retry on validation errors
+  discard_on ArgumentError, if: ->(error) { error.message.include?("validation") }
 
   def perform(signal_hash, dry_run: nil)
     # Convert signal hash to proper format if needed

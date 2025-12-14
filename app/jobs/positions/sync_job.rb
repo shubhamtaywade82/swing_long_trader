@@ -5,7 +5,11 @@ module Positions
   class SyncJob < ApplicationJob
     include JobLogging
 
-    queue_as :default
+    # Use monitoring queue for position sync jobs
+    queue_as :monitoring
+
+    # Retry strategy: exponential backoff, max 3 attempts
+    retry_on StandardError, wait: :exponentially_longer, attempts: 3
 
     def perform(sync_type: "all")
       case sync_type

@@ -4,7 +4,11 @@ module Candles
   class WeeklyIngestorJob < ApplicationJob
     include JobLogging
 
-    queue_as :default
+    # Use data queue for data ingestion jobs
+    queue_as :data_ingestion
+
+    # Retry strategy: exponential backoff, max 3 attempts
+    retry_on StandardError, wait: :exponentially_longer, attempts: 3
 
     def perform(instruments: nil, weeks_back: nil)
       result = WeeklyIngestor.call(instruments: instruments, weeks_back: weeks_back)

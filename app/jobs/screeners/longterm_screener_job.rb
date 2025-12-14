@@ -4,7 +4,11 @@ module Screeners
   class LongtermScreenerJob < ApplicationJob
     include JobLogging
 
-    queue_as :default
+    # Use dedicated screener queue
+    queue_as :screener
+
+    # Retry strategy: exponential backoff, max 3 attempts
+    retry_on StandardError, wait: :exponentially_longer, attempts: 3
 
     def perform(instruments: nil, limit: nil)
       # Enable persistence by default for background jobs

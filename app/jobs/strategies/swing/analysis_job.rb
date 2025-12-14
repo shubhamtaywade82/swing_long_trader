@@ -3,7 +3,11 @@
 module Strategies
   module Swing
     class AnalysisJob < ApplicationJob
-      queue_as :default
+      # Use background queue for analysis jobs
+      queue_as :background
+
+      # Retry strategy: exponential backoff, max 2 attempts
+      retry_on StandardError, wait: :exponentially_longer, attempts: 2
 
       def perform(candidate_ids)
         candidates = candidate_ids.map { |id| { instrument_id: id } }

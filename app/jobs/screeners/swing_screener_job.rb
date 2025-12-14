@@ -4,7 +4,14 @@ module Screeners
   class SwingScreenerJob < ApplicationJob
     include JobLogging
 
-    queue_as :default
+    # Use dedicated screener queue for isolation and priority
+    queue_as :screener
+
+    # Retry strategy: exponential backoff, max 3 attempts
+    retry_on StandardError, wait: :exponentially_longer, attempts: 3
+
+    # Don't retry on specific errors that won't resolve
+    discard_on ArgumentError, NoMethodError
 
     def perform(instruments: nil, limit: nil)
       Rails.logger.info("[Screeners::SwingScreenerJob] Starting 4-layer decision pipeline")

@@ -8,7 +8,11 @@ module Strategies
     class EntryMonitorJob < ApplicationJob
       include JobLogging
 
-      queue_as :default
+      # Use monitoring queue for entry monitoring
+      queue_as :monitoring
+
+      # Retry strategy: exponential backoff, max 2 attempts
+      retry_on StandardError, wait: :exponentially_longer, attempts: 2
 
       def perform(candidate_ids: nil, dry_run: nil)
         # Get candidates to monitor
