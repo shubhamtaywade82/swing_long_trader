@@ -2,11 +2,24 @@
 
 class ScreenerResult < ApplicationRecord
   belongs_to :instrument
+  belongs_to :screener_run, optional: true
 
   validates :screener_type, presence: true, inclusion: { in: %w[swing longterm] }
+  validates :stage, inclusion: { in: %w[screener ranked ai_evaluated final] }, allow_nil: true
+  validates :ai_status, inclusion: { in: %w[pending evaluated failed skipped] }, allow_nil: true
+  validates :ai_eval_id, uniqueness: true, allow_nil: true
   validates :symbol, presence: true
   validates :score, presence: true, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
   validates :analyzed_at, presence: true
+
+  # CRITICAL RULE: No ScreenerResult without screener_run_id (enforced in production)
+  validate :must_have_screener_run_id, if: -> { Rails.env.production? }
+
+  def must_have_screener_run_id
+    return if screener_run_id.present?
+
+    errors.add(:screener_run_id, "is required - no ScreenerResult may exist without run isolation")
+  end
 
   scope :swing, -> { where(screener_type: "swing") }
   scope :longterm, -> { where(screener_type: "longterm") }
@@ -15,6 +28,11 @@ class ScreenerResult < ApplicationRecord
   scope :top_scored, ->(limit = 50) { order(score: :desc).limit(limit) }
   scope :today, -> { by_date(Date.current) }
   scope :latest, -> { where(analyzed_at: maximum(:analyzed_at)) }
+  scope :by_run, ->(run_id) { where(screener_run_id: run_id) }
+  scope :by_stage, ->(stage) { where(stage: stage) }
+  scope :ai_evaluated, -> { where(ai_status: "evaluated") }
+  scope :ai_pending, -> { where(ai_status: ["pending", nil]) }
+  scope :ai_failed, -> { where(ai_status: "failed") }
 
   def indicators_hash
     return {} if indicators.blank?
@@ -40,6 +58,14 @@ class ScreenerResult < ApplicationRecord
     {}
   end
 
+  def trade_quality_breakdown_hash
+    return {} if trade_quality_breakdown.blank?
+
+    JSON.parse(trade_quality_breakdown)
+  rescue JSON::ParserError
+    {}
+  end
+
   # Convert to candidate hash format for compatibility with existing views
   def to_candidate_hash
     {
@@ -51,6 +77,13 @@ class ScreenerResult < ApplicationRecord
       indicators: indicators_hash,
       metadata: metadata_hash,
       multi_timeframe: multi_timeframe_hash,
+      trade_quality_score: trade_quality_score&.to_f,
+      trade_quality_breakdown: trade_quality_breakdown_hash,
+      ai_confidence: ai_confidence&.to_f,
+      ai_risk: ai_risk,
+      ai_holding_days: ai_holding_days,
+      ai_comment: ai_comment,
+      ai_avoid: ai_avoid || false,
     }
   end
 
@@ -68,11 +101,23 @@ class ScreenerResult < ApplicationRecord
   # Get or create result for an instrument (upsert)
   def self.upsert_result(attributes)
     analyzed_at = attributes[:analyzed_at] || Time.current
-    result = find_or_initialize_by(
-      instrument_id: attributes[:instrument_id],
-      screener_type: attributes[:screener_type],
-      analyzed_at: analyzed_at.beginning_of_minute, # Round to minute for grouping
-    )
+    screener_run_id = attributes[:screener_run_id]
+    stage = attributes[:stage] || "screener"
+
+    # Find by run_id + instrument_id if run_id provided, otherwise fallback to old logic
+    result = if screener_run_id
+               find_or_initialize_by(
+                 screener_run_id: screener_run_id,
+                 instrument_id: attributes[:instrument_id],
+                 screener_type: attributes[:screener_type],
+               )
+             else
+               find_or_initialize_by(
+                 instrument_id: attributes[:instrument_id],
+                 screener_type: attributes[:screener_type],
+                 analyzed_at: analyzed_at.beginning_of_minute, # Round to minute for grouping
+               )
+             end
 
     result.assign_attributes(
       symbol: attributes[:symbol],
@@ -82,6 +127,17 @@ class ScreenerResult < ApplicationRecord
       indicators: attributes[:indicators].to_json,
       metadata: attributes[:metadata].to_json,
       multi_timeframe: attributes[:multi_timeframe].to_json,
+      trade_quality_score: attributes[:trade_quality_score],
+      trade_quality_breakdown: attributes[:trade_quality_breakdown]&.to_json,
+      ai_confidence: attributes[:ai_confidence],
+      ai_risk: attributes[:ai_risk],
+      ai_holding_days: attributes[:ai_holding_days],
+      ai_comment: attributes[:ai_comment],
+      ai_avoid: attributes[:ai_avoid] || false,
+      screener_run_id: screener_run_id,
+      stage: stage,
+      ai_status: attributes[:ai_status],
+      ai_eval_id: attributes[:ai_eval_id],
       analyzed_at: analyzed_at,
     )
 

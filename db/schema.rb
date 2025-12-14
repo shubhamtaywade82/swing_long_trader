@@ -10,9 +10,19 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_13_190044) do
+ActiveRecord::Schema[8.1].define(version: 2025_12_14_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "ai_calibrations", force: :cascade do |t|
+    t.datetime "calibrated_at", null: false
+    t.json "calibration_data"
+    t.datetime "created_at", null: false
+    t.text "notes"
+    t.integer "total_outcomes", null: false
+    t.datetime "updated_at", null: false
+    t.index ["calibrated_at"], name: "index_ai_calibrations_on_calibrated_at", order: :desc
+  end
 
   create_table "backtest_positions", force: :cascade do |t|
     t.bigint "backtest_run_id", null: false
@@ -400,6 +410,13 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_13_190044) do
   end
 
   create_table "screener_results", force: :cascade do |t|
+    t.boolean "ai_avoid", default: false
+    t.text "ai_comment"
+    t.decimal "ai_confidence", precision: 5, scale: 2
+    t.string "ai_eval_id"
+    t.string "ai_holding_days"
+    t.string "ai_risk"
+    t.string "ai_status"
     t.datetime "analyzed_at", null: false
     t.decimal "base_score", precision: 8, scale: 2, default: "0.0"
     t.datetime "created_at", null: false
@@ -409,13 +426,38 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_13_190044) do
     t.decimal "mtf_score", precision: 8, scale: 2, default: "0.0"
     t.text "multi_timeframe"
     t.decimal "score", precision: 8, scale: 2, null: false
+    t.bigint "screener_run_id"
     t.string "screener_type", null: false
+    t.string "stage"
     t.string "symbol", null: false
+    t.text "trade_quality_breakdown"
+    t.decimal "trade_quality_score", precision: 8, scale: 2
     t.datetime "updated_at", null: false
+    t.index ["ai_confidence"], name: "index_screener_results_on_ai_confidence", order: :desc
+    t.index ["ai_eval_id"], name: "index_screener_results_on_ai_eval_id", unique: true
     t.index ["instrument_id"], name: "index_screener_results_on_instrument_id"
+    t.index ["screener_run_id"], name: "index_screener_results_on_screener_run_id"
     t.index ["screener_type", "analyzed_at"], name: "index_screener_results_on_screener_type_and_analyzed_at", order: { analyzed_at: :desc }
     t.index ["screener_type", "score"], name: "index_screener_results_on_screener_type_and_score", order: { score: :desc }
     t.index ["symbol", "screener_type", "analyzed_at"], name: "index_screener_results_on_symbol_type_analyzed"
+    t.index ["trade_quality_score"], name: "index_screener_results_on_trade_quality_score", order: :desc
+  end
+
+  create_table "screener_runs", force: :cascade do |t|
+    t.integer "ai_calls_count", default: 0
+    t.decimal "ai_cost", precision: 10, scale: 4, default: "0.0"
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.text "error_message"
+    t.string "market_regime"
+    t.json "metrics"
+    t.string "screener_type", null: false
+    t.datetime "started_at", null: false
+    t.string "status", default: "running"
+    t.integer "universe_size", null: false
+    t.datetime "updated_at", null: false
+    t.index ["screener_type", "started_at"], name: "index_screener_runs_on_screener_type_and_started_at", order: { started_at: :desc }
+    t.index ["status"], name: "index_screener_runs_on_status"
   end
 
   create_table "settings", force: :cascade do |t|
@@ -585,6 +627,47 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_13_190044) do
     t.index ["portfolio_id"], name: "index_swing_risk_configs_on_portfolio_id"
   end
 
+  create_table "trade_outcomes", force: :cascade do |t|
+    t.decimal "ai_confidence", precision: 5, scale: 2
+    t.datetime "created_at", null: false
+    t.decimal "entry_price", precision: 15, scale: 4, null: false
+    t.datetime "entry_time", null: false
+    t.decimal "exit_price", precision: 15, scale: 4
+    t.string "exit_reason"
+    t.datetime "exit_time"
+    t.integer "holding_days"
+    t.bigint "instrument_id", null: false
+    t.text "notes"
+    t.decimal "pnl", precision: 15, scale: 4
+    t.decimal "pnl_percent", precision: 8, scale: 2
+    t.integer "position_id"
+    t.string "position_type"
+    t.integer "quantity", null: false
+    t.decimal "r_multiple", precision: 8, scale: 2
+    t.decimal "risk_amount", precision: 15, scale: 4
+    t.decimal "risk_per_share", precision: 15, scale: 4
+    t.bigint "screener_run_id", null: false
+    t.decimal "screener_score", precision: 8, scale: 2
+    t.string "stage"
+    t.string "status", default: "open"
+    t.decimal "stop_loss", precision: 15, scale: 4
+    t.string "symbol", null: false
+    t.decimal "take_profit", precision: 15, scale: 4
+    t.string "tier"
+    t.decimal "trade_quality_score", precision: 8, scale: 2
+    t.string "trading_mode", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ai_confidence"], name: "index_trade_outcomes_on_ai_confidence", order: :desc
+    t.index ["entry_time"], name: "index_trade_outcomes_on_entry_time", order: :desc
+    t.index ["exit_time"], name: "index_trade_outcomes_on_exit_time", order: :desc
+    t.index ["instrument_id", "status"], name: "index_trade_outcomes_on_instrument_id_and_status"
+    t.index ["instrument_id"], name: "index_trade_outcomes_on_instrument_id"
+    t.index ["r_multiple"], name: "index_trade_outcomes_on_r_multiple", order: :desc
+    t.index ["screener_run_id", "status"], name: "index_trade_outcomes_on_screener_run_id_and_status"
+    t.index ["screener_run_id"], name: "index_trade_outcomes_on_screener_run_id"
+    t.index ["trading_mode", "status"], name: "index_trade_outcomes_on_trading_mode_and_status"
+  end
+
   create_table "trading_signals", force: :cascade do |t|
     t.decimal "available_balance", precision: 15, scale: 2
     t.decimal "balance_shortfall", precision: 15, scale: 2
@@ -658,6 +741,7 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_13_190044) do
   add_foreign_key "positions", "paper_portfolios"
   add_foreign_key "positions", "trading_signals"
   add_foreign_key "screener_results", "instruments"
+  add_foreign_key "screener_results", "screener_runs"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
@@ -667,6 +751,8 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_13_190044) do
   add_foreign_key "swing_positions", "capital_allocation_portfolios", column: "portfolio_id"
   add_foreign_key "swing_positions", "instruments"
   add_foreign_key "swing_risk_configs", "capital_allocation_portfolios", column: "portfolio_id"
+  add_foreign_key "trade_outcomes", "instruments"
+  add_foreign_key "trade_outcomes", "screener_runs"
   add_foreign_key "trading_signals", "instruments"
   add_foreign_key "trading_signals", "orders"
   add_foreign_key "trading_signals", "paper_positions"

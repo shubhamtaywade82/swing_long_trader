@@ -1,186 +1,72 @@
 # frozen_string_literal: true
 
 namespace :portfolios do
-  desc "Create daily portfolio snapshot for today"
-  task snapshot: :environment do
-    date = Time.zone.today
-    puts "Creating portfolio snapshot for #{date}..."
+  desc "Initialize paper trading portfolio with capital"
+  task initialize_paper: :environment do
+    puts "Initializing paper trading portfolio..."
 
-    result = Portfolios::DailySnapshot.create_for_date(date: date, portfolio_type: "all")
+    result = Portfolios::PaperPortfolioInitializer.call
 
-    if result[:live] && result[:live][:success]
-      live = result[:live][:portfolio]
-      puts "\n🟢 LIVE PORTFOLIO:"
-      puts "   Date: #{live.portfolio_date}"
-      puts "   Opening Capital: ₹#{live.opening_capital}"
-      puts "   Closing Capital: ₹#{live.closing_capital}"
-      puts "   Total Equity: ₹#{live.total_equity}"
-      puts "   Realized P&L: ₹#{live.realized_pnl}"
-      puts "   Unrealized P&L: ₹#{live.unrealized_pnl}"
-      puts "   Open Positions: #{live.open_positions_count}"
-      puts "   Closed Today: #{live.closed_positions_count}"
-    end
-
-    if result[:paper] && result[:paper][:success]
-      paper = result[:paper][:portfolio]
-      puts "\n📘 PAPER PORTFOLIO:"
-      puts "   Date: #{paper.portfolio_date}"
-      puts "   Opening Capital: ₹#{paper.opening_capital}"
-      puts "   Closing Capital: ₹#{paper.closing_capital}"
-      puts "   Total Equity: ₹#{paper.total_equity}"
-      puts "   Realized P&L: ₹#{paper.realized_pnl}"
-      puts "   Unrealized P&L: ₹#{paper.unrealized_pnl}"
-      puts "   Open Positions: #{paper.open_positions_count}"
-      puts "   Closed Today: #{paper.closed_positions_count}"
-    end
-  end
-
-  desc "Create portfolio snapshot for specific date"
-  task :snapshot_date, [:date] => :environment do |_t, args|
-    date_str = args[:date] || Time.zone.today.to_s
-    date = Date.parse(date_str)
-    puts "Creating portfolio snapshot for #{date}..."
-
-    result = Portfolios::DailySnapshot.create_for_date(date: date, portfolio_type: "all")
-
-    if result[:live] && result[:live][:success]
-      puts "✅ Live portfolio snapshot created"
-    elsif result[:live]
-      puts "❌ Live portfolio failed: #{result[:live][:error]}"
-    end
-
-    if result[:paper] && result[:paper][:success]
-      puts "✅ Paper portfolio snapshot created"
-    elsif result[:paper]
-      puts "❌ Paper portfolio failed: #{result[:paper][:error]}"
-    end
-  end
-
-  desc "Show portfolio for today"
-  task show: :environment do
-    date = Time.zone.today
-    show_portfolio(date)
-  end
-
-  desc "Show portfolio for specific date"
-  task :show_date, [:date] => :environment do |_t, args|
-    date_str = args[:date] || Time.zone.today.to_s
-    date = Date.parse(date_str)
-    show_portfolio(date)
-  end
-
-  desc "List all portfolio snapshots"
-  task list: :environment do
-    puts "📊 PORTFOLIO SNAPSHOTS"
-    puts "=" * 60
-
-    live_portfolios = Portfolio.live.recent.limit(10)
-    paper_portfolios = Portfolio.paper.recent.limit(10)
-
-    puts "\n🟢 LIVE PORTFOLIOS:"
-    if live_portfolios.any?
-      live_portfolios.each do |p|
-        puts "  #{p.portfolio_date} - Equity: ₹#{p.total_equity}, P&L: ₹#{p.realized_pnl + p.unrealized_pnl} (#{p.utilization_pct}%)"
-        puts "    Open: #{p.open_positions_count}, Closed: #{p.closed_positions_count}"
-      end
+    if result[:success]
+      portfolio = result[:portfolio]
+      puts "✅ Paper portfolio initialized successfully!"
+      puts "   Portfolio ID: #{portfolio.id}"
+      puts "   Name: #{portfolio.name}"
+      puts "   Mode: #{portfolio.mode}"
+      puts "   Total Equity: ₹#{portfolio.total_equity}"
+      puts "   Swing Capital: ₹#{portfolio.swing_capital}"
+      puts "   Available Swing Capital: ₹#{portfolio.available_swing_capital}"
+      puts "   Long-term Capital: ₹#{portfolio.long_term_capital}"
+      puts "   Available Cash: ₹#{portfolio.available_cash}"
     else
-      puts "  No live portfolios found"
-    end
-
-    puts "\n📘 PAPER PORTFOLIOS:"
-    if paper_portfolios.any?
-      paper_portfolios.each do |p|
-        puts "  #{p.portfolio_date} - Equity: ₹#{p.total_equity}, P&L: ₹#{p.realized_pnl + p.unrealized_pnl} (#{p.utilization_pct}%)"
-        puts "    Open: #{p.open_positions_count}, Closed: #{p.closed_positions_count}"
-      end
-    else
-      puts "  No paper portfolios found"
+      puts "❌ Failed to initialize paper portfolio: #{result[:error]}"
+      exit 1
     end
   end
 
-  def show_portfolio(date)
-    puts "📊 PORTFOLIO SNAPSHOT - #{date}"
-    puts "=" * 60
+  desc "Rebalance paper portfolio capital allocation"
+  task rebalance_paper: :environment do
+    portfolio = CapitalAllocationPortfolio.paper.active.first
 
-    live = Portfolio.find_by(portfolio_type: "live", portfolio_date: date)
-    paper = Portfolio.find_by(portfolio_type: "paper", portfolio_date: date)
-
-    if live
-      puts "\n🟢 LIVE PORTFOLIO:"
-      puts "   Opening Capital: ₹#{live.opening_capital}"
-      puts "   Closing Capital: ₹#{live.closing_capital}"
-      puts "   Total Equity: ₹#{live.total_equity}"
-      puts "   Available Capital: ₹#{live.available_capital}"
-      puts "   Realized P&L: ₹#{live.realized_pnl}"
-      puts "   Unrealized P&L: ₹#{live.unrealized_pnl}"
-      total_pnl = (live.realized_pnl || 0) + (live.unrealized_pnl || 0)
-      pnl_pct = live.opening_capital.positive? ? ((total_pnl / live.opening_capital) * 100).round(2) : 0
-      puts "   Total P&L: ₹#{total_pnl} (#{pnl_pct}%)"
-      puts "   Open Positions: #{live.open_positions_count}"
-      puts "   Closed Today: #{live.closed_positions_count}"
-      puts "   Total Exposure: ₹#{live.total_exposure}"
-      puts "   Utilization: #{live.utilization_pct}%"
-      puts "   Win Rate: #{live.win_rate}%"
-
-      # Show continued positions
-      continued = live.continued_positions
-      if continued.any?
-        puts "\n   📌 Continued Positions (#{continued.size}):"
-        continued.each do |pos|
-          puts "      #{pos.symbol} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}, P&L: ₹#{pos.unrealized_pnl}"
-        end
-      end
-
-      # Show new positions
-      new_pos = live.new_positions
-      if new_pos.any?
-        puts "\n   🆕 New Positions Today (#{new_pos.size}):"
-        new_pos.each do |pos|
-          puts "      #{pos.symbol} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}"
-        end
-      end
-    else
-      puts "\n🟢 LIVE PORTFOLIO: Not found for #{date}"
-      puts "   Run: rails portfolios:snapshot_date[#{date}]"
+    unless portfolio
+      puts "❌ No paper portfolio found. Run 'rake portfolios:initialize_paper' first."
+      exit 1
     end
 
-    if paper
-      puts "\n📘 PAPER PORTFOLIO:"
-      puts "   Opening Capital: ₹#{paper.opening_capital}"
-      puts "   Closing Capital: ₹#{paper.closing_capital}"
-      puts "   Total Equity: ₹#{paper.total_equity}"
-      puts "   Available Capital: ₹#{paper.available_capital}"
-      puts "   Realized P&L: ₹#{paper.realized_pnl}"
-      puts "   Unrealized P&L: ₹#{paper.unrealized_pnl}"
-      total_pnl = (paper.realized_pnl || 0) + (paper.unrealized_pnl || 0)
-      pnl_pct = paper.opening_capital.positive? ? ((total_pnl / paper.opening_capital) * 100).round(2) : 0
-      puts "   Total P&L: ₹#{total_pnl} (#{pnl_pct}%)"
-      puts "   Open Positions: #{paper.open_positions_count}"
-      puts "   Closed Today: #{paper.closed_positions_count}"
-      puts "   Total Exposure: ₹#{paper.total_exposure}"
-      puts "   Utilization: #{paper.utilization_pct}%"
-      puts "   Win Rate: #{paper.win_rate}%"
+    puts "Rebalancing paper portfolio capital..."
+    puts "   Before: swing_capital=₹#{portfolio.swing_capital}, available=₹#{portfolio.available_swing_capital}"
 
-      # Show continued positions
-      continued = paper.continued_positions
-      if continued.any?
-        puts "\n   📌 Continued Positions (#{continued.size}):"
-        continued.each do |pos|
-          puts "      #{pos.symbol} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}, P&L: ₹#{pos.unrealized_pnl}"
-        end
-      end
+    portfolio.rebalance_capital!
+    portfolio.reload
 
-      # Show new positions
-      new_pos = paper.new_positions
-      if new_pos.any?
-        puts "\n   🆕 New Positions Today (#{new_pos.size}):"
-        new_pos.each do |pos|
-          puts "      #{pos.symbol} #{pos.direction.upcase} - Entry: ₹#{pos.entry_price}, Current: ₹#{pos.current_price}"
-        end
-      end
-    else
-      puts "\n📘 PAPER PORTFOLIO: Not found for #{date}"
-      puts "   Run: rails portfolios:snapshot_date[#{date}]"
+    puts "✅ Portfolio rebalanced!"
+    puts "   After: swing_capital=₹#{portfolio.swing_capital}, available=₹#{portfolio.available_swing_capital}"
+  end
+
+  desc "Show paper portfolio status"
+  task status: :environment do
+    portfolio = CapitalAllocationPortfolio.paper.active.first
+
+    unless portfolio
+      puts "❌ No paper portfolio found."
+      exit 1
     end
+
+    puts "Paper Portfolio Status:"
+    puts "=" * 50
+    puts "ID: #{portfolio.id}"
+    puts "Name: #{portfolio.name}"
+    puts "Mode: #{portfolio.mode}"
+    puts "Total Equity: ₹#{portfolio.total_equity}"
+    puts "Swing Capital: ₹#{portfolio.swing_capital}"
+    puts "Available Swing Capital: ₹#{portfolio.available_swing_capital}"
+    puts "Long-term Capital: ₹#{portfolio.long_term_capital}"
+    puts "Available Cash: ₹#{portfolio.available_cash}"
+    puts "Open Positions: #{portfolio.open_swing_positions.count}"
+    puts "Total Swing Exposure: ₹#{portfolio.total_swing_exposure}"
+    puts "Realized P&L: ₹#{portfolio.realized_pnl}"
+    puts "Unrealized P&L: ₹#{portfolio.unrealized_pnl}"
+    puts "Max Drawdown: #{portfolio.max_drawdown}%"
+    puts "=" * 50
   end
 end

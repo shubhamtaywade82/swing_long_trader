@@ -22,6 +22,10 @@ module Telegram
       new.format_error_alert(error_message, context: context)
     end
 
+    def self.format_tiered_candidates(final_result)
+      new.format_tiered_candidates(final_result)
+    end
+
     def format_daily_candidates(candidates)
       return "📋 <b>Daily Candidates</b>\n\nNo candidates found today." if candidates.empty?
 
@@ -165,6 +169,92 @@ module Telegram
 
       message += "\n⏰ #{Time.current.strftime('%H:%M:%S IST')}"
 
+      message
+    end
+
+    def format_tiered_candidates(final_result)
+      summary = final_result[:summary] || {}
+      tiers = final_result[:tiers] || {}
+      tier_1 = tiers[:tier_1] || []
+      tier_2 = tiers[:tier_2] || []
+      tier_3 = tiers[:tier_3] || []
+
+      message = "📊 <b>Swing Trading Candidates</b>\n\n"
+      message += "📈 Screened: #{summary[:swing_count] || 0} → Selected: #{summary[:swing_selected] || 0}\n\n"
+
+      # Tier 1: Actionable Now (3-5)
+      if tier_1.any?
+        message += "✅ <b>TIER 1: Actionable Now</b> (#{tier_1.size})\n"
+        tier_1.each_with_index do |candidate, index|
+          message += format_candidate(candidate, index + 1, actionable: true)
+        end
+        message += "\n"
+      end
+
+      # Tier 2: Watchlist / Waiting (5-10)
+      if tier_2.any?
+        message += "👀 <b>TIER 2: Watchlist / Waiting</b> (#{tier_2.size})\n"
+        tier_2.first(5).each_with_index do |candidate, index|
+          message += format_candidate(candidate, index + 1, actionable: false)
+        end
+        message += "\n"
+      end
+
+      # Tier 3: Market Strength (Rest)
+      if tier_3.any?
+        message += "📊 <b>TIER 3: Market Strength</b> (#{tier_3.size} bullish but extended)\n"
+        message += "<i>Informational only - not actionable</i>\n\n"
+      end
+
+      message += "⏰ #{Time.current.strftime('%Y-%m-%d %H:%M:%S IST')}"
+
+      message
+    end
+
+    def format_candidate(candidate, rank, actionable: false)
+      symbol = candidate[:symbol] || "N/A"
+      combined_score = candidate[:combined_score] || candidate[:score] || 0
+      quality_score = candidate[:trade_quality_score]
+      ai_confidence = candidate[:ai_confidence]
+      sector = candidate[:sector]
+
+      message = "#{rank}. <b>#{symbol}</b>"
+      message += " (#{sector})" if sector
+      message += "\n"
+
+      # Scores
+      score_parts = []
+      score_parts << "Score: #{combined_score.round(1)}" if combined_score.positive?
+      score_parts << "Quality: #{quality_score.round(1)}" if quality_score
+      score_parts << "AI: #{ai_confidence.round(1)}/10" if ai_confidence
+      message += "   #{score_parts.join(' | ')}\n" if score_parts.any?
+
+      # AI comment if available
+      if candidate[:ai_comment].present?
+        message += "   💬 #{candidate[:ai_comment].truncate(80)}\n"
+      end
+
+      # Actionable details
+      if actionable && candidate[:indicators]
+        indicators = candidate[:indicators]
+        latest_close = indicators[:latest_close]
+        ema20 = indicators[:ema20]
+        atr = indicators[:atr]
+
+        if latest_close && ema20 && atr
+          # Estimate entry, SL, TP
+          entry = ema20 || latest_close
+          sl = entry - (atr * 2)
+          tp = entry + (atr * 2.5)
+          rr = ((tp - entry) / (entry - sl)).round(2) if entry > sl
+
+          message += "   💰 Entry: ₹#{entry.round(2)} | SL: ₹#{sl.round(2)} | TP: ₹#{tp.round(2)}"
+          message += " | RR: 1:#{rr}" if rr
+          message += "\n"
+        end
+      end
+
+      message += "\n"
       message
     end
 

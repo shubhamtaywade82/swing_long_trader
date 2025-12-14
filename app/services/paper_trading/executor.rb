@@ -39,6 +39,9 @@ module PaperTrading
         signal: @signal,
       )
 
+      # Create TradeOutcome if this is from a screener run
+      create_trade_outcome_if_from_screener(position, signal_record)
+
       # Update signal record as executed
       signal_record&.mark_as_executed!(
         execution_type: "paper",
@@ -130,6 +133,64 @@ module PaperTrading
       Telegram::Notifier.send_error_alert(message, context: "Paper Trade Entry")
     rescue StandardError => e
       log_error("Failed to send entry notification: #{e.message}")
+    end
+
+    def create_trade_outcome_if_from_screener(position, signal_record)
+      # Check if signal came from a screener run
+      return unless signal_record
+
+      # Try to find screener_run_id from signal metadata
+      metadata = signal_record.metadata_hash || {}
+      screener_run_id = metadata["screener_run_id"] || metadata[:screener_run_id]
+
+      # If no screener_run_id, check if signal has screener_run_id attribute
+      screener_run_id ||= signal_record.respond_to?(:screener_run_id) ? signal_record.screener_run_id : nil
+
+      # If still no screener_run_id, try to find from recent screener results
+      unless screener_run_id
+        screener_result = ScreenerResult
+                          .where(instrument_id: @instrument.id, symbol: @signal[:symbol] || @instrument.symbol_name)
+                          .where("analyzed_at > ?", 1.hour.ago)
+                          .by_stage("final")
+                          .order(analyzed_at: :desc)
+                          .first
+
+        screener_run_id = screener_result&.screener_run_id
+      end
+
+      return unless screener_run_id
+
+      # Find screener run
+      screener_run = ScreenerRun.find_by(id: screener_run_id)
+      return unless screener_run
+
+      # Get candidate data from screener result
+      screener_result = screener_run.screener_results
+                                     .find_by(instrument_id: @instrument.id)
+
+      return unless screener_result
+
+      # Create TradeOutcome
+      candidate_hash = screener_result.to_candidate_hash.merge(
+        tier: metadata["tier"] || metadata[:tier] || "tier_1",
+        stage: "final",
+      )
+
+      result = TradeOutcomes::Creator.call(
+        screener_run: screener_run,
+        candidate: candidate_hash,
+        position: position,
+        trading_mode: "paper",
+      )
+
+      if result[:success]
+        log_info("Created TradeOutcome for paper position #{position.id} from screener run ##{screener_run_id}")
+      else
+        log_error("Failed to create TradeOutcome: #{result[:error]}")
+      end
+    rescue StandardError => e
+      log_error("Failed to create TradeOutcome from screener: #{e.message}")
+      # Don't fail position creation if outcome creation fails
     end
   end
 end

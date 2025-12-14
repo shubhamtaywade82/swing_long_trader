@@ -6,7 +6,11 @@ module Screeners
   class AutomatedScreenerJob < ApplicationJob
     include JobLogging
 
-    queue_as :default
+    # Use dedicated screener queue
+    queue_as :screener
+
+    # Retry strategy: exponential backoff, max 2 attempts (scheduled job)
+    retry_on StandardError, wait: :exponentially_longer, attempts: 2
 
     def perform(screener_type: "swing")
       # Check if market is open

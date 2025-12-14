@@ -3,7 +3,11 @@
 class MonitorJob < ApplicationJob
   include JobLogging
 
-  queue_as :default
+  # Use monitoring queue for health checks
+  queue_as :monitoring
+
+  # Don't retry monitoring failures - they're informational
+  discard_on StandardError
 
   def perform
     checks = {

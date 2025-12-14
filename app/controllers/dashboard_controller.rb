@@ -6,7 +6,12 @@ class DashboardController < ApplicationController
 
     if mode == "paper"
       @positions = Position.paper.open.includes(:instrument).order(opened_at: :desc).limit(20)
-      @portfolio = PaperPortfolio.active.first
+      @portfolio = CapitalAllocationPortfolio.paper.active.first
+      # Ensure portfolio is initialized with balance
+      if @portfolio.nil? || @portfolio.total_equity.zero?
+        initializer_result = Portfolios::PaperPortfolioInitializer.call
+        @portfolio = initializer_result[:portfolio] if initializer_result[:success]
+      end
     else
       @positions = Position.live.open.includes(:instrument).order(opened_at: :desc).limit(20)
       @portfolio = Portfolio.live.recent.first
@@ -27,7 +32,12 @@ class DashboardController < ApplicationController
 
     # Portfolio metrics
     @live_portfolio = Portfolio.live.recent.first
-    @paper_portfolio = PaperPortfolio.active.first
+    @paper_portfolio = CapitalAllocationPortfolio.paper.active.first
+    # Ensure paper portfolio is initialized with balance
+    if mode == "paper" && (@paper_portfolio.nil? || @paper_portfolio.total_equity.zero?)
+      initializer_result = Portfolios::PaperPortfolioInitializer.call
+      @paper_portfolio = initializer_result[:portfolio] if initializer_result[:success]
+    end
 
     # Get balance/wallet information
     @balance_info = get_balance_info(mode)
@@ -467,34 +477,49 @@ class DashboardController < ApplicationController
 
   def get_balance_info(mode)
     if mode == "paper"
-      portfolio = PaperPortfolio.active.first || PaperTrading::Portfolio.find_or_create_default
+      # Use CapitalAllocationPortfolio and ensure it's initialized
+      portfolio = CapitalAllocationPortfolio.paper.active.first
+
+      # Initialize portfolio if it doesn't exist or has zero balance
+      if portfolio.nil? || portfolio.total_equity.zero?
+        initializer_result = Portfolios::PaperPortfolioInitializer.call
+        if initializer_result[:success]
+          portfolio = initializer_result[:portfolio]
+        else
+          Rails.logger.error("[DashboardController] Failed to initialize paper portfolio: #{initializer_result[:error]}")
+          # Return zero balance if initialization fails
+          return {
+            available_balance: 0,
+            total_equity: 0,
+            capital: 0,
+            reserved_capital: 0,
+            unrealized_pnl: 0,
+            realized_pnl: 0,
+            total_exposure: 0,
+            utilization_pct: 0,
+            type: "paper",
+          }
+        end
+      end
 
       # Recalculate from actual positions (unified Position model)
       open_positions = Position.paper.open.includes(:instrument)
-      calculated_reserved = open_positions.sum { |pos| (pos.entry_price || 0) * (pos.quantity || 0) }
-      calculated_unrealized = open_positions.sum { |pos| pos.unrealized_pnl || 0 }
       calculated_exposure = open_positions.sum { |pos| (pos.current_price || 0) * (pos.quantity || 0) }
-
-      # Update portfolio if values differ
-      if portfolio.reserved_capital != calculated_reserved
-        portfolio.update_column(:reserved_capital, calculated_reserved)
-      end
-      if portfolio.pnl_unrealized != calculated_unrealized
-        portfolio.update_column(:pnl_unrealized, calculated_unrealized)
-      end
+      calculated_unrealized = open_positions.sum { |pos| pos.unrealized_pnl || 0 }
 
       # Update equity to ensure it's current
       portfolio.update_equity! if portfolio.respond_to?(:update_equity!)
+      portfolio.reload
 
       {
-        available_balance: portfolio.available_capital || 0,
-        total_equity: portfolio.total_equity || portfolio.capital || 0,
-        capital: portfolio.capital || 0,
-        reserved_capital: portfolio.reserved_capital || 0,
-        unrealized_pnl: portfolio.pnl_unrealized || 0,
-        realized_pnl: portfolio.pnl_realized || 0,
+        available_balance: portfolio.available_swing_capital || 0,
+        total_equity: portfolio.total_equity || 0,
+        capital: portfolio.total_equity || 0,
+        reserved_capital: portfolio.total_swing_exposure || 0,
+        unrealized_pnl: portfolio.unrealized_pnl || 0,
+        realized_pnl: portfolio.realized_pnl || 0,
         total_exposure: calculated_exposure,
-        utilization_pct: portfolio.capital.positive? ? (calculated_exposure / portfolio.capital * 100).round(2) : 0,
+        utilization_pct: portfolio.swing_capital.positive? ? (calculated_exposure / portfolio.swing_capital * 100).round(2) : 0,
         type: "paper",
       }
     else

@@ -1,96 +1,121 @@
 # frozen_string_literal: true
 
 namespace :solid_queue do
-  desc "Verify SolidQueue tables exist"
-  task verify: :environment do
-    required_tables = %w[
-      solid_queue_jobs
-      solid_queue_claimed_executions
-      solid_queue_failed_executions
-      solid_queue_recurring_executions
-      solid_queue_scheduled_executions
-      solid_queue_blocked_executions
-    ]
-
-    puts "🔍 Verifying SolidQueue tables..."
+  desc "Check Solid Queue configuration and status"
+  task check: :environment do
+    puts "🔍 Solid Queue Configuration Check"
     puts "=" * 60
 
-    all_exist = true
-    required_tables.each do |table_name|
-      exists = ActiveRecord::Base.connection.table_exists?(table_name)
-      status = exists ? "✅" : "❌"
-      puts "#{status} #{table_name}"
-
-      all_exist = false unless exists
+    # Check queue adapter
+    adapter = Rails.application.config.active_job.queue_adapter
+    puts "Queue Adapter: #{adapter}"
+    unless adapter == :solid_queue
+      puts "⚠️  WARNING: Queue adapter is not :solid_queue"
     end
 
-    puts ""
-    if all_exist
-      puts "✅ All SolidQueue tables exist!"
-      puts ""
-      puts "To install SolidQueue tables, run:"
-      puts "  rails solid_queue:install"
-      puts "  rails db:migrate"
+    # Check tables exist
+    if ActiveRecord::Base.connection.table_exists?("solid_queue_jobs")
+      puts "✅ solid_queue_jobs table exists"
     else
-      puts "❌ Some SolidQueue tables are missing!"
-      puts ""
-      puts "To install SolidQueue, run:"
-      puts "  rails solid_queue:install"
-      puts "  rails db:migrate"
-      exit 1
-    end
-  end
-
-  desc "Show SolidQueue status"
-  task status: :environment do
-    unless ActiveRecord::Base.connection.table_exists?("solid_queue_jobs")
-      puts "❌ SolidQueue is not installed"
-      puts "   Run: rails solid_queue:install && rails db:migrate"
-      exit 1
+      puts "❌ solid_queue_jobs table missing - run migrations"
     end
 
-    pending = SolidQueue::Job.where(finished_at: nil).count
+    # Check job counts
+    pending = SolidQueue::Job.where(finished_at: nil)
+                             .where("scheduled_at IS NULL OR scheduled_at <= ?", Time.current)
+                             .count
     running = SolidQueue::ClaimedExecution.count
     failed = SolidQueue::FailedExecution.count
-    scheduled = SolidQueue::ScheduledExecution.count
 
-    puts "📊 SolidQueue Status"
-    puts "=" * 60
-    puts "Pending jobs:   #{pending}"
-    puts "Running jobs:   #{running}"
-    puts "Failed jobs:    #{failed}"
-    puts "Scheduled jobs: #{scheduled}"
-    puts ""
+    puts "\n📊 Job Status:"
+    puts "  Pending: #{pending}"
+    puts "  Running: #{running}"
+    puts "  Failed: #{failed}"
 
-    if failed.positive?
-      puts "⚠️  There are #{failed} failed jobs"
-      puts "   Run: rails solid_queue:failed to view details"
+    # Check queues
+    queues = SolidQueue::Job.distinct.pluck(:queue_name).compact
+    if queues.any?
+      puts "\n📋 Queues in use:"
+      queues.each do |queue|
+        count = SolidQueue::Job.where(queue_name: queue, finished_at: nil).count
+        puts "  #{queue}: #{count} pending"
+      end
+    else
+      puts "\n📋 No jobs in queue"
     end
+
+    # Check recent failures
+    if failed.positive?
+      puts "\n❌ Recent Failures:"
+      SolidQueue::FailedExecution
+        .includes(:job)
+        .order(created_at: :desc)
+        .limit(5)
+        .each do |failed_exec|
+        puts "  #{failed_exec.job.class_name}: #{failed_exec.error_class}"
+        puts "    #{failed_exec.error_message&.truncate(80)}"
+      end
+    end
+
+    puts "\n" + "=" * 60
   end
 
-  desc "List failed jobs"
-  task failed: :environment do
-    unless ActiveRecord::Base.connection.table_exists?("solid_queue_failed_executions")
-      puts "❌ SolidQueue is not installed"
-      exit 1
-    end
-
-    failed_jobs = SolidQueue::FailedExecution.order(created_at: :desc).limit(10)
-
-    if failed_jobs.empty?
-      puts "✅ No failed jobs"
-      return
-    end
-
-    puts "❌ Failed Jobs (last 10)"
+  desc "Show queue statistics"
+  task stats: :environment do
+    puts "📊 Solid Queue Statistics"
     puts "=" * 60
 
-    failed_jobs.each do |failed|
-      puts "Job ID: #{failed.job_id}"
-      puts "Error: #{failed.error_class}"
-      puts "Message: #{failed.error_message&.split("\n")&.first}"
-      puts "Failed at: #{failed.created_at}"
-      puts "-" * 60
+    queues = SolidQueue::Job.distinct.pluck(:queue_name).compact
+
+    queues.each do |queue_name|
+      jobs = SolidQueue::Job.where(queue_name: queue_name)
+      pending = jobs.where(finished_at: nil)
+                   .where("scheduled_at IS NULL OR scheduled_at <= ?", Time.current)
+                   .count
+      running = jobs.joins(:claimed_executions).count
+      failed = jobs.joins(:failed_executions).count
+
+      completed = jobs.where.not(finished_at: nil)
+                     .where("finished_at > ?", 24.hours.ago)
+                     .limit(100)
+
+      durations = completed.filter_map do |job|
+        next unless job.created_at && job.finished_at
+
+        (job.finished_at - job.created_at).to_f
+      end
+
+      avg_duration = durations.any? ? (durations.sum / durations.size).round(2) : 0
+      max_duration = durations.any? ? durations.max.round(2) : 0
+
+      puts "\n#{queue_name.upcase}:"
+      puts "  Pending: #{pending}"
+      puts "  Running: #{running}"
+      puts "  Failed: #{failed}"
+      puts "  Avg Duration: #{avg_duration}s"
+      puts "  Max Duration: #{max_duration}s"
+    end
+
+    puts "\n" + "=" * 60
+  end
+
+  desc "Clear finished jobs older than specified days (default: 7)"
+  task :clear_finished, [:days] => :environment do |_t, args|
+    days = (args[:days] || 7).to_i
+    cutoff = days.days.ago
+
+    count = SolidQueue::Job.where.not(finished_at: nil)
+                           .where("finished_at < ?", cutoff)
+                           .count
+
+    if count.positive?
+      SolidQueue::Job.where.not(finished_at: nil)
+                     .where("finished_at < ?", cutoff)
+                     .delete_all
+
+      puts "✅ Cleared #{count} finished jobs older than #{days} days"
+    else
+      puts "ℹ️  No finished jobs older than #{days} days to clear"
     end
   end
 end
