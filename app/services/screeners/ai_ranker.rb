@@ -89,6 +89,9 @@ module Screeners
             )
             evaluated << evaluated_candidate
 
+            # Persist AI evaluation result to database
+            persist_ai_evaluation_result(evaluated_candidate)
+
             # Broadcast individual AI evaluation update
             broadcast_ai_evaluation_update(evaluated_candidate, {
               total: total_count,
@@ -414,6 +417,34 @@ module Screeners
       )
     rescue StandardError => e
       Rails.logger.error("[Screeners::AIEvaluator] Failed to broadcast completion: #{e.message}")
+    end
+
+    def persist_ai_evaluation_result(candidate)
+      # Update existing ScreenerResult with AI evaluation data
+      return unless candidate[:instrument_id]
+
+      screener_result = ScreenerResult.find_by(
+        instrument_id: candidate[:instrument_id],
+        screener_type: "swing",
+      )
+
+      return unless screener_result
+
+      # Update with AI evaluation fields
+      screener_result.update_columns(
+        ai_confidence: candidate[:ai_confidence],
+        ai_risk: candidate[:ai_risk],
+        ai_holding_days: candidate[:ai_holding_days],
+        ai_comment: candidate[:ai_comment],
+        ai_avoid: candidate[:ai_avoid] || false,
+        trade_quality_score: candidate[:trade_quality_score],
+        trade_quality_breakdown: candidate[:trade_quality_breakdown]&.to_json,
+      )
+    rescue StandardError => e
+      Rails.logger.error(
+        "[Screeners::AIEvaluator] Failed to persist AI evaluation for #{candidate[:symbol]}: #{e.message}"
+      )
+      # Don't fail the entire evaluation if one save fails
     end
   end
 

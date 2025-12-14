@@ -47,6 +47,9 @@ module Screeners
       
       sorted.each_with_index do |candidate, index|
         candidate[:trade_quality_rank] = index + 1
+        
+        # Persist trade quality score to database
+        persist_trade_quality_result(candidate)
       end
 
       Rails.logger.info(
@@ -376,6 +379,29 @@ module Screeners
       end
 
       score.round(2)
+    end
+
+    def persist_trade_quality_result(candidate)
+      # Update existing ScreenerResult with trade quality score
+      return unless candidate[:instrument_id]
+
+      screener_result = ScreenerResult.find_by(
+        instrument_id: candidate[:instrument_id],
+        screener_type: "swing",
+      )
+
+      return unless screener_result
+
+      # Update with trade quality fields
+      screener_result.update_columns(
+        trade_quality_score: candidate[:trade_quality_score],
+        trade_quality_breakdown: candidate[:trade_quality_breakdown]&.to_json,
+      )
+    rescue StandardError => e
+      Rails.logger.error(
+        "[Screeners::TradeQualityRanker] Failed to persist trade quality for #{candidate[:symbol]}: #{e.message}"
+      )
+      # Don't fail the entire ranking if one save fails
     end
   end
 end

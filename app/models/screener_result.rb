@@ -40,6 +40,14 @@ class ScreenerResult < ApplicationRecord
     {}
   end
 
+  def trade_quality_breakdown_hash
+    return {} if trade_quality_breakdown.blank?
+
+    JSON.parse(trade_quality_breakdown)
+  rescue JSON::ParserError
+    {}
+  end
+
   # Convert to candidate hash format for compatibility with existing views
   def to_candidate_hash
     {
@@ -51,6 +59,13 @@ class ScreenerResult < ApplicationRecord
       indicators: indicators_hash,
       metadata: metadata_hash,
       multi_timeframe: multi_timeframe_hash,
+      trade_quality_score: trade_quality_score&.to_f,
+      trade_quality_breakdown: trade_quality_breakdown_hash,
+      ai_confidence: ai_confidence&.to_f,
+      ai_risk: ai_risk,
+      ai_holding_days: ai_holding_days,
+      ai_comment: ai_comment,
+      ai_avoid: ai_avoid || false,
     }
   end
 
@@ -82,6 +97,13 @@ class ScreenerResult < ApplicationRecord
       indicators: attributes[:indicators].to_json,
       metadata: attributes[:metadata].to_json,
       multi_timeframe: attributes[:multi_timeframe].to_json,
+      trade_quality_score: attributes[:trade_quality_score],
+      trade_quality_breakdown: attributes[:trade_quality_breakdown]&.to_json,
+      ai_confidence: attributes[:ai_confidence],
+      ai_risk: attributes[:ai_risk],
+      ai_holding_days: attributes[:ai_holding_days],
+      ai_comment: attributes[:ai_comment],
+      ai_avoid: attributes[:ai_avoid] || false,
       analyzed_at: analyzed_at,
     )
 
