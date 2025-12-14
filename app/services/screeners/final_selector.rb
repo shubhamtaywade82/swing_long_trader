@@ -16,22 +16,24 @@ module Screeners
     DEFAULT_MAX_CAPITAL_PCT = 15.0
     DEFAULT_MAX_PER_SECTOR = 2
 
-    def self.call(swing_candidates: [], longterm_candidates: [], swing_limit: nil, longterm_limit: nil, portfolio: nil)
+    def self.call(swing_candidates: [], longterm_candidates: [], swing_limit: nil, longterm_limit: nil, portfolio: nil, screener_run_id: nil)
       new(
         swing_candidates: swing_candidates,
         longterm_candidates: longterm_candidates,
         swing_limit: swing_limit,
         longterm_limit: longterm_limit,
         portfolio: portfolio,
+        screener_run_id: screener_run_id,
       ).call
     end
 
-    def initialize(swing_candidates: [], longterm_candidates: [], swing_limit: nil, longterm_limit: nil, portfolio: nil)
+    def initialize(swing_candidates: [], longterm_candidates: [], swing_limit: nil, longterm_limit: nil, portfolio: nil, screener_run_id: nil)
       @swing_candidates = swing_candidates
       @longterm_candidates = longterm_candidates
       @swing_limit = swing_limit || DEFAULT_SWING_LIMIT
       @longterm_limit = longterm_limit || DEFAULT_LONGTERM_LIMIT
       @portfolio = portfolio || load_default_portfolio
+      @screener_run_id = screener_run_id
       @config = AlgoConfig.fetch(%i[swing_trading final_selection]) || {}
     end
 
@@ -66,8 +68,14 @@ module Screeners
       current_positions = get_current_positions
 
       ranked.each do |candidate|
-        # Check max positions limit
+        # Check max positions limit (global)
         break if selected.size >= constraints[:max_positions]
+
+        # Check action budget (daily limit)
+        if constraints[:remaining_trades_today] && constraints[:remaining_trades_today] <= 0
+          Rails.logger.info("[Screeners::FinalSelector] Daily trade limit reached (#{constraints[:trades_taken_today]}/#{constraints[:max_trades_today]})")
+          break
+        end
 
         # Check sector limit
         sector = get_sector(candidate)
@@ -92,11 +100,28 @@ module Screeners
         )
 
         sector_counts[sector] = (sector_counts[sector] || 0) + 1 if sector
+
+        # Update remaining trades count
+        if constraints[:remaining_trades_today]
+          constraints[:remaining_trades_today] -= 1
+        end
       end
 
-      # Set ranks
+      # Set ranks and persist final stage
       selected.each_with_index do |candidate, index|
         candidate[:rank] = index + 1
+
+        # Mark as final in database
+        if @screener_run_id && candidate[:instrument_id]
+          ActiveRecord::Base.transaction do
+            screener_result = ScreenerResult.find_by(
+              screener_run_id: @screener_run_id,
+              instrument_id: candidate[:instrument_id],
+              screener_type: "swing",
+            )
+            screener_result&.update_columns(stage: "final")
+          end
+        end
       end
 
       selected
@@ -124,22 +149,47 @@ module Screeners
     end
 
     def get_portfolio_constraints
-      if @portfolio&.swing_risk_config
-        risk_config = @portfolio.swing_risk_config
-        {
-          max_positions: risk_config.max_open_positions || DEFAULT_MAX_POSITIONS,
-          max_capital_pct: risk_config.max_position_exposure || DEFAULT_MAX_CAPITAL_PCT,
-          max_per_sector: @config[:max_per_sector] || DEFAULT_MAX_PER_SECTOR,
-          total_equity: @portfolio.total_equity || 100_000,
-        }
-      else
-        {
-          max_positions: @config[:max_positions] || DEFAULT_MAX_POSITIONS,
-          max_capital_pct: @config[:max_capital_pct] || DEFAULT_MAX_CAPITAL_PCT,
-          max_per_sector: @config[:max_per_sector] || DEFAULT_MAX_PER_SECTOR,
-          total_equity: @portfolio&.total_equity || 100_000,
-        }
+      base_constraints = if @portfolio&.swing_risk_config
+                           risk_config = @portfolio.swing_risk_config
+                           {
+                             max_positions: risk_config.max_open_positions || DEFAULT_MAX_POSITIONS,
+                             max_capital_pct: risk_config.max_position_exposure || DEFAULT_MAX_CAPITAL_PCT,
+                             max_per_sector: @config[:max_per_sector] || DEFAULT_MAX_PER_SECTOR,
+                             total_equity: @portfolio.total_equity || 100_000,
+                           }
+                         else
+                           {
+                             max_positions: @config[:max_positions] || DEFAULT_MAX_POSITIONS,
+                             max_capital_pct: @config[:max_capital_pct] || DEFAULT_MAX_CAPITAL_PCT,
+                             max_per_sector: @config[:max_per_sector] || DEFAULT_MAX_PER_SECTOR,
+                             total_equity: @portfolio&.total_equity || 100_000,
+                           }
+                         end
+
+      # Apply action budget (max trades/risk/capital per day)
+      action_budget = get_action_budget
+      base_constraints.merge(action_budget)
+    end
+
+    # Get action budget: max trades/risk/capital deployable today
+    def get_action_budget
+      today = Date.current
+      budget = {
+        max_trades_today: @config[:max_trades_per_day] || DEFAULT_MAX_POSITIONS,
+        max_risk_today: @config[:max_risk_per_day] || nil, # % of equity
+        max_capital_today: @config[:max_capital_per_day] || nil, # % of equity
+      }
+
+      # Check how many trades were taken today
+      if @portfolio
+        today_positions = @portfolio.open_swing_positions
+                                    .where("created_at >= ?", today.beginning_of_day)
+                                    .count
+        budget[:trades_taken_today] = today_positions
+        budget[:remaining_trades_today] = [budget[:max_trades_today] - today_positions, 0].max
       end
+
+      budget
     end
 
     def get_current_positions

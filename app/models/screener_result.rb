@@ -2,8 +2,12 @@
 
 class ScreenerResult < ApplicationRecord
   belongs_to :instrument
+  belongs_to :screener_run, optional: true
 
   validates :screener_type, presence: true, inclusion: { in: %w[swing longterm] }
+  validates :stage, inclusion: { in: %w[screener ranked ai_evaluated final] }, allow_nil: true
+  validates :ai_status, inclusion: { in: %w[pending evaluated failed skipped] }, allow_nil: true
+  validates :ai_eval_id, uniqueness: true, allow_nil: true
   validates :symbol, presence: true
   validates :score, presence: true, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
   validates :analyzed_at, presence: true
@@ -15,6 +19,11 @@ class ScreenerResult < ApplicationRecord
   scope :top_scored, ->(limit = 50) { order(score: :desc).limit(limit) }
   scope :today, -> { by_date(Date.current) }
   scope :latest, -> { where(analyzed_at: maximum(:analyzed_at)) }
+  scope :by_run, ->(run_id) { where(screener_run_id: run_id) }
+  scope :by_stage, ->(stage) { where(stage: stage) }
+  scope :ai_evaluated, -> { where(ai_status: "evaluated") }
+  scope :ai_pending, -> { where(ai_status: ["pending", nil]) }
+  scope :ai_failed, -> { where(ai_status: "failed") }
 
   def indicators_hash
     return {} if indicators.blank?
@@ -83,11 +92,23 @@ class ScreenerResult < ApplicationRecord
   # Get or create result for an instrument (upsert)
   def self.upsert_result(attributes)
     analyzed_at = attributes[:analyzed_at] || Time.current
-    result = find_or_initialize_by(
-      instrument_id: attributes[:instrument_id],
-      screener_type: attributes[:screener_type],
-      analyzed_at: analyzed_at.beginning_of_minute, # Round to minute for grouping
-    )
+    screener_run_id = attributes[:screener_run_id]
+    stage = attributes[:stage] || "screener"
+
+    # Find by run_id + instrument_id if run_id provided, otherwise fallback to old logic
+    result = if screener_run_id
+               find_or_initialize_by(
+                 screener_run_id: screener_run_id,
+                 instrument_id: attributes[:instrument_id],
+                 screener_type: attributes[:screener_type],
+               )
+             else
+               find_or_initialize_by(
+                 instrument_id: attributes[:instrument_id],
+                 screener_type: attributes[:screener_type],
+                 analyzed_at: analyzed_at.beginning_of_minute, # Round to minute for grouping
+               )
+             end
 
     result.assign_attributes(
       symbol: attributes[:symbol],
@@ -104,6 +125,10 @@ class ScreenerResult < ApplicationRecord
       ai_holding_days: attributes[:ai_holding_days],
       ai_comment: attributes[:ai_comment],
       ai_avoid: attributes[:ai_avoid] || false,
+      screener_run_id: screener_run_id,
+      stage: stage,
+      ai_status: attributes[:ai_status],
+      ai_eval_id: attributes[:ai_eval_id],
       analyzed_at: analyzed_at,
     )
 

@@ -4,14 +4,15 @@ module Screeners
   class SwingScreener < ApplicationService
     DEFAULT_LIMIT = 50
 
-    def self.call(instruments: nil, limit: nil)
-      new(instruments: instruments, limit: limit).call
+    def self.call(instruments: nil, limit: nil, persist_results: true, screener_run_id: nil)
+      new(instruments: instruments, limit: limit, persist_results: persist_results, screener_run_id: screener_run_id).call
     end
 
-    def initialize(instruments: nil, limit: nil, persist_results: true)
+    def initialize(instruments: nil, limit: nil, persist_results: true, screener_run_id: nil)
       @instruments = instruments || load_universe
       @limit = limit # Remove default limit to screen full universe
       @persist_results = persist_results
+      @screener_run_id = screener_run_id
       @config = AlgoConfig.fetch[:swing_trading] || {}
       @screening_config = @config[:screening] || {}
       @strategy_config = @config[:strategy] || {}
@@ -103,11 +104,15 @@ module Screeners
         candidates << analysis
 
         # Persist result to database immediately (incremental updates)
+        # Use transaction to ensure data consistency before broadcast
         if @persist_results
-          persist_result(analysis)
+          ActiveRecord::Base.transaction do
+            persist_result(analysis)
+          end
         end
 
         # Broadcast individual record update immediately for live UI updates
+        # Only broadcast after successful persistence
         broadcast_record_added(analysis, {
           total: total_count,
           processed: processed_count,
@@ -116,6 +121,8 @@ module Screeners
           started_at: start_time.iso8601,
           status: "running",
           elapsed: (Time.current - start_time).round(1),
+          screener_run_id: @screener_run_id,
+          stage: "screener",
         })
 
         # Cache and broadcast aggregated results incrementally (every 5 new candidates)
@@ -321,6 +328,8 @@ module Screeners
         {
           type: "screener_record_added",
           screener_type: "swing",
+          screener_run_id: progress_data[:screener_run_id],
+          stage: progress_data[:stage] || "screener",
           record: analysis,
           progress: progress_data,
         },
@@ -641,6 +650,8 @@ module Screeners
         indicators: analysis[:indicators] || {},
         metadata: analysis[:metadata] || {},
         multi_timeframe: analysis[:multi_timeframe] || {},
+        screener_run_id: @screener_run_id,
+        stage: "screener",
         analyzed_at: @analyzed_at,
       )
     rescue StandardError => e

@@ -20,15 +20,17 @@ module Screeners
     CACHE_TTL = 24.hours
     MIN_CONFIDENCE_THRESHOLD = 6.5
 
-    def self.call(candidates: nil, limit: nil, **kwargs)
+    def self.call(candidates: nil, limit: nil, screener_run_id: nil, **kwargs)
       # Support both positional and keyword arguments for backward compatibility
       candidates = kwargs[:candidates] || candidates if candidates.nil?
-      new(candidates: candidates, limit: limit).call
+      screener_run_id = kwargs[:screener_run_id] || screener_run_id
+      new(candidates: candidates, limit: limit, screener_run_id: screener_run_id).call
     end
 
-    def initialize(candidates:, limit: nil)
+    def initialize(candidates:, limit: nil, screener_run_id: nil)
       @candidates = candidates
       @limit = limit || AlgoConfig.fetch(%i[swing_trading ai_evaluation max_candidates]) || 15
+      @screener_run_id = screener_run_id
       @config = AlgoConfig.fetch(%i[swing_trading ai_evaluation]) || {}
       @enabled = @config[:enabled] != false
       @model = @config[:model] || "gpt-4o-mini"
@@ -75,7 +77,15 @@ module Screeners
       # Process highest scores first
       sorted_candidates.each do |candidate|
         processed_count += 1
-        result = evaluate_candidate(candidate)
+        
+        # Check idempotency - skip if already evaluated for this run
+        ai_eval_id = generate_ai_eval_id(candidate)
+        if already_evaluated?(ai_eval_id)
+          Rails.logger.info("[Screeners::AIEvaluator] Skipping #{candidate[:symbol]} - already evaluated (#{ai_eval_id})")
+          next
+        end
+
+        result = evaluate_candidate(candidate, ai_eval_id)
         
         if result
           # Filter: drop if avoid flag is true or confidence too low
@@ -86,13 +96,16 @@ module Screeners
               ai_holding_days: result[:holding_days],
               ai_comment: result[:comment],
               ai_avoid: result[:avoid] || false,
+              ai_eval_id: ai_eval_id,
             )
             evaluated << evaluated_candidate
 
-            # Persist AI evaluation result to database
-            persist_ai_evaluation_result(evaluated_candidate)
+            # Persist AI evaluation result to database (with transaction)
+            ActiveRecord::Base.transaction do
+              persist_ai_evaluation_result(evaluated_candidate)
+            end
 
-            # Broadcast individual AI evaluation update
+            # Broadcast individual AI evaluation update (only after successful persistence)
             broadcast_ai_evaluation_update(evaluated_candidate, {
               total: total_count,
               processed: processed_count,
@@ -100,8 +113,15 @@ module Screeners
               started_at: start_time.iso8601,
               status: "running",
               elapsed: (Time.current - start_time).round(1),
+              screener_run_id: @screener_run_id,
+              stage: "ai_evaluated",
             })
           else
+            # Mark as filtered but still persist status
+            ActiveRecord::Base.transaction do
+              mark_ai_filtered(candidate, result, ai_eval_id)
+            end
+
             # Broadcast that candidate was filtered out
             broadcast_ai_evaluation_filtered(candidate, result, {
               total: total_count,
@@ -110,7 +130,14 @@ module Screeners
               started_at: start_time.iso8601,
               status: "running",
               elapsed: (Time.current - start_time).round(1),
+              screener_run_id: @screener_run_id,
+              stage: "ai_evaluated",
             })
+          end
+        else
+          # Mark as failed
+          ActiveRecord::Base.transaction do
+            mark_ai_failed(candidate, ai_eval_id)
           end
         end
       end
@@ -134,9 +161,25 @@ module Screeners
 
     private
 
-    def evaluate_candidate(candidate)
-      # Check cache first
-      cache_key = "ai_eval:#{candidate[:instrument_id]}:#{candidate[:symbol]}"
+    def generate_ai_eval_id(candidate)
+      # Idempotency key: screener_run_id + instrument_id
+      # Ensures same candidate is never evaluated twice in same run
+      if @screener_run_id
+        "#{@screener_run_id}-#{candidate[:instrument_id]}"
+      else
+        "#{Date.current}-#{candidate[:instrument_id]}"
+      end
+    end
+
+    def already_evaluated?(ai_eval_id)
+      return false unless ai_eval_id
+
+      ScreenerResult.exists?(ai_eval_id: ai_eval_id, ai_status: ["evaluated", "failed"])
+    end
+
+    def evaluate_candidate(candidate, ai_eval_id)
+      # Check cache first (by eval_id for run-specific caching)
+      cache_key = "ai_eval:#{ai_eval_id}"
       cached = Rails.cache.read(cache_key)
       return cached if cached
 
@@ -160,7 +203,7 @@ module Screeners
       result = parse_response(ai_result[:content])
       return nil unless result
 
-      # Cache result
+      # Cache result (by eval_id)
       Rails.cache.write(cache_key, result, expires_in: CACHE_TTL)
 
       # Track API call
@@ -379,6 +422,8 @@ module Screeners
         {
           type: "ai_evaluation_added",
           screener_type: "swing",
+          screener_run_id: progress_data[:screener_run_id],
+          stage: progress_data[:stage] || "ai_evaluated",
           record: candidate,
           progress: progress_data,
         },
@@ -394,6 +439,8 @@ module Screeners
         {
           type: "ai_evaluation_filtered",
           screener_type: "swing",
+          screener_run_id: progress_data[:screener_run_id],
+          stage: progress_data[:stage] || "ai_evaluated",
           symbol: candidate[:symbol],
           reason: result[:avoid] ? "avoided" : "low_confidence",
           confidence: result[:confidence],
@@ -411,6 +458,8 @@ module Screeners
         {
           type: "ai_evaluation_complete",
           screener_type: "swing",
+          screener_run_id: @screener_run_id,
+          stage: "ai_evaluated",
           candidate_count: evaluated_candidates.size,
           progress: progress_data,
         },
@@ -423,10 +472,18 @@ module Screeners
       # Update existing ScreenerResult with AI evaluation data
       return unless candidate[:instrument_id]
 
-      screener_result = ScreenerResult.find_by(
-        instrument_id: candidate[:instrument_id],
-        screener_type: "swing",
-      )
+      screener_result = if @screener_run_id
+                          ScreenerResult.find_by(
+                            screener_run_id: @screener_run_id,
+                            instrument_id: candidate[:instrument_id],
+                            screener_type: "swing",
+                          )
+                        else
+                          ScreenerResult.find_by(
+                            instrument_id: candidate[:instrument_id],
+                            screener_type: "swing",
+                          )
+                        end
 
       return unless screener_result
 
@@ -437,6 +494,9 @@ module Screeners
         ai_holding_days: candidate[:ai_holding_days],
         ai_comment: candidate[:ai_comment],
         ai_avoid: candidate[:ai_avoid] || false,
+        ai_eval_id: candidate[:ai_eval_id],
+        ai_status: "evaluated",
+        stage: "ai_evaluated",
         trade_quality_score: candidate[:trade_quality_score],
         trade_quality_breakdown: candidate[:trade_quality_breakdown]&.to_json,
       )
@@ -445,6 +505,60 @@ module Screeners
         "[Screeners::AIEvaluator] Failed to persist AI evaluation for #{candidate[:symbol]}: #{e.message}"
       )
       # Don't fail the entire evaluation if one save fails
+    end
+
+    def mark_ai_filtered(candidate, result, ai_eval_id)
+      return unless candidate[:instrument_id]
+
+      screener_result = if @screener_run_id
+                          ScreenerResult.find_by(
+                            screener_run_id: @screener_run_id,
+                            instrument_id: candidate[:instrument_id],
+                            screener_type: "swing",
+                          )
+                        else
+                          ScreenerResult.find_by(
+                            instrument_id: candidate[:instrument_id],
+                            screener_type: "swing",
+                          )
+                        end
+
+      return unless screener_result
+
+      screener_result.update_columns(
+        ai_eval_id: ai_eval_id,
+        ai_status: "skipped",
+        ai_avoid: result[:avoid] || false,
+        ai_confidence: result[:confidence],
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::AIEvaluator] Failed to mark filtered: #{e.message}")
+    end
+
+    def mark_ai_failed(candidate, ai_eval_id)
+      return unless candidate[:instrument_id]
+
+      screener_result = if @screener_run_id
+                          ScreenerResult.find_by(
+                            screener_run_id: @screener_run_id,
+                            instrument_id: candidate[:instrument_id],
+                            screener_type: "swing",
+                          )
+                        else
+                          ScreenerResult.find_by(
+                            instrument_id: candidate[:instrument_id],
+                            screener_type: "swing",
+                          )
+                        end
+
+      return unless screener_result
+
+      screener_result.update_columns(
+        ai_eval_id: ai_eval_id,
+        ai_status: "failed",
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::AIEvaluator] Failed to mark failed: #{e.message}")
     end
   end
 

@@ -14,13 +14,14 @@ module Screeners
   class TradeQualityRanker < ApplicationService
     DEFAULT_TOP_LIMIT = 40
 
-    def self.call(candidates:, limit: nil)
-      new(candidates: candidates, limit: limit).call
+    def self.call(candidates:, limit: nil, screener_run_id: nil)
+      new(candidates: candidates, limit: limit, screener_run_id: screener_run_id).call
     end
 
-    def initialize(candidates:, limit: nil)
+    def initialize(candidates:, limit: nil, screener_run_id: nil)
       @candidates = candidates
       @limit = limit || DEFAULT_TOP_LIMIT
+      @screener_run_id = screener_run_id
       @config = AlgoConfig.fetch(%i[swing_trading trade_quality]) || {}
     end
 
@@ -29,9 +30,14 @@ module Screeners
 
       ranked = @candidates.map do |candidate|
         quality_score = calculate_quality_score(candidate)
+        
+        # Add freshness decay penalty
+        freshness_penalty = calculate_freshness_decay(candidate)
+        adjusted_score = quality_score[:total] - freshness_penalty
+        
         candidate.merge(
-          trade_quality_score: quality_score[:total],
-          trade_quality_breakdown: quality_score[:breakdown],
+          trade_quality_score: [adjusted_score, 0].max.round(2), # Don't go negative
+          trade_quality_breakdown: quality_score[:breakdown].merge(freshness_penalty: freshness_penalty),
           trade_quality_rank: nil, # Will be set after sorting
         )
       end
@@ -48,8 +54,10 @@ module Screeners
       sorted.each_with_index do |candidate, index|
         candidate[:trade_quality_rank] = index + 1
         
-        # Persist trade quality score to database
-        persist_trade_quality_result(candidate)
+        # Persist trade quality score to database (with transaction)
+        ActiveRecord::Base.transaction do
+          persist_trade_quality_result(candidate)
+        end
       end
 
       Rails.logger.info(
@@ -184,7 +192,103 @@ module Screeners
         score += 5
       end
 
+      # MTF conflict penalty (NEW)
+      mtf_conflict_penalty = calculate_mtf_conflict_penalty(mtf_data)
+      score -= mtf_conflict_penalty
+
       [score, max_score].min.round(2)
+    end
+
+    # Calculate MTF conflict penalty
+    # Penalizes misaligned timeframes (e.g., weekly bullish but 1H distribution)
+    def calculate_mtf_conflict_penalty(mtf_data)
+      penalty = 0.0
+
+      return penalty unless mtf_data[:trend_alignment]
+
+      ta = mtf_data[:trend_alignment]
+
+      # If not aligned, heavy penalty
+      unless ta[:aligned]
+        penalty += 10.0
+        return penalty
+      end
+
+      # Check for conflicts in timeframes
+      timeframes = mtf_data[:timeframes] || {}
+
+      # Weekly should be bullish
+      weekly_trend = timeframes.dig(:w1, :trend_direction)
+      # Daily should be bullish
+      daily_trend = timeframes.dig(:d1, :trend_direction)
+      # 1H should not be bearish (distribution)
+      hourly_trend = timeframes.dig(:h1, :trend_direction)
+
+      # Conflict: Weekly bullish but daily bearish
+      if weekly_trend == :bullish && daily_trend == :bearish
+        penalty += 8.0
+      end
+
+      # Conflict: Daily bullish but hourly bearish (distribution)
+      if daily_trend == :bullish && hourly_trend == :bearish
+        penalty += 5.0
+      end
+
+      # Conflict: Weekly bullish but hourly bearish
+      if weekly_trend == :bullish && hourly_trend == :bearish
+        penalty += 6.0
+      end
+
+      penalty.round(2)
+    end
+
+    # Calculate freshness decay penalty
+    # Penalizes late setups: days since BOS, distance from demand, % run-up
+    def calculate_freshness_decay(candidate)
+      penalty = 0.0
+      metadata = candidate[:metadata] || {}
+      indicators = candidate[:indicators] || {}
+      mtf_data = candidate[:multi_timeframe] || {}
+
+      # Penalty 1: Days since BOS (if available)
+      if mtf_data[:structure] && mtf_data[:structure][:bos]
+        bos_age = mtf_data[:structure][:bos][:age] || 0
+        # Penalty increases after 20 candles (days for daily)
+        if bos_age > 20
+          penalty += 5.0 # Late setup
+        elsif bos_age > 10
+          penalty += 2.0 # Getting late
+        end
+      end
+
+      # Penalty 2: Distance from last demand zone / EMA20
+      latest_close = indicators[:latest_close] || metadata[:ltp]
+      ema20 = indicators[:ema20]
+      if latest_close && ema20
+        distance_pct = ((latest_close - ema20) / ema20 * 100).abs
+        # Penalty if extended > 10% above EMA20
+        if distance_pct > 15
+          penalty += 8.0 # Very extended
+        elsif distance_pct > 10
+          penalty += 4.0 # Extended
+        end
+      end
+
+      # Penalty 3: Recent run-up without pullback
+      momentum = metadata[:momentum] || {}
+      if momentum[:change_5d]
+        runup = momentum[:change_5d]
+        # Penalty if run up > 15% in 5 days
+        if runup > 20
+          penalty += 10.0 # Very extended
+        elsif runup > 15
+          penalty += 6.0 # Extended
+        elsif runup > 10
+          penalty += 3.0 # Getting extended
+        end
+      end
+
+      penalty.round(2)
     end
 
     # Location Quality: 20 points (CRITICAL)
@@ -385,17 +489,26 @@ module Screeners
       # Update existing ScreenerResult with trade quality score
       return unless candidate[:instrument_id]
 
-      screener_result = ScreenerResult.find_by(
-        instrument_id: candidate[:instrument_id],
-        screener_type: "swing",
-      )
+      screener_result = if @screener_run_id
+                          ScreenerResult.find_by(
+                            screener_run_id: @screener_run_id,
+                            instrument_id: candidate[:instrument_id],
+                            screener_type: "swing",
+                          )
+                        else
+                          ScreenerResult.find_by(
+                            instrument_id: candidate[:instrument_id],
+                            screener_type: "swing",
+                          )
+                        end
 
       return unless screener_result
 
-      # Update with trade quality fields
+      # Update with trade quality fields and stage
       screener_result.update_columns(
         trade_quality_score: candidate[:trade_quality_score],
         trade_quality_breakdown: candidate[:trade_quality_breakdown]&.to_json,
+        stage: "ranked",
       )
     rescue StandardError => e
       Rails.logger.error(
