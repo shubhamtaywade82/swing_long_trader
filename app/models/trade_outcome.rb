@@ -138,4 +138,28 @@ class TradeOutcome < ApplicationRecord
       low: closed_trades.where("ai_confidence < 6.5"),
     }
   end
+
+  # Get expected performance based on AI confidence (requires calibration)
+  def expected_performance
+    return nil unless ai_confidence
+
+    AIConfidence::ExpectancyMapper.call(ai_confidence, scope: self.class.closed)
+  end
+
+  # Compare actual vs expected performance
+  def performance_vs_expectation
+    return nil unless closed? && ai_confidence
+
+    expected = expected_performance
+    return nil unless expected
+
+    {
+      actual_r_multiple: r_multiple || 0,
+      expected_r_multiple: expected[:expected_r_multiple] || 0,
+      difference: (r_multiple || 0) - (expected[:expected_r_multiple] || 0),
+      actual_win: winner?,
+      expected_win_rate: expected[:expected_win_rate] || 0,
+      outperformed: (r_multiple || 0) > (expected[:expected_r_multiple] || 0),
+    }
+  end
 end
