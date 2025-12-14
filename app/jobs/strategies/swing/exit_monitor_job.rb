@@ -8,7 +8,11 @@ module Strategies
     class ExitMonitorJob < ApplicationJob
       include JobLogging
 
-      queue_as :default
+      # Use monitoring queue for exit monitoring
+      queue_as :monitoring
+
+      # Retry strategy: exponential backoff, max 2 attempts
+      retry_on StandardError, wait: :exponentially_longer, attempts: 2
 
       def perform
         # Get all open positions (preferred) or active orders (fallback)

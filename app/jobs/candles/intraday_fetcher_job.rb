@@ -6,7 +6,11 @@ module Candles
   class IntradayFetcherJob < ApplicationJob
     include JobLogging
 
-    queue_as :default
+    # Use data queue for data fetching jobs
+    queue_as :data_ingestion
+
+    # Retry strategy: exponential backoff, max 2 attempts
+    retry_on StandardError, wait: :exponentially_longer, attempts: 2
 
     def perform(instrument_ids: nil, interval: "15")
       instruments = if instrument_ids

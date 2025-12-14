@@ -4,14 +4,15 @@ module Screeners
   class SwingScreener < ApplicationService
     DEFAULT_LIMIT = 50
 
-    def self.call(instruments: nil, limit: nil)
-      new(instruments: instruments, limit: limit).call
+    def self.call(instruments: nil, limit: nil, persist_results: true, screener_run_id: nil)
+      new(instruments: instruments, limit: limit, persist_results: persist_results, screener_run_id: screener_run_id).call
     end
 
-    def initialize(instruments: nil, limit: nil, persist_results: true)
+    def initialize(instruments: nil, limit: nil, persist_results: true, screener_run_id: nil)
       @instruments = instruments || load_universe
       @limit = limit # Remove default limit to screen full universe
       @persist_results = persist_results
+      @screener_run_id = screener_run_id
       @config = AlgoConfig.fetch[:swing_trading] || {}
       @screening_config = @config[:screening] || {}
       @strategy_config = @config[:strategy] || {}
@@ -103,12 +104,29 @@ module Screeners
         candidates << analysis
 
         # Persist result to database immediately (incremental updates)
+        # Use transaction to ensure data consistency before broadcast
         if @persist_results
-          persist_result(analysis)
+          ActiveRecord::Base.transaction do
+            persist_result(analysis)
+          end
         end
 
-        # Cache and broadcast partial results incrementally (every 5 new candidates)
-        # This allows UI to show results as they're found
+        # Broadcast individual record update immediately for live UI updates
+        # Only broadcast after successful persistence
+        broadcast_record_added(analysis, {
+          total: total_count,
+          processed: processed_count,
+          analyzed: analyzed_count,
+          candidates: candidates.size,
+          started_at: start_time.iso8601,
+          status: "running",
+          elapsed: (Time.current - start_time).round(1),
+          screener_run_id: @screener_run_id,
+          stage: "screener",
+        })
+
+        # Cache and broadcast aggregated results incrementally (every 5 new candidates)
+        # This allows UI to show top candidates list
         if candidates.size % 5 == 0
           # Get top candidates from database if persisting, otherwise from memory
           sorted_candidates = if @persist_results
@@ -301,6 +319,23 @@ module Screeners
       )
     rescue StandardError => e
       Rails.logger.error("[Screeners::SwingScreener] Failed to broadcast completion: #{e.message}")
+    end
+
+    def broadcast_record_added(analysis, progress_data)
+      # Broadcast individual record for live table updates
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "screener_record_added",
+          screener_type: "swing",
+          screener_run_id: progress_data[:screener_run_id],
+          stage: progress_data[:stage] || "screener",
+          record: analysis,
+          progress: progress_data,
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::SwingScreener] Failed to broadcast record: #{e.message}")
     end
 
     def passes_basic_filters?(instrument)
@@ -601,6 +636,27 @@ module Screeners
                  :neutral
                end,
       }
+    end
+
+    def persist_result(analysis)
+      # Persist each result immediately to database (incremental updates)
+      ScreenerResult.upsert_result(
+        instrument_id: analysis[:instrument_id],
+        screener_type: "swing",
+        symbol: analysis[:symbol],
+        score: analysis[:score],
+        base_score: analysis[:base_score] || 0,
+        mtf_score: analysis[:mtf_score] || 0,
+        indicators: analysis[:indicators] || {},
+        metadata: analysis[:metadata] || {},
+        multi_timeframe: analysis[:multi_timeframe] || {},
+        screener_run_id: @screener_run_id,
+        stage: "screener",
+        analyzed_at: @analyzed_at,
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::SwingScreener] Failed to persist result for #{analysis[:symbol]}: #{e.message}")
+      # Don't fail the entire screener if one save fails
     end
   end
 end

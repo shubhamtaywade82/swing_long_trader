@@ -6,7 +6,11 @@ module Portfolios
   class DailySnapshotJob < ApplicationJob
     include JobLogging
 
-    queue_as :default
+    # Use background queue for snapshot jobs
+    queue_as :background
+
+    # Retry strategy: exponential backoff, max 2 attempts
+    retry_on StandardError, wait: :exponentially_longer, attempts: 2
 
     def perform(date: nil, portfolio_type: "all")
       date ||= Time.zone.today

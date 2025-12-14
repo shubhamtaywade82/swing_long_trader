@@ -31,4 +31,14 @@ Rails.application.routes.draw do
 
   # ActionCable for live updates
   mount ActionCable.server => "/cable"
+
+  # Admin routes for Solid Queue monitoring
+  namespace :admin do
+    resources :solid_queue, only: [:index, :show] do
+      member do
+        post :retry_failed
+        delete :clear_finished
+      end
+    end
+  end
 end
