@@ -641,6 +641,16 @@ module Screeners
 
     def persist_result(analysis)
       # Persist each result immediately to database (incremental updates)
+      # Include setup_status and trade_plan in metadata for retrieval
+      metadata = (analysis[:metadata] || {}).merge(
+        setup_status: analysis[:setup_status],
+        setup_reason: analysis[:setup_reason],
+        invalidate_if: analysis[:invalidate_if],
+        entry_conditions: analysis[:entry_conditions],
+        trade_plan: analysis[:trade_plan],
+        recommendation: analysis[:recommendation],
+      )
+
       ScreenerResult.upsert_result(
         instrument_id: analysis[:instrument_id],
         screener_type: "swing",
@@ -649,7 +659,7 @@ module Screeners
         base_score: analysis[:base_score] || 0,
         mtf_score: analysis[:mtf_score] || 0,
         indicators: analysis[:indicators] || {},
-        metadata: analysis[:metadata] || {},
+        metadata: metadata,
         multi_timeframe: analysis[:multi_timeframe] || {},
         screener_run_id: @screener_run_id,
         stage: "screener",

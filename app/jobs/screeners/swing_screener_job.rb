@@ -36,7 +36,7 @@ module Screeners
         # Layer 1: Technical Eligibility (SwingScreener)
         # Result: 100-150 bullish candidates (sorted by score, highest first)
         Rails.logger.info("[Screeners::SwingScreenerJob] Layer 1: Technical Eligibility Screening")
-        layer1_candidates = Screeners::SwingScreener.call(
+        layer1_candidates = SwingScreener.call(
           instruments: instruments,
           limit: nil,
           persist_results: true,
@@ -61,7 +61,7 @@ module Screeners
         # Layer 2: Trade Quality Ranking
         # Result: 30-40 high-quality setups (sorted by combined score, highest first)
         Rails.logger.info("[Screeners::SwingScreenerJob] Layer 2: Trade Quality Ranking")
-        layer2_candidates = Screeners::TradeQualityRanker.call(
+        layer2_candidates = TradeQualityRanker.call(
           candidates: layer1_candidates,
           limit: 40,
           screener_run_id: screener_run.id,
@@ -100,7 +100,7 @@ module Screeners
           "[Screeners::SwingScreenerJob] Layer 3: AI Evaluation " \
           "(evaluating #{prefiltered_candidates.size} tradable candidates, highest scores first)",
         )
-        layer3_candidates = Screeners::AIEvaluator.call(
+        layer3_candidates = AIEvaluator.call(
           candidates: prefiltered_candidates,
           limit: 15,
           screener_run_id: screener_run.id,
@@ -125,7 +125,7 @@ module Screeners
         # Layer 4: Portfolio & Capacity Filter
         # Result: 3-5 tradable positions
         Rails.logger.info("[Screeners::SwingScreenerJob] Layer 4: Portfolio & Capacity Filter")
-        final_result = Screeners::FinalSelector.call(
+        final_result = FinalSelector.call(
           swing_candidates: layer3_candidates,
           swing_limit: limit || 5,
           portfolio: portfolio,

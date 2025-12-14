@@ -49,6 +49,13 @@ module Admin
       @available_classes = cached_available_classes
       @paused_queues = cached_paused_queues
       @available_job_classes = cached_available_job_classes
+
+      # Recurring tasks
+      @recurring_tasks = SolidQueue::RecurringTask.all.order(:key)
+      @recurring_executions = SolidQueue::RecurringExecution
+                              .includes(:job)
+                              .order(created_at: :desc)
+                              .limit(20)
     end
 
     def show
@@ -379,5 +386,181 @@ module Admin
         job_classes.uniq.sort
       end
     end
+
+    def human_readable_schedule(cron_expression)
+      return cron_expression unless cron_expression.present?
+
+      # Handle non-cron formats (e.g., "every hour", "at 5am every day")
+      if cron_expression.include?("every") || cron_expression.include?("at")
+        return cron_expression.capitalize
+      end
+
+      # Parse cron format: minute hour day month weekday
+      parts = cron_expression.split
+      return cron_expression unless parts.size == 5
+
+      minute, hour, day, month, weekday = parts
+
+      result = []
+
+      # Parse time first (most important)
+      time_desc = parse_time(hour, minute)
+      result << time_desc if time_desc
+
+      # Parse weekday
+      weekday_desc = parse_weekday(weekday)
+      result << weekday_desc if weekday_desc && weekday_desc != "Every day"
+
+      # Parse day/month (less common)
+      day_month_desc = parse_day_month(day, month)
+      result << day_month_desc if day_month_desc
+
+      # If we couldn't parse it well, return original with a note
+      if result.empty?
+        "#{cron_expression} (cron)"
+      else
+        result.join(", ")
+      end
+    end
+
+    def parse_weekday(weekday)
+      return "Every day" if weekday == "*"
+
+      case weekday
+      when "0", "7"
+        "Sunday"
+      when "1"
+        "Monday"
+      when "2"
+        "Tuesday"
+      when "3"
+        "Wednesday"
+      when "4"
+        "Thursday"
+      when "5"
+        "Friday"
+      when "6"
+        "Saturday"
+      when /^(\d+)-(\d+)$/
+        start_day, end_day = $1.to_i, $2.to_i
+        days = %w[Sunday Monday Tuesday Wednesday Thursday Friday Saturday]
+        if start_day == 1 && end_day == 5
+          "Weekdays (Mon-Fri)"
+        elsif start_day == 0 && end_day == 6
+          "Every day"
+        elsif start_day <= end_day
+          "#{days[start_day % 7]}-#{days[end_day % 7]}"
+        else
+          "#{days[start_day % 7]}-#{days[end_day % 7]}"
+        end
+      when /^(\d+),(\d+)$/
+        day1, day2 = $1.to_i, $2.to_i
+        days = %w[Sunday Monday Tuesday Wednesday Thursday Friday Saturday]
+        "#{days[day1 % 7]}, #{days[day2 % 7]}"
+      else
+        nil
+      end
+    end
+
+    def parse_time(hour, minute)
+      return nil if hour == "*" && minute == "*"
+
+      # Handle hour ranges with multiple minutes (e.g., "15,45 9-15")
+      if hour.include?("-") && minute.include?(",")
+        start_hour, end_hour = hour.split("-").map(&:to_i)
+        minutes = minute.split(",").map(&:to_i).sort
+        minute_list = minutes.map { |m| format("%02d", m) }.join(" and :")
+        return "At :#{minute_list} past each hour, #{format_hour(start_hour)}-#{format_hour(end_hour)}"
+      end
+
+      # Handle hour ranges with single minute (e.g., "30 7-15")
+      if hour.include?("-") && minute != "*" && !minute.include?(",")
+        start_hour, end_hour = hour.split("-").map(&:to_i)
+        return "#{format_hour(start_hour)}-#{format_hour(end_hour)} at :#{format("%02d", minute.to_i)}"
+      end
+
+      # Handle multiple minutes with single hour (e.g., "15,45 9")
+      if minute.include?(",") && hour != "*" && !hour.include?("-") && !hour.include?(",")
+        minutes = minute.split(",").map(&:to_i).sort
+        minute_list = minutes.map { |m| format("%02d", m) }.join(" and :")
+        return "#{format_hour(hour.to_i)}:#{minute_list}"
+      end
+
+      # Single time (e.g., "30 7")
+      if hour != "*" && minute != "*" && !hour.include?("-") && !hour.include?(",") && !minute.include?(",")
+        return "#{format_hour(hour.to_i)}:#{format("%02d", minute.to_i)}"
+      end
+
+      # Fallback: build from components
+      hour_str = if hour == "*"
+                   "every hour"
+                 elsif hour.include?("-")
+                   start_hour, end_hour = hour.split("-").map(&:to_i)
+                   "#{format_hour(start_hour)}-#{format_hour(end_hour)}"
+                 elsif hour.include?(",")
+                   hours = hour.split(",").map { |h| format_hour(h.to_i) }
+                   hours.join(", ")
+                 else
+                   format_hour(hour.to_i)
+                 end
+
+      minute_str = if minute == "*"
+                     ""
+                   elsif minute.include?(",")
+                     minutes = minute.split(",").map(&:to_i).sort
+                     "at :#{minutes.map { |m| format("%02d", m) }.join(' and :')}"
+                   elsif minute.start_with?("*/")
+                     interval = minute.split("/").last.to_i
+                     "every #{interval} minutes"
+                   else
+                     "at :#{format("%02d", minute.to_i)}"
+                   end
+
+      if minute_str.present?
+        "#{minute_str} #{hour_str}".strip
+      else
+        hour_str
+      end
+    end
+
+    def parse_day_month(day, month)
+      return nil if day == "*" && month == "*"
+      return nil if day == "*" && month != "*" # Don't show if only month is specified
+
+      if day != "*" && month == "*"
+        if day.include?("-")
+          "days #{day}"
+        else
+          "day #{day}"
+        end
+      elsif day == "*" && month != "*"
+        "in #{month_name(month)}"
+      else
+        nil
+      end
+    end
+
+    def format_hour(hour)
+      hour_24 = hour.to_i
+      if hour_24 == 0
+        "12 AM"
+      elsif hour_24 < 12
+        "#{hour_24} AM"
+      elsif hour_24 == 12
+        "12 PM"
+      else
+        "#{hour_24 - 12} PM"
+      end
+    end
+
+    def month_name(month)
+      months = %w[January February March April May June July August September October November December]
+      month_num = month.to_i
+      return month if month_num < 1 || month_num > 12
+
+      months[month_num - 1]
+    end
+
+    helper_method :human_readable_schedule
   end
 end

@@ -69,6 +69,7 @@ class ScreenerResult < ApplicationRecord
   # Convert to candidate hash format for compatibility with existing views
   def to_candidate_hash
     indicators = deep_symbolize_keys(indicators_hash)
+    metadata = deep_symbolize_keys(metadata_hash)
 
     # Split indicators into daily_indicators and weekly_indicators
     # The stored format for longterm screener has daily indicators at top level and weekly_indicators nested
@@ -96,7 +97,7 @@ class ScreenerResult < ApplicationRecord
       daily_indicators: daily_indicators,
       weekly_indicators: weekly_indicators,
       indicators: daily_indicators.merge(weekly_indicators: weekly_indicators), # Keep for backward compatibility
-      metadata: deep_symbolize_keys(metadata_hash),
+      metadata: metadata,
       multi_timeframe: deep_symbolize_keys(multi_timeframe_hash),
       trade_quality_score: trade_quality_score&.to_f,
       trade_quality_breakdown: deep_symbolize_keys(trade_quality_breakdown_hash),
@@ -105,6 +106,13 @@ class ScreenerResult < ApplicationRecord
       ai_holding_days: ai_holding_days,
       ai_comment: ai_comment,
       ai_avoid: ai_avoid || false,
+      # Extract setup_status and trade_plan from metadata
+      setup_status: metadata[:setup_status],
+      setup_reason: metadata[:setup_reason],
+      invalidate_if: metadata[:invalidate_if],
+      entry_conditions: metadata[:entry_conditions],
+      trade_plan: metadata[:trade_plan],
+      recommendation: metadata[:recommendation],
     }
   end
 

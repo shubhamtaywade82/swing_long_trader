@@ -12,7 +12,17 @@
             <th class="sortable text-right" data-sort="score" data-sort-type="number">Score</th>
             <th class="sortable text-right" data-sort="base_score" data-sort-type="number">Base Score</th>
             <th class="sortable text-right" data-sort="mtf_score" data-sort-type="number">MTF Score</th>
+            <th class="sortable" data-sort="setup_status" data-sort-type="string">Setup</th>
             <th class="sortable text-right" data-sort="price" data-sort-type="number">Price</th>
+            <% has_trade_plan = candidates.any? { |c| c[:trade_plan] } %>
+            <% if has_trade_plan %>
+              <th class="sortable text-right" data-sort="entry" data-sort-type="number">Entry</th>
+              <th class="sortable text-right" data-sort="sl" data-sort-type="number">SL</th>
+              <th class="sortable text-right" data-sort="tp" data-sort-type="number">TP</th>
+              <th class="sortable text-right" data-sort="rr" data-sort-type="number">RR</th>
+              <th class="sortable text-right" data-sort="qty" data-sort-type="number">Qty</th>
+              <th class="sortable text-right" data-sort="risk" data-sort-type="number">Risk ₹</th>
+            <% end %>
             <th class="sortable text-right" data-sort="rsi" data-sort-type="number">RSI</th>
             <th class="sortable text-right" data-sort="adx" data-sort-type="number">ADX</th>
             <th class="sortable" data-sort="supertrend" data-sort-type="string">Supertrend</th>
@@ -60,7 +70,16 @@
                 data-macd="<%= macd_trend %>"
                 data-ai-score="<%= candidate[:ai_score] || 0 %>"
                 data-ai-confidence="<%= candidate[:ai_confidence] || 0 %>"
-                data-recommendation="<%= candidate[:recommendation] || '' %>">
+                data-recommendation="<%= candidate[:recommendation] || '' %>"
+                data-setup-status="<%= candidate[:setup_status] || '' %>"
+                <% if candidate[:trade_plan] %>
+                  data-entry="<%= candidate[:trade_plan][:entry_price] || 0 %>"
+                  data-sl="<%= candidate[:trade_plan][:stop_loss] || 0 %>"
+                  data-tp="<%= candidate[:trade_plan][:take_profit] || 0 %>"
+                  data-rr="<%= candidate[:trade_plan][:risk_reward] || 0 %>"
+                  data-qty="<%= candidate[:trade_plan][:quantity] || 0 %>"
+                  data-risk="<%= candidate[:trade_plan][:risk_amount] || 0 %>"
+                <% end %>>
               <td class="text-right"><strong>#<%= index + 1 %></strong></td>
               <td><strong><%= candidate[:symbol] %></strong></td>
               <td class="text-right">
@@ -70,7 +89,57 @@
               </td>
               <td class="text-right"><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
               <td class="text-right"><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
+              <td>
+                <% setup_status = candidate[:setup_status] || "UNKNOWN" %>
+                <% setup_class = case setup_status
+                     when "READY" then "success"
+                     when "WAIT_PULLBACK", "WAIT_BREAKOUT" then "warning"
+                     when "IN_POSITION" then "info"
+                     else "secondary"
+                   end %>
+                <span class="badge bg-<%= setup_class %>" title="<%= candidate[:setup_reason] || '' %>">
+                  <%= setup_status.gsub('_', ' ') %>
+                </span>
+              </td>
               <td class="text-right">₹<%= number_with_precision(latest_close, precision: 2) %></td>
+              <% if has_trade_plan %>
+                <% trade_plan = candidate[:trade_plan] %>
+                <% if trade_plan %>
+                  <td class="text-right">
+                    <strong>₹<%= number_with_precision(trade_plan[:entry_price], precision: 2) %></strong>
+                    <small class="text-muted d-block" style="font-size: 0.7rem;">
+                      <%= trade_plan[:entry_zone] %>
+                    </small>
+                  </td>
+                  <td class="text-right">
+                    <span class="badge bg-danger">₹<%= number_with_precision(trade_plan[:stop_loss], precision: 2) %></span>
+                  </td>
+                  <td class="text-right">
+                    <span class="badge bg-success">₹<%= number_with_precision(trade_plan[:take_profit], precision: 2) %></span>
+                  </td>
+                  <td class="text-right">
+                    <span class="badge bg-<%= trade_plan[:risk_reward] >= 2.5 ? 'success' : 'warning' %>">
+                      <%= number_with_precision(trade_plan[:risk_reward], precision: 1) %>R
+                    </span>
+                  </td>
+                  <td class="text-right">
+                    <strong><%= trade_plan[:quantity] %></strong>
+                    <% if trade_plan[:max_capital_pct] && trade_plan[:max_capital_pct] > 0 %>
+                      <small class="text-muted d-block" style="font-size: 0.7rem;">
+                        <%= number_with_precision(trade_plan[:max_capital_pct], precision: 1) %>% capital
+                      </small>
+                    <% end %>
+                  </td>
+                  <td class="text-right">
+                    <strong class="text-danger">₹<%= number_with_precision(trade_plan[:risk_amount], precision: 0) %></strong>
+                    <small class="text-muted d-block" style="font-size: 0.7rem;">
+                      Capital: ₹<%= number_with_precision(trade_plan[:capital_used], precision: 0) %>
+                    </small>
+                  </td>
+                <% else %>
+                  <td colspan="6" class="text-muted text-center">-</td>
+                <% end %>
+              <% end %>
               <td class="text-right">
                 <% if rsi %>
                   <span class="badge bg-<%= rsi > 70 ? 'danger' : rsi < 30 ? 'success' : 'info' %>">
@@ -137,18 +206,38 @@
                 </td>
               <% end %>
               <% if show_recommendation %>
-                <td>
+                <td style="max-width: 300px;">
                   <% rec = candidate[:recommendation] || "N/A" %>
                   <% rec_class = case rec
-                       when /Strong Buy|Buy/i then "success"
-                       when /Watch/i then "warning"
-                       when /Wait|Avoid/i then "danger"
-                       when /Already in/i then "info"
+                       when /BUY/i then "success"
+                       when /WAIT/i then "warning"
+                       when /NOT READY|Avoid/i then "danger"
+                       when /Already in|Monitor/i then "info"
                        else "secondary"
                      end %>
-                  <span class="badge bg-<%= rec_class %>">
-                    <%= rec %>
-                  </span>
+                  <% if candidate[:trade_plan] %>
+                    <% tp = candidate[:trade_plan] %>
+                    <div class="small">
+                      <span class="badge bg-<%= rec_class %> mb-1 d-block">
+                        <%= rec %>
+                      </span>
+                      <div class="text-muted" style="font-size: 0.7rem; line-height: 1.3;">
+                        Entry: ₹<%= number_with_precision(tp[:entry_price], precision: 2) %><br>
+                        SL: ₹<%= number_with_precision(tp[:stop_loss], precision: 2) %> |
+                        TP: ₹<%= number_with_precision(tp[:take_profit], precision: 2) %><br>
+                        Qty: <%= tp[:quantity] %> | Risk: ₹<%= number_with_precision(tp[:risk_amount], precision: 0) %>
+                      </div>
+                    </div>
+                  <% else %>
+                    <span class="badge bg-<%= rec_class %>">
+                      <%= rec %>
+                    </span>
+                    <% if candidate[:setup_reason] %>
+                      <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                        <%= candidate[:setup_reason] %>
+                      </small>
+                    <% end %>
+                  <% end %>
                 </td>
               <% end %>
               <% if show_position && candidate[:position] %>

@@ -525,6 +525,105 @@
       </div>
     <% end %>
 
+    <!-- Recurring Tasks -->
+    <% if @recurring_tasks.any? %>
+      <div class="card mb-2 shadow-sm border-info">
+        <div class="card-header bg-info text-white py-1">
+          <h6 class="mb-0" style="font-size: 0.8rem;">
+            <i class="bi bi-repeat"></i> Recurring Tasks
+            <span class="badge bg-light text-dark ms-1" style="font-size: 0.65rem;"><%= @recurring_tasks.count %></span>
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover job-table mb-0">
+              <thead>
+                <tr>
+                  <th>Task Key</th>
+                  <th>Schedule</th>
+                  <th>Class/Command</th>
+                  <th>Queue</th>
+                  <th>Priority</th>
+                  <th>Last Run</th>
+                  <th>Next Run</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @recurring_tasks.each do |task| %>
+                  <tr>
+                    <td>
+                      <span class="code-block"><%= task.key %></span>
+                    </td>
+                    <td>
+                      <div>
+                        <span class="badge bg-info badge-status" title="<%= task.schedule %>">
+                          <%= human_readable_schedule(task.schedule) %>
+                        </span>
+                      </div>
+                      <small class="text-muted d-block mt-1" style="font-size: 0.65rem;">
+                        <code style="font-size: 0.7rem;"><%= task.schedule %></code>
+                      </small>
+                    </td>
+                    <td>
+                      <% if task.class_name.present? %>
+                        <span class="code-block"><%= task.class_name.split("::").last %></span>
+                        <% if task.arguments.present? %>
+                          <br>
+                          <small class="text-muted">
+                            Args: <%= task.arguments.is_a?(String) ? task.arguments : task.arguments.to_json %>
+                          </small>
+                        <% end %>
+                      <% elsif task.command.present? %>
+                        <span class="code-block" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="<%= task.command %>">
+                          <%= truncate(task.command, length: 40) %>
+                        </span>
+                      <% else %>
+                        <span class="text-muted">—</span>
+                      <% end %>
+                    </td>
+                    <td>
+                      <span class="code-block"><%= task.queue_name || "default" %></span>
+                    </td>
+                    <td><%= task.priority || 0 %></td>
+                    <td>
+                      <% last_execution = @recurring_executions.find { |e| e.task_key == task.key } %>
+                      <% if last_execution %>
+                        <%= time_ago_in_words(last_execution.created_at) %> ago
+                        <% if last_execution.job %>
+                          <br>
+                          <small class="text-muted">
+                            <%= link_to "Job ##{last_execution.job.id}", admin_solid_queue_path(last_execution.job.id), class: "text-decoration-none" %>
+                          </small>
+                        <% end %>
+                      <% else %>
+                        <span class="text-muted">Never</span>
+                      <% end %>
+                    </td>
+                    <td>
+                      <span class="text-muted">Auto-scheduled</span>
+                      <% if task.description.present? %>
+                        <br>
+                        <small class="text-muted" title="<%= task.description %>">
+                          <%= truncate(task.description, length: 30) %>
+                        </small>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+          <% if @recurring_executions.any? %>
+            <div class="mt-2">
+              <small class="text-muted">
+                <i class="bi bi-info-circle"></i> Showing last <%= @recurring_executions.count %> execution(s)
+              </small>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+
     <!-- Recent Failures -->
     <% if @recent_failures.any? %>
       <div class="card mb-2 shadow-sm border-danger">

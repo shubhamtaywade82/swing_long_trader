@@ -313,7 +313,7 @@ class DashboardController < ApplicationController
     # Log job enqueueing with PID to verify process separation
     Rails.logger.info(
       "[DashboardController] Enqueued SwingScreenerJob: #{job.job_id} " \
-      "queue=#{queue_name} web_pid=#{Process.pid}"
+      "queue=#{queue_name} web_pid=#{Process.pid}",
     )
 
     # Check if worker is running by checking queue status
@@ -355,7 +355,7 @@ class DashboardController < ApplicationController
     # Log job enqueueing with PID to verify process separation
     Rails.logger.info(
       "[DashboardController] Enqueued LongtermScreenerJob: #{job.job_id} " \
-      "queue=#{queue_name} web_pid=#{Process.pid}"
+      "queue=#{queue_name} web_pid=#{Process.pid}",
     )
 
     # Check if worker is running
@@ -926,8 +926,9 @@ class DashboardController < ApplicationController
       # Determine if bullish or bearish
       is_bullish = determine_bullish(candidate, indicators, screener_type)
 
-      # Generate recommendation
-      recommendation = generate_recommendation(candidate, indicators, score, is_bullish, screener_type)
+      # Use actionable recommendation from screener if available, otherwise generate generic one
+      recommendation = candidate[:recommendation].presence || generate_recommendation(candidate, indicators, score,
+                                                                                      is_bullish, screener_type)
 
       candidate_with_rec = candidate.merge(recommendation: recommendation)
 
@@ -937,15 +938,29 @@ class DashboardController < ApplicationController
         @bearish_stocks << candidate_with_rec
       end
 
-      # Add to recommendations ONLY if it's a "Buy" or "Strong Buy" recommendation
-      # This ensures recommendations tab only shows actionable buy signals
-      @recommendations << candidate_with_rec if /(Strong Buy|Buy)/i.match?(recommendation)
+      # Add to recommendations if:
+      # 1. Has actionable BUY recommendation (from trade plan), OR
+      # 2. Setup status is READY (tradeable), OR
+      # 3. Generic "Buy" or "Strong Buy" recommendation
+      is_actionable = candidate[:setup_status] == "READY" ||
+                      candidate[:trade_plan].present? ||
+                      /(BUY|Strong Buy|Buy)/i.match?(recommendation)
+      @recommendations << candidate_with_rec if is_actionable
     end
 
-    # Sort by score
-    @bullish_stocks.sort_by! { |c| -(c[:score] || 0) }
-    @bearish_stocks.sort_by! { |c| -(c[:score] || 0) }
-    @recommendations.sort_by! { |c| -(c[:score] || 0) }
+    # Sort recommendations by setup status (READY first), then by score
+    # Sort others by score
+    @bullish_stocks.sort_by! { |c| [-(c[:score] || 0)] }
+    @bearish_stocks.sort_by! { |c| [-(c[:score] || 0)] }
+    @recommendations.sort_by! do |c|
+      setup_priority = case c[:setup_status]
+                       when "READY" then 0
+                       when "WAIT_PULLBACK", "WAIT_BREAKOUT" then 1
+                       when "IN_POSITION" then 2
+                       else 3
+                       end
+      [setup_priority, -(c[:score] || 0)]
+    end
     @flag_stocks.sort_by! { |c| -(c[:score] || 0) }
   end
 
