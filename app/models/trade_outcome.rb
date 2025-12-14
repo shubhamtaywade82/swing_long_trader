@@ -15,6 +15,10 @@ class TradeOutcome < ApplicationRecord
     allow_nil: true,
   }
 
+  # Alias for backward compatibility
+  alias_method :tp_hit?, :winner? if respond_to?(:winner?)
+  alias_method :sl_hit?, :loser? if respond_to?(:loser?)
+
   scope :open, -> { where(status: "open") }
   scope :closed, -> { where(status: "closed") }
   scope :cancelled, -> { where(status: "cancelled") }

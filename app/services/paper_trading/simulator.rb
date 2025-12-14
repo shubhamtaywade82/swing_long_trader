@@ -212,26 +212,36 @@ module PaperTrading
     end
 
     def update_trade_outcome_for_paper_position(position, exit_price:, exit_reason:)
+      # Find TradeOutcome by position_id or by symbol + screener_run
       outcome = TradeOutcome.find_by(
         position_id: position.id,
         position_type: "paper_position",
         status: "open",
       )
 
+      # If not found by position_id, try to find by symbol and recent screener run
+      unless outcome
+        screener_result = ScreenerResult
+                          .where(instrument_id: position.instrument_id, symbol: position.symbol)
+                          .where("analyzed_at > ?", 1.day.ago)
+                          .by_stage("final")
+                          .order(analyzed_at: :desc)
+                          .first
+
+        if screener_result&.screener_run_id
+          outcome = TradeOutcome.find_by(
+            screener_run_id: screener_result.screener_run_id,
+            instrument_id: position.instrument_id,
+            symbol: position.symbol,
+            status: "open",
+          )
+        end
+      end
+
       return unless outcome
 
-      mapped_reason = case exit_reason.to_s.downcase
-                      when /target|take.profit|tp/
-                        "target_hit"
-                      when /stop|sl|stop.loss/
-                        "stop_hit"
-                      when /time|holding|days/
-                        "time_based"
-                      when /signal|invalid|screener/
-                        "signal_invalidated"
-                      else
-                        "manual"
-                      end
+      # Map exit reason to TradeOutcome format
+      mapped_reason = map_exit_reason(exit_reason)
 
       TradeOutcomes::Updater.call(
         outcome: outcome,
@@ -242,6 +252,23 @@ module PaperTrading
     rescue StandardError => e
       Rails.logger.error("[PaperTrading::Simulator] Failed to update TradeOutcome: #{e.message}")
       # Don't fail position closing if outcome update fails
+    end
+
+    def map_exit_reason(reason)
+      case reason.to_s.downcase
+      when /target|take.profit|tp|tp_hit/
+        "target_hit"
+      when /stop|sl|stop.loss|sl_hit/
+        "stop_hit"
+      when /time|holding|days|time_based/
+        "time_based"
+      when /signal|invalid|screener|signal_invalidated/
+        "signal_invalidated"
+      when /manual/
+        "manual"
+      else
+        "manual" # Default to manual if unknown
+      end
     end
   end
 end
