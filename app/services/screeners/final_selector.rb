@@ -49,7 +49,12 @@ module Screeners
     private
 
     def load_default_portfolio
-      # Try to find active portfolio (paper or live)
+      # Prefer paper portfolio for screening (safer, allows testing)
+      # But allow live if paper doesn't exist
+      paper_portfolio = CapitalAllocationPortfolio.paper.active.first
+      return paper_portfolio if paper_portfolio
+
+      # Fallback to any active portfolio (could be live)
       CapitalAllocationPortfolio.active.first || nil
     end
 
@@ -149,26 +154,50 @@ module Screeners
     end
 
     def get_portfolio_constraints
-      base_constraints = if @portfolio&.swing_risk_config
-                           risk_config = @portfolio.swing_risk_config
-                           {
-                             max_positions: risk_config.max_open_positions || DEFAULT_MAX_POSITIONS,
-                             max_capital_pct: risk_config.max_position_exposure || DEFAULT_MAX_CAPITAL_PCT,
-                             max_per_sector: @config[:max_per_sector] || DEFAULT_MAX_PER_SECTOR,
-                             total_equity: @portfolio.total_equity || 100_000,
-                           }
-                         else
-                           {
-                             max_positions: @config[:max_positions] || DEFAULT_MAX_POSITIONS,
-                             max_capital_pct: @config[:max_capital_pct] || DEFAULT_MAX_CAPITAL_PCT,
-                             max_per_sector: @config[:max_per_sector] || DEFAULT_MAX_PER_SECTOR,
-                             total_equity: @portfolio&.total_equity || 100_000,
-                           }
-                         end
+      return default_constraints unless @portfolio
+
+      # Handle CapitalAllocationPortfolio (paper or live)
+      if @portfolio.is_a?(CapitalAllocationPortfolio)
+        base_constraints = if @portfolio.swing_risk_config
+                             risk_config = @portfolio.swing_risk_config
+                             {
+                               max_positions: risk_config.max_open_positions || DEFAULT_MAX_POSITIONS,
+                               max_capital_pct: risk_config.max_position_exposure || DEFAULT_MAX_CAPITAL_PCT,
+                               max_per_sector: @config[:max_per_sector] || DEFAULT_MAX_PER_SECTOR,
+                               total_equity: @portfolio.total_equity || 100_000,
+                             }
+                           else
+                             {
+                               max_positions: @config[:max_positions] || DEFAULT_MAX_POSITIONS,
+                               max_capital_pct: @config[:max_capital_pct] || DEFAULT_MAX_CAPITAL_PCT,
+                               max_per_sector: @config[:max_per_sector] || DEFAULT_MAX_PER_SECTOR,
+                               total_equity: @portfolio.total_equity || 100_000,
+                             }
+                           end
+      # Handle PaperPortfolio (legacy paper trading system)
+      elsif @portfolio.is_a?(PaperPortfolio)
+        base_constraints = {
+          max_positions: @config[:max_positions] || DEFAULT_MAX_POSITIONS,
+          max_capital_pct: @config[:max_capital_pct] || DEFAULT_MAX_CAPITAL_PCT,
+          max_per_sector: @config[:max_per_sector] || DEFAULT_MAX_PER_SECTOR,
+          total_equity: @portfolio.total_equity || @portfolio.capital || 100_000,
+        }
+      else
+        base_constraints = default_constraints
+      end
 
       # Apply action budget (max trades/risk/capital per day)
       action_budget = get_action_budget
       base_constraints.merge(action_budget)
+    end
+
+    def default_constraints
+      {
+        max_positions: DEFAULT_MAX_POSITIONS,
+        max_capital_pct: DEFAULT_MAX_CAPITAL_PCT,
+        max_per_sector: DEFAULT_MAX_PER_SECTOR,
+        total_equity: 100_000,
+      }
     end
 
     # Get action budget: max trades/risk/capital deployable today
@@ -182,9 +211,17 @@ module Screeners
 
       # Check how many trades were taken today
       if @portfolio
-        today_positions = @portfolio.open_swing_positions
-                                    .where("created_at >= ?", today.beginning_of_day)
-                                    .count
+        today_positions = if @portfolio.is_a?(CapitalAllocationPortfolio)
+                            @portfolio.open_swing_positions
+                                      .where("created_at >= ?", today.beginning_of_day)
+                                      .count
+                          elsif @portfolio.is_a?(PaperPortfolio)
+                            @portfolio.open_positions
+                                      .where("opened_at >= ?", today.beginning_of_day)
+                                      .count
+                          else
+                            0
+                          end
         budget[:trades_taken_today] = today_positions
         budget[:remaining_trades_today] = [budget[:max_trades_today] - today_positions, 0].max
       end
@@ -195,7 +232,16 @@ module Screeners
     def get_current_positions
       return [] unless @portfolio
 
-      @portfolio.open_swing_positions.includes(:instrument).map do |pos|
+      # Handle both CapitalAllocationPortfolio and PaperPortfolio
+      positions = if @portfolio.is_a?(CapitalAllocationPortfolio)
+                     @portfolio.open_swing_positions.includes(:instrument)
+                   elsif @portfolio.is_a?(PaperPortfolio)
+                     @portfolio.open_positions.includes(:instrument)
+                   else
+                     []
+                   end
+
+      positions.map do |pos|
         {
           symbol: pos.instrument&.symbol_name || pos.symbol,
           sector: get_sector_for_instrument(pos.instrument),
@@ -232,10 +278,17 @@ module Screeners
       # Estimate position size (10-15% of equity)
       max_position_value = constraints[:total_equity] * (constraints[:max_capital_pct] / 100.0)
 
-      # Check available capital
-      available = @portfolio.available_swing_capital || @portfolio.swing_capital || 0
+      # Get available capital based on portfolio type
+      available = if @portfolio.respond_to?(:available_swing_capital)
+                     @portfolio.available_swing_capital || @portfolio.swing_capital || 0
+                   elsif @portfolio.respond_to?(:available_capital)
+                     @portfolio.available_capital || 0
+                   else
+                     0
+                   end
 
-      available >= max_position_value * 0.5 # Require at least 50% of max position size
+      # Require at least 50% of max position size to be available
+      available >= max_position_value * 0.5
     end
 
     def too_correlated?(candidate, selected, constraints)

@@ -69,7 +69,8 @@ module Screeners
         return handle_empty_results(screener_run) if layer2_candidates.empty?
 
         # Portfolio pre-filter before AI (save costs, avoid untradable setups)
-        portfolio = CapitalAllocationPortfolio.active.first
+        # Prefer paper portfolio if available, otherwise use any active portfolio
+        portfolio = find_portfolio_for_screening
         prefiltered_candidates = prefilter_for_portfolio(layer2_candidates, portfolio)
 
         screener_run.update_metrics!(
@@ -301,12 +302,35 @@ module Screeners
       nil
     end
 
+    def find_portfolio_for_screening
+      # Prefer paper portfolio for screening (safer, allows testing)
+      # But allow live if paper doesn't exist
+      paper_portfolio = CapitalAllocationPortfolio.paper.active.first
+      return paper_portfolio if paper_portfolio
+
+      # Fallback to any active portfolio (could be live)
+      CapitalAllocationPortfolio.active.first
+    end
+
     def has_sufficient_capital?(candidate, constraints, portfolio)
       return true unless portfolio
 
       max_position_value = constraints[:total_equity] * (constraints[:max_capital_pct] / 100.0)
-      available = portfolio.available_swing_capital || portfolio.swing_capital || 0
+      
+      # Get available capital based on portfolio type
+      available = if portfolio.is_a?(CapitalAllocationPortfolio)
+                     # CapitalAllocationPortfolio (paper or live)
+                     portfolio.available_swing_capital || portfolio.swing_capital || 0
+                   elsif portfolio.is_a?(PaperPortfolio)
+                     # PaperPortfolio (legacy paper trading)
+                     portfolio.available_capital || (portfolio.capital - portfolio.total_exposure) || 0
+                   elsif portfolio.respond_to?(:available_capital)
+                     portfolio.available_capital || 0
+                   else
+                     0
+                   end
 
+      # Require at least 50% of max position size to be available
       available >= max_position_value * 0.5
     end
 
