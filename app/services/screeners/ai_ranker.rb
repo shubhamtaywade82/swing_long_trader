@@ -43,26 +43,64 @@ module Screeners
       return handle_rate_limit if rate_limit_exceeded?
 
       evaluated = []
+      total_count = @candidates.size
+      processed_count = 0
+      start_time = Time.current
 
       @candidates.each do |candidate|
+        processed_count += 1
         result = evaluate_candidate(candidate)
-        next unless result
+        
+        if result
+          # Filter: drop if avoid flag is true or confidence too low
+          if result[:avoid] != true && result[:confidence] >= @min_confidence
+            evaluated_candidate = candidate.merge(
+              ai_confidence: result[:confidence],
+              ai_risk: result[:risk],
+              ai_holding_days: result[:holding_days],
+              ai_comment: result[:comment],
+              ai_avoid: result[:avoid] || false,
+            )
+            evaluated << evaluated_candidate
 
-        # Filter: drop if avoid flag is true or confidence too low
-        next if result[:avoid] == true
-        next if result[:confidence] < @min_confidence
-
-        evaluated << candidate.merge(
-          ai_confidence: result[:confidence],
-          ai_risk: result[:risk],
-          ai_holding_days: result[:holding_days],
-          ai_comment: result[:comment],
-          ai_avoid: result[:avoid] || false,
-        )
+            # Broadcast individual AI evaluation update
+            broadcast_ai_evaluation_update(evaluated_candidate, {
+              total: total_count,
+              processed: processed_count,
+              evaluated: evaluated.size,
+              started_at: start_time.iso8601,
+              status: "running",
+              elapsed: (Time.current - start_time).round(1),
+            })
+          else
+            # Broadcast that candidate was filtered out
+            broadcast_ai_evaluation_filtered(candidate, result, {
+              total: total_count,
+              processed: processed_count,
+              evaluated: evaluated.size,
+              started_at: start_time.iso8601,
+              status: "running",
+              elapsed: (Time.current - start_time).round(1),
+            })
+          end
+        end
       end
 
       # Sort by confidence (highest first)
-      evaluated.sort_by { |c| -c[:ai_confidence] }.first(@limit)
+      sorted = evaluated.sort_by { |c| -c[:ai_confidence] }.first(@limit)
+      
+      # Broadcast completion
+      broadcast_ai_evaluation_complete(sorted, {
+        total: total_count,
+        processed: processed_count,
+        evaluated: sorted.size,
+        started_at: start_time.iso8601,
+        completed_at: Time.current.iso8601,
+        duration: (Time.current - start_time).round(1),
+        status: "completed",
+      })
+
+      sorted
     end
 
     private
@@ -303,6 +341,53 @@ module Screeners
       Rails.logger.warn("[Screeners::AIEvaluator] Rate limit exceeded (#{MAX_CALLS_PER_DAY} calls/day)")
       # Return candidates sorted by trade quality score only
       @candidates.sort_by { |c| -(c[:trade_quality_score] || c[:score] || 0) }.first(@limit)
+    end
+
+    def broadcast_ai_evaluation_update(candidate, progress_data)
+      # Broadcast individual AI evaluation result for live UI updates
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "ai_evaluation_added",
+          screener_type: "swing",
+          record: candidate,
+          progress: progress_data,
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::AIEvaluator] Failed to broadcast AI evaluation: #{e.message}")
+    end
+
+    def broadcast_ai_evaluation_filtered(candidate, result, progress_data)
+      # Broadcast when candidate is filtered out by AI
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "ai_evaluation_filtered",
+          screener_type: "swing",
+          symbol: candidate[:symbol],
+          reason: result[:avoid] ? "avoided" : "low_confidence",
+          confidence: result[:confidence],
+          progress: progress_data,
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::AIEvaluator] Failed to broadcast filtered candidate: #{e.message}")
+    end
+
+    def broadcast_ai_evaluation_complete(evaluated_candidates, progress_data)
+      # Broadcast completion of AI evaluation phase
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "ai_evaluation_complete",
+          screener_type: "swing",
+          candidate_count: evaluated_candidates.size,
+          progress: progress_data,
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::AIEvaluator] Failed to broadcast completion: #{e.message}")
     end
   end
 

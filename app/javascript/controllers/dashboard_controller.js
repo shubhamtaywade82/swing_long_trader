@@ -135,6 +135,15 @@ export default class extends Controller {
     } else if (data.type === "screener_record_added") {
       // Add/update individual record in table for live updates
       this.handleScreenerRecordAdded(data);
+    } else if (data.type === "ai_evaluation_added") {
+      // Update record with AI evaluation results
+      this.handleAIEvaluationAdded(data);
+    } else if (data.type === "ai_evaluation_filtered") {
+      // Show that candidate was filtered out by AI
+      this.handleAIEvaluationFiltered(data);
+    } else if (data.type === "ai_evaluation_complete") {
+      // Show AI evaluation phase completion
+      this.handleAIEvaluationComplete(data);
     } else if (data.type === "screener_partial_results") {
       // Update progressive results display
       if (window.updateProgressiveResults && data.candidates) {
@@ -191,7 +200,10 @@ export default class extends Controller {
             data.type === "screener_progress" ||
             data.type === "screener_partial_results" ||
             data.type === "screener_complete" ||
-            data.type === "screener_record_added"
+            data.type === "screener_record_added" ||
+            data.type === "ai_evaluation_added" ||
+            data.type === "ai_evaluation_filtered" ||
+            data.type === "ai_evaluation_complete"
           ) {
             this.handleScreenerStream(data);
           }
@@ -605,6 +617,129 @@ export default class extends Controller {
       } candidates found - ${elapsed.toFixed(1)}s elapsed${
         remaining > 0 ? `, ~${remaining.toFixed(0)}s remaining` : ""
       }`;
+    }
+  }
+
+  handleAIEvaluationAdded(data) {
+    if (!data.record || !data.record.symbol) return;
+
+    const record = data.record;
+    const tbody = document.querySelector(
+      'tbody[data-screener-results="true"][data-screener-type="swing"]'
+    );
+
+    if (!tbody) return;
+
+    // Find existing row and update with AI data
+    const existingRow = tbody.querySelector(
+      `tr[data-screener-symbol="${record.symbol}"]`
+    );
+
+    if (existingRow) {
+      // Update AI columns if they exist, or add them
+      this.updateRowWithAIData(existingRow, record);
+    } else {
+      // Row doesn't exist yet, create it (shouldn't happen, but handle gracefully)
+      const newRow = this.createScreenerRow(record);
+      tbody.appendChild(newRow);
+    }
+
+    // Update progress
+    if (data.progress) {
+      this.updateAIEvaluationProgress(data.progress);
+    }
+  }
+
+  updateRowWithAIData(row, record) {
+    // Check if AI columns exist
+    const cells = row.querySelectorAll("td");
+    const hasAIColumns = row.querySelector("td:nth-child(11)") !== null; // AI Score column
+
+    if (hasAIColumns) {
+      // Update existing AI columns
+      const aiScoreCell = row.querySelector("td:nth-child(11)");
+      const aiConfidenceCell = row.querySelector("td:nth-child(12)");
+
+      if (aiScoreCell && record.ai_confidence) {
+        const score = record.ai_confidence * 10; // Convert 0-10 to 0-100
+        const scoreClass =
+          score >= 80 ? "success" : score >= 60 ? "warning" : "secondary";
+        aiScoreCell.innerHTML = `<span class="badge bg-${scoreClass}">${score.toFixed(1)}</span>`;
+      }
+
+      if (aiConfidenceCell && record.ai_confidence) {
+        aiConfidenceCell.innerHTML = `<span class="badge bg-info">${record.ai_confidence.toFixed(1)}</span>`;
+      }
+    } else {
+      // Add AI columns if they don't exist
+      // This requires checking the table header first
+      const thead = row.closest("table")?.querySelector("thead");
+      if (thead) {
+        const headerRow = thead.querySelector("tr");
+        // Check if AI headers exist
+        const hasAIHeaders = headerRow.querySelector("th:nth-child(11)") !== null;
+
+        if (!hasAIHeaders) {
+          // Add AI headers
+          const aiScoreHeader = document.createElement("th");
+          aiScoreHeader.textContent = "AI Score";
+          const aiConfidenceHeader = document.createElement("th");
+          aiConfidenceHeader.textContent = "AI Confidence";
+          headerRow.appendChild(aiScoreHeader);
+          headerRow.appendChild(aiConfidenceHeader);
+        }
+
+        // Add AI data cells
+        const aiScoreCell = document.createElement("td");
+        const aiConfidenceCell = document.createElement("td");
+
+        if (record.ai_confidence) {
+          const score = record.ai_confidence * 10;
+          const scoreClass =
+            score >= 80 ? "success" : score >= 60 ? "warning" : "secondary";
+          aiScoreCell.innerHTML = `<span class="badge bg-${scoreClass}">${score.toFixed(1)}</span>`;
+          aiConfidenceCell.innerHTML = `<span class="badge bg-info">${record.ai_confidence.toFixed(1)}</span>`;
+        } else {
+          aiScoreCell.innerHTML = '<span class="text-muted">-</span>';
+          aiConfidenceCell.innerHTML = '<span class="text-muted">-</span>';
+        }
+
+        row.appendChild(aiScoreCell);
+        row.appendChild(aiConfidenceCell);
+      }
+    }
+  }
+
+  handleAIEvaluationFiltered(data) {
+    // Show that a candidate was filtered out
+    if (data.progress) {
+      this.updateAIEvaluationProgress(data.progress);
+    }
+    // Could add visual indicator or log
+    console.log(
+      `AI filtered out ${data.symbol}: ${data.reason} (confidence: ${data.confidence})`
+    );
+  }
+
+  handleAIEvaluationComplete(data) {
+    // Show completion message
+    const statusMessage = document.querySelector(
+      '[data-screener-target="statusMessage"]'
+    );
+    if (statusMessage && data.progress) {
+      statusMessage.textContent = `AI Evaluation complete: ${data.candidate_count} candidates approved (${data.progress.duration}s)`;
+    }
+  }
+
+  updateAIEvaluationProgress(progress) {
+    const statusMessage = document.querySelector(
+      '[data-screener-target="statusMessage"]'
+    );
+    if (statusMessage && progress) {
+      const elapsed = progress.elapsed || 0;
+      statusMessage.textContent = `AI Evaluation: ${progress.processed || 0}/${
+        progress.total || 0
+      } evaluated, ${progress.evaluated || 0} approved - ${elapsed.toFixed(1)}s elapsed`;
     }
   }
 }
