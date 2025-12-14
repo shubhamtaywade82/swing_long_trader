@@ -24,7 +24,7 @@ class ScreenerResult < ApplicationRecord
   scope :swing, -> { where(screener_type: "swing") }
   scope :longterm, -> { where(screener_type: "longterm") }
   scope :recent, -> { order(analyzed_at: :desc) }
-  scope :by_date, ->(date) { where(analyzed_at: date.beginning_of_day..date.end_of_day) }
+  scope :by_date, ->(date) { where(analyzed_at: date.all_day) }
   scope :top_scored, ->(limit = 50) { order(score: :desc).limit(limit) }
   scope :today, -> { by_date(Date.current) }
   scope :latest, -> { where(analyzed_at: maximum(:analyzed_at)) }
@@ -74,11 +74,11 @@ class ScreenerResult < ApplicationRecord
       score: score.to_f,
       base_score: base_score.to_f,
       mtf_score: mtf_score.to_f,
-      indicators: indicators_hash,
-      metadata: metadata_hash,
-      multi_timeframe: multi_timeframe_hash,
+      indicators: deep_symbolize_keys(indicators_hash),
+      metadata: deep_symbolize_keys(metadata_hash),
+      multi_timeframe: deep_symbolize_keys(multi_timeframe_hash),
       trade_quality_score: trade_quality_score&.to_f,
-      trade_quality_breakdown: trade_quality_breakdown_hash,
+      trade_quality_breakdown: deep_symbolize_keys(trade_quality_breakdown_hash),
       ai_confidence: ai_confidence&.to_f,
       ai_risk: ai_risk,
       ai_holding_days: ai_holding_days,
@@ -93,7 +93,7 @@ class ScreenerResult < ApplicationRecord
     return [] unless latest_analyzed_at
 
     scope = where(screener_type: screener_type, analyzed_at: latest_analyzed_at)
-                                          .order(score: :desc)
+            .order(score: :desc)
     scope = scope.limit(limit) if limit
     scope
   end
@@ -143,5 +143,24 @@ class ScreenerResult < ApplicationRecord
 
     result.save!
     result
+  end
+
+  private
+
+  def deep_symbolize_keys(hash)
+    return hash unless hash.is_a?(Hash)
+
+    hash.each_with_object({}) do |(key, value), result|
+      new_key = key.is_a?(String) ? key.to_sym : key
+      new_value = case value
+                  when Hash
+                    deep_symbolize_keys(value)
+                  when Array
+                    value.map { |v| v.is_a?(Hash) ? deep_symbolize_keys(v) : v }
+                  else
+                    value
+                  end
+      result[new_key] = new_value
+    end
   end
 end

@@ -43,9 +43,11 @@
               </td>
               <td><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
               <td><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
-              <td>₹<%= number_with_precision(candidate.dig(:indicators, :latest_close) || candidate.dig(:daily_indicators, :latest_close) || 0, precision: 2) %></td>
+              <% indicators = candidate[:indicators] || {} %>
+              <% latest_close = indicators[:latest_close] || indicators["latest_close"] || candidate.dig(:daily_indicators, :latest_close) || 0 %>
+              <td>₹<%= number_with_precision(latest_close, precision: 2) %></td>
               <td>
-                <% rsi = candidate.dig(:indicators, :rsi) || candidate.dig(:daily_indicators, :rsi) %>
+                <% rsi = indicators[:rsi] || indicators["rsi"] || candidate.dig(:daily_indicators, :rsi) %>
                 <% if rsi %>
                   <span class="badge bg-<%= rsi > 70 ? 'danger' : rsi < 30 ? 'success' : 'info' %>">
                     <%= number_with_precision(rsi, precision: 1) %>
@@ -55,7 +57,7 @@
                 <% end %>
               </td>
               <td>
-                <% adx = candidate.dig(:indicators, :adx) || candidate.dig(:daily_indicators, :adx) %>
+                <% adx = indicators[:adx] || indicators["adx"] || candidate.dig(:daily_indicators, :adx) %>
                 <% if adx %>
                   <span class="badge bg-<%= adx > 25 ? 'success' : 'secondary' %>">
                     <%= number_with_precision(adx, precision: 1) %>
@@ -65,18 +67,20 @@
                 <% end %>
               </td>
               <td>
-                <% st = candidate.dig(:indicators, :supertrend) || candidate.dig(:weekly_indicators, :supertrend) %>
+                <% st = indicators[:supertrend] || indicators["supertrend"] || candidate.dig(:weekly_indicators, :supertrend) %>
                 <% if st %>
-                  <span class="badge bg-<%= st[:direction] == :bullish ? 'success' : 'danger' %>">
-                    <%= st[:direction].to_s.upcase %>
+                  <% st_direction = st[:direction] || st["direction"] %>
+                  <% st_direction = st_direction.to_sym if st_direction.is_a?(String) %>
+                  <span class="badge bg-<%= st_direction == :bullish ? 'success' : 'danger' %>">
+                    <%= st_direction.to_s.upcase %>
                   </span>
                 <% else %>
                   <span class="text-muted">-</span>
                 <% end %>
               </td>
               <td>
-                <% ema20 = candidate.dig(:indicators, :ema20) || candidate.dig(:daily_indicators, :ema20) %>
-                <% ema50 = candidate.dig(:indicators, :ema50) || candidate.dig(:daily_indicators, :ema50) %>
+                <% ema20 = indicators[:ema20] || indicators["ema20"] || candidate.dig(:daily_indicators, :ema20) %>
+                <% ema50 = indicators[:ema50] || indicators["ema50"] || candidate.dig(:daily_indicators, :ema50) %>
                 <% if ema20 && ema50 %>
                   <span class="badge bg-<%= ema20 > ema50 ? 'success' : 'danger' %>">
                     <%= ema20 > ema50 ? 'BULL' : 'BEAR' %>
@@ -86,7 +90,7 @@
                 <% end %>
               </td>
               <td>
-                <% macd = candidate.dig(:indicators, :macd) || candidate.dig(:daily_indicators, :macd) %>
+                <% macd = indicators[:macd] || indicators["macd"] || candidate.dig(:daily_indicators, :macd) %>
                 <% if macd.is_a?(Array) && macd.size >= 2 %>
                   <% macd_line = macd[0] %>
                   <% signal_line = macd[1] %>
