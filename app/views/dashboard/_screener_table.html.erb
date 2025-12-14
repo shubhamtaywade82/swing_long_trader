@@ -31,9 +31,9 @@
             <% end %>
           </tr>
         </thead>
-        <tbody>
+        <tbody data-screener-results="true" data-screener-type="swing">
           <% candidates.each_with_index do |candidate, index| %>
-            <tr>
+            <tr data-screener-symbol="<%= candidate[:symbol] %>" data-screener-instrument-id="<%= candidate[:instrument_id] %>">
               <td><strong>#<%= index + 1 %></strong></td>
               <td><strong><%= candidate[:symbol] %></strong></td>
               <td>

@@ -132,6 +132,9 @@ export default class extends Controller {
             remaining > 0 ? `, ~${remaining}s remaining` : ""
           }`;
       }
+    } else if (data.type === "screener_record_added") {
+      // Add/update individual record in table for live updates
+      this.handleScreenerRecordAdded(data);
     } else if (data.type === "screener_partial_results") {
       // Update progressive results display
       if (window.updateProgressiveResults && data.candidates) {
@@ -187,7 +190,8 @@ export default class extends Controller {
           if (
             data.type === "screener_progress" ||
             data.type === "screener_partial_results" ||
-            data.type === "screener_complete"
+            data.type === "screener_complete" ||
+            data.type === "screener_record_added"
           ) {
             this.handleScreenerStream(data);
           }
@@ -388,5 +392,219 @@ export default class extends Controller {
         button.disabled = false;
         alert("Failed to toggle trading mode. Please try again.");
       });
+  }
+
+  handleScreenerRecordAdded(data) {
+    if (!data.record || !data.record.symbol) return;
+
+    const record = data.record;
+    const tbody = document.querySelector(
+      'tbody[data-screener-results="true"][data-screener-type="swing"]'
+    );
+
+    if (!tbody) {
+      // Table might not be rendered yet, skip
+      return;
+    }
+
+    // Check if row already exists
+    const existingRow = tbody.querySelector(
+      `tr[data-screener-symbol="${record.symbol}"]`
+    );
+
+    if (existingRow) {
+      // Update existing row
+      this.updateScreenerRow(existingRow, record, tbody);
+    } else {
+      // Add new row
+      const newRow = this.createScreenerRow(record);
+      tbody.appendChild(newRow);
+    }
+
+    // Sort rows by score and update ranks
+    this.sortScreenerRows(tbody);
+
+    // Update progress if available
+    if (data.progress) {
+      this.updateScreenerProgress(data.progress);
+    }
+  }
+
+  createScreenerRow(record) {
+    const row = document.createElement("tr");
+    row.setAttribute("data-screener-symbol", record.symbol);
+    row.setAttribute("data-screener-instrument-id", record.instrument_id);
+
+    const indicators = record.indicators || {};
+    const score = record.score || 0;
+    const baseScore = record.base_score || 0;
+    const mtfScore = record.mtf_score || 0;
+    const rsi = indicators.rsi;
+    const adx = indicators.adx;
+    const supertrend = indicators.supertrend;
+    const ema20 = indicators.ema20;
+    const ema50 = indicators.ema50;
+    const macd = indicators.macd;
+    const latestClose = indicators.latest_close || 0;
+    const aiScore = record.ai_score;
+    const aiConfidence = record.ai_confidence;
+
+    // Score badge color
+    const scoreClass =
+      score >= 70 ? "success" : score >= 50 ? "warning" : "secondary";
+
+    // RSI badge color
+    const rsiClass = rsi > 70 ? "danger" : rsi < 30 ? "success" : "info";
+
+    // ADX badge color
+    const adxClass = adx > 25 ? "success" : "secondary";
+
+    // Supertrend badge
+    const stDirection = supertrend?.direction || "";
+    const stClass = stDirection === "bullish" ? "success" : "danger";
+
+    // EMA trend
+    const emaTrend =
+      ema20 && ema50 ? (ema20 > ema50 ? "BULL" : "BEAR") : "";
+    const emaClass = ema20 > ema50 ? "success" : "danger";
+
+    // MACD
+    const macdLine = macd?.[0];
+    const signalLine = macd?.[1];
+    const macdTrend =
+      macdLine && signalLine ? (macdLine > signalLine ? "BULL" : "BEAR") : "";
+    const macdClass = macdLine > signalLine ? "success" : "secondary";
+
+    row.innerHTML = `
+      <td><strong>#<span class="rank-number">1</span></strong></td>
+      <td><strong>${record.symbol}</strong></td>
+      <td>
+        <span class="badge bg-${scoreClass}">
+          ${score.toFixed(1)}
+        </span>
+      </td>
+      <td>${baseScore.toFixed(1)}</td>
+      <td>${mtfScore.toFixed(1)}</td>
+      <td>₹${latestClose.toFixed(2)}</td>
+      <td>
+        ${
+          rsi
+            ? `<span class="badge bg-${rsiClass}">${rsi.toFixed(1)}</span>`
+            : '<span class="text-muted">-</span>'
+        }
+      </td>
+      <td>
+        ${
+          adx
+            ? `<span class="badge bg-${adxClass}">${adx.toFixed(1)}</span>`
+            : '<span class="text-muted">-</span>'
+        }
+      </td>
+      <td>
+        ${
+          supertrend
+            ? `<span class="badge bg-${stClass}">${stDirection.toUpperCase()}</span>`
+            : '<span class="text-muted">-</span>'
+        }
+      </td>
+      <td>
+        ${
+          emaTrend
+            ? `<span class="badge bg-${emaClass}">${emaTrend}</span>`
+            : '<span class="text-muted">-</span>'
+        }
+      </td>
+      <td>
+        ${
+          macdTrend
+            ? `<span class="badge bg-${macdClass}">${macdTrend}</span>`
+            : '<span class="text-muted">-</span>'
+        }
+      </td>
+      ${
+        aiScore || aiConfidence
+          ? `
+        <td>
+          ${
+            aiScore
+              ? `<span class="badge bg-${
+                  aiScore >= 80 ? "success" : aiScore >= 60 ? "warning" : "secondary"
+                }">${aiScore.toFixed(1)}</span>`
+              : '<span class="text-muted">-</span>'
+          }
+        </td>
+        <td>
+          ${
+            aiConfidence
+              ? `<span class="badge bg-info">${aiConfidence.toFixed(1)}</span>`
+              : '<span class="text-muted">-</span>'
+          }
+        </td>
+        `
+          : ""
+      }
+    `;
+
+    return row;
+  }
+
+  updateScreenerRow(row, record, tbody) {
+    // Update the row with new data (similar to createScreenerRow but update existing)
+    const newRow = this.createScreenerRow(record);
+    row.replaceWith(newRow);
+  }
+
+  sortScreenerRows(tbody) {
+    const rows = Array.from(tbody.querySelectorAll("tr[data-screener-symbol]"));
+    rows.sort((a, b) => {
+      // Extract score from the third column (Score column)
+      const scoreCellA = a.querySelector("td:nth-child(3)");
+      const scoreCellB = b.querySelector("td:nth-child(3)");
+      
+      const scoreA = parseFloat(
+        scoreCellA?.querySelector(".badge")?.textContent?.trim() ||
+        scoreCellA?.textContent?.trim() ||
+        "0"
+      ) || 0;
+      
+      const scoreB = parseFloat(
+        scoreCellB?.querySelector(".badge")?.textContent?.trim() ||
+        scoreCellB?.textContent?.trim() ||
+        "0"
+      ) || 0;
+      
+      return scoreB - scoreA; // Descending order
+    });
+
+    // Re-append sorted rows and update ranks
+    rows.forEach((row, index) => {
+      tbody.appendChild(row);
+      const rankCell = row.querySelector(".rank-number");
+      if (rankCell) {
+        rankCell.textContent = index + 1;
+      } else {
+        const rankTd = row.querySelector("td:first-child");
+        if (rankTd) {
+          rankTd.innerHTML = `<strong>#${index + 1}</strong>`;
+        }
+      }
+    });
+  }
+
+  updateScreenerProgress(progress) {
+    const statusMessage = document.querySelector(
+      '[data-screener-target="statusMessage"]'
+    );
+    if (statusMessage && progress) {
+      const elapsed = progress.elapsed || 0;
+      const remaining = progress.remaining || 0;
+      statusMessage.textContent = `Processing: ${progress.processed || 0}/${
+        progress.total || 0
+      } instruments, ${progress.analyzed || 0} analyzed, ${
+        progress.candidates || 0
+      } candidates found - ${elapsed.toFixed(1)}s elapsed${
+        remaining > 0 ? `, ~${remaining.toFixed(0)}s remaining` : ""
+      }`;
+    }
   }
 }

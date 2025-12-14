@@ -107,8 +107,19 @@ module Screeners
           persist_result(analysis)
         end
 
-        # Cache and broadcast partial results incrementally (every 5 new candidates)
-        # This allows UI to show results as they're found
+        # Broadcast individual record update immediately for live UI updates
+        broadcast_record_added(analysis, {
+          total: total_count,
+          processed: processed_count,
+          analyzed: analyzed_count,
+          candidates: candidates.size,
+          started_at: start_time.iso8601,
+          status: "running",
+          elapsed: (Time.current - start_time).round(1),
+        })
+
+        # Cache and broadcast aggregated results incrementally (every 5 new candidates)
+        # This allows UI to show top candidates list
         if candidates.size % 5 == 0
           # Get top candidates from database if persisting, otherwise from memory
           sorted_candidates = if @persist_results
@@ -301,6 +312,21 @@ module Screeners
       )
     rescue StandardError => e
       Rails.logger.error("[Screeners::SwingScreener] Failed to broadcast completion: #{e.message}")
+    end
+
+    def broadcast_record_added(analysis, progress_data)
+      # Broadcast individual record for live table updates
+      ActionCable.server.broadcast(
+        "dashboard_updates",
+        {
+          type: "screener_record_added",
+          screener_type: "swing",
+          record: analysis,
+          progress: progress_data,
+        },
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::SwingScreener] Failed to broadcast record: #{e.message}")
     end
 
     def passes_basic_filters?(instrument)
