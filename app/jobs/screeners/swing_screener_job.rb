@@ -129,8 +129,26 @@ module Screeners
 
         Rails.logger.info("[Screeners::SwingScreenerJob] Layer 4 complete: #{final_result[:swing].size} actionable positions")
 
+        # Calculate and persist all compression metrics
+        ScreenerRuns::MetricsCalculator.call(screener_run)
+
         # Mark run as completed
         screener_run.mark_completed!
+
+        # Log health status
+        health = screener_run.health_status
+        if health[:healthy]
+          Rails.logger.info(
+            "[Screeners::SwingScreenerJob] Run ##{screener_run.id} completed successfully " \
+            "(compression: #{health[:compression_efficiency]}%, " \
+            "overlap: #{health[:overlap]}%)"
+          )
+        else
+          Rails.logger.warn(
+            "[Screeners::SwingScreenerJob] Run ##{screener_run.id} completed with issues: " \
+            "#{health[:issues].join(', ')}"
+          )
+        end
 
         # Cache results for dashboard display
         cache_key = "swing_screener_results_#{Date.current}"

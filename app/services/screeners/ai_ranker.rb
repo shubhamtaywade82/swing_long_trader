@@ -209,6 +209,9 @@ module Screeners
       # Track API call
       track_api_call
 
+      # Track AI cost if screener_run_id is available (pass full ai_result for usage data)
+      track_ai_cost(ai_result) if @screener_run_id
+
       result
     rescue StandardError => e
       Rails.logger.error("[Screeners::AIEvaluator] Failed to evaluate candidate #{candidate[:symbol]}: #{e.message}")
@@ -407,6 +410,27 @@ module Screeners
       cache_key = "ai_evaluator_calls:#{today}"
       calls_today = Rails.cache.read(cache_key) || 0
       Rails.cache.write(cache_key, calls_today + 1, expires_in: 1.day)
+    end
+
+    def track_ai_cost(ai_result)
+      return unless @screener_run_id && ai_result
+
+      screener_run = ScreenerRun.find_by(id: @screener_run_id)
+      return unless screener_run
+
+      # Extract token usage from AI result (if available)
+      input_tokens = ai_result[:usage]&.dig(:prompt_tokens) || ai_result[:input_tokens] || 0
+      output_tokens = ai_result[:usage]&.dig(:completion_tokens) || ai_result[:output_tokens] || 0
+
+      ScreenerRuns::AICostTracker.track_call(
+        screener_run: screener_run,
+        model: @model,
+        input_tokens: input_tokens,
+        output_tokens: output_tokens,
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::AIEvaluator] Failed to track AI cost: #{e.message}")
+      # Don't fail evaluation if cost tracking fails
     end
 
     def handle_rate_limit
