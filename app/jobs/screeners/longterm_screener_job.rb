@@ -11,7 +11,11 @@ module Screeners
     retry_on StandardError, wait: :polynomially_longer, attempts: 3
 
     def perform(instruments: nil, limit: nil)
-      Rails.logger.info("[Screeners::LongtermScreenerJob] Starting long-term screener")
+      # Log PID to verify job runs in worker process, not web process
+      Rails.logger.info(
+        "[Screeners::LongtermScreenerJob] Starting long-term screener " \
+        "worker_pid=#{Process.pid} queue=#{queue_name}"
+      )
 
       # Normalize limit parameter (handle string "ALL", nil, or integer)
       normalized_limit = if limit.nil? || limit.to_s.upcase == "ALL"

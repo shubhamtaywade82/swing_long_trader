@@ -14,7 +14,11 @@ module Screeners
     discard_on ArgumentError, NoMethodError
 
     def perform(instruments: nil, limit: nil)
-      Rails.logger.info("[Screeners::SwingScreenerJob] Starting 4-layer decision pipeline")
+      # Log PID to verify job runs in worker process, not web process
+      Rails.logger.info(
+        "[Screeners::SwingScreenerJob] Starting 4-layer decision pipeline " \
+        "worker_pid=#{Process.pid} queue=#{queue_name}"
+      )
 
       # Create screener run for isolation and tracking
       universe_size = instruments&.count || Instrument.where(segment: %w[equity index], exchange: "NSE").count
