@@ -41,9 +41,19 @@ env:
   secret:
     - RAILS_MASTER_KEY
   clear:
-    # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
-    # When you start using multiple servers, you should split out job processing to a dedicated machine.
-    SOLID_QUEUE_IN_PUMA: true
+    # CRITICAL: Solid Queue MUST run in a separate process, NOT inside Puma.
+    # The Procfile defines both 'web' and 'worker' processes.
+    # Kamal will start both processes automatically when using Procfile.
+    # DO NOT set SOLID_QUEUE_IN_PUMA=true - this causes blocking!
+    #
+    # For production with multiple servers, configure a separate 'job' server:
+    # servers:
+    #   web:
+    #     - 192.168.0.1
+    #   job:
+    #     hosts:
+    #       - 192.168.0.2
+    #     cmd: bundle exec rails solid_queue:start
 
     # Set number of processes dedicated to Solid Queue (default: 1)
     # JOB_CONCURRENCY: 3
