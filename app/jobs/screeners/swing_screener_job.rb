@@ -82,6 +82,13 @@ module Screeners
         # Portfolio pre-filter before AI (save costs, avoid untradable setups)
         # Prefer paper portfolio if available, otherwise use any active portfolio
         portfolio = find_portfolio_for_screening
+
+        # Enhance trade plans with portfolio-aware quantity calculations
+        layer2_candidates = Screeners::TradePlanEnhancer.call(
+          candidates: layer2_candidates,
+          portfolio: portfolio,
+        )
+
         prefiltered_candidates = prefilter_for_portfolio(layer2_candidates, portfolio)
 
         screener_run.update_metrics!(

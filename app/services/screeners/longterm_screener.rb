@@ -92,7 +92,7 @@ module Screeners
         # Log slow instruments
         if instrument_time > 3.0
           Rails.logger.warn(
-            "[Screeners::LongtermScreener] Slow instrument: #{instrument.symbol} " \
+            "[Screeners::LongtermScreener] Slow instrument: #{instrument.symbol_name} " \
             "took #{instrument_time.round(2)}s",
           )
         end

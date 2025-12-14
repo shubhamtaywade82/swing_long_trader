@@ -50,12 +50,23 @@ module Admin
       @paused_queues = cached_paused_queues
       @available_job_classes = cached_available_job_classes
 
-      # Recurring tasks
-      @recurring_tasks = SolidQueue::RecurringTask.all.order(:key)
-      @recurring_executions = SolidQueue::RecurringExecution
-                              .includes(:job)
-                              .order(created_at: :desc)
-                              .limit(20)
+      # Recurring tasks (with error handling in case table doesn't exist)
+      @recurring_tasks = begin
+        SolidQueue::RecurringTask.all.order(:key)
+      rescue StandardError => e
+        Rails.logger.warn("Could not load recurring tasks: #{e.message}")
+        []
+      end
+
+      @recurring_executions = begin
+        SolidQueue::RecurringExecution
+          .includes(:job)
+          .order(created_at: :desc)
+          .limit(20)
+      rescue StandardError => e
+        Rails.logger.warn("Could not load recurring executions: #{e.message}")
+        []
+      end
     end
 
     def show
@@ -391,9 +402,7 @@ module Admin
       return cron_expression unless cron_expression.present?
 
       # Handle non-cron formats (e.g., "every hour", "at 5am every day")
-      if cron_expression.include?("every") || cron_expression.include?("at")
-        return cron_expression.capitalize
-      end
+      return cron_expression.capitalize if cron_expression.include?("every") || cron_expression.include?("at")
 
       # Parse cron format: minute hour day month weekday
       parts = cron_expression.split
@@ -403,23 +412,28 @@ module Admin
 
       result = []
 
-      # Parse time first (most important)
-      time_desc = parse_time(hour, minute)
-      result << time_desc if time_desc
-
-      # Parse weekday
+      # Parse in natural order: frequency/period first, then time
+      # 1. Weekday/frequency (largest unit)
       weekday_desc = parse_weekday(weekday)
       result << weekday_desc if weekday_desc && weekday_desc != "Every day"
 
-      # Parse day/month (less common)
+      # 2. Day/month (if specified)
       day_month_desc = parse_day_month(day, month)
       result << day_month_desc if day_month_desc
+
+      # 3. Time (smallest unit - hours and minutes)
+      time_desc = parse_time(hour, minute)
+      result << time_desc if time_desc
 
       # If we couldn't parse it well, return original with a note
       if result.empty?
         "#{cron_expression} (cron)"
+      elsif result.size > 1 && result.last.include?(" at ")
+        # Join with "at" for natural reading: "Every day at 7:30 AM"
+        # If time already contains "at", don't add another one
+        result[0..-2].join(", ") + " " + result.last
       else
-        result.join(", ")
+        result.join(" at ")
       end
     end
 
@@ -442,7 +456,8 @@ module Admin
       when "6"
         "Saturday"
       when /^(\d+)-(\d+)$/
-        start_day, end_day = $1.to_i, $2.to_i
+        start_day = ::Regexp.last_match(1).to_i
+        end_day = ::Regexp.last_match(2).to_i
         days = %w[Sunday Monday Tuesday Wednesday Thursday Friday Saturday]
         if start_day == 1 && end_day == 5
           "Weekdays (Mon-Fri)"
@@ -454,7 +469,8 @@ module Admin
           "#{days[start_day % 7]}-#{days[end_day % 7]}"
         end
       when /^(\d+),(\d+)$/
-        day1, day2 = $1.to_i, $2.to_i
+        day1 = ::Regexp.last_match(1).to_i
+        day2 = ::Regexp.last_match(2).to_i
         days = %w[Sunday Monday Tuesday Wednesday Thursday Friday Saturday]
         "#{days[day1 % 7]}, #{days[day2 % 7]}"
       else
@@ -469,26 +485,61 @@ module Admin
       if hour.include?("-") && minute.include?(",")
         start_hour, end_hour = hour.split("-").map(&:to_i)
         minutes = minute.split(",").map(&:to_i).sort
+        
+        # Show first few times with full HH:MM AM/PM format
+        # Example: "9:15 AM, 9:45 AM, 10:15 AM, 10:45 AM... (every :15 and :45 until 3 PM)"
+        times = []
+        hour_count = 0
+        max_hours_to_show = 3
+        
+        (start_hour..end_hour).each do |h|
+          break if hour_count >= max_hours_to_show
+          minutes.each do |m|
+            times << format_single_time(h, m)
+          end
+          hour_count += 1
+        end
+        
         minute_list = minutes.map { |m| format("%02d", m) }.join(" and :")
-        return "At :#{minute_list} past each hour, #{format_hour(start_hour)}-#{format_hour(end_hour)}"
+        if (end_hour - start_hour) <= max_hours_to_show
+          # Small range: show all times
+          return times.join(", ")
+        else
+          # Large range: show first few, then pattern
+          return "#{times.join(', ')}... (every :#{minute_list} until #{format_hour(end_hour)})"
+        end
       end
 
       # Handle hour ranges with single minute (e.g., "30 7-15")
       if hour.include?("-") && minute != "*" && !minute.include?(",")
         start_hour, end_hour = hour.split("-").map(&:to_i)
-        return "#{format_hour(start_hour)}-#{format_hour(end_hour)} at :#{format("%02d", minute.to_i)}"
+        minute_val = minute.to_i
+        # Format as "7:30 AM-3:30 PM" not "7 AM-3 PM :30"
+        start_time = format_single_time(start_hour, minute_val)
+        end_time = format_single_time(end_hour, minute_val)
+        return "#{start_time}-#{end_time}"
       end
 
       # Handle multiple minutes with single hour (e.g., "15,45 9")
       if minute.include?(",") && hour != "*" && !hour.include?("-") && !hour.include?(",")
+        hour_24 = hour.to_i
         minutes = minute.split(",").map(&:to_i).sort
-        minute_list = minutes.map { |m| format("%02d", m) }.join(" and :")
-        return "#{format_hour(hour.to_i)}:#{minute_list}"
+        # Format as "9:15 AM and 9:45 AM" not "9:15 and :45 AM"
+        am_pm = (hour_24 == 0 || hour_24 < 12) ? "AM" : "PM"
+        display_hour = if hour_24 == 0
+                        12
+                      elsif hour_24 <= 12
+                        hour_24
+                      else
+                        hour_24 - 12
+                      end
+        time_list = minutes.map { |m| "#{display_hour}:#{format('%02d', m)} #{am_pm}" }.join(" and ")
+        return time_list
       end
 
       # Single time (e.g., "30 7")
       if hour != "*" && minute != "*" && !hour.include?("-") && !hour.include?(",") && !minute.include?(",")
-        return "#{format_hour(hour.to_i)}:#{format("%02d", minute.to_i)}"
+        return format_single_time(hour.to_i, minute.to_i)
       end
 
       # Fallback: build from components
@@ -508,12 +559,12 @@ module Admin
                      ""
                    elsif minute.include?(",")
                      minutes = minute.split(",").map(&:to_i).sort
-                     "at :#{minutes.map { |m| format("%02d", m) }.join(' and :')}"
+                     "at :#{minutes.map { |m| format('%02d', m) }.join(' and :')}"
                    elsif minute.start_with?("*/")
                      interval = minute.split("/").last.to_i
                      "every #{interval} minutes"
                    else
-                     "at :#{format("%02d", minute.to_i)}"
+                     "at :#{format('%02d', minute.to_i)}"
                    end
 
       if minute_str.present?
@@ -550,6 +601,19 @@ module Admin
         "12 PM"
       else
         "#{hour_24 - 12} PM"
+      end
+    end
+
+    def format_single_time(hour_24, minute_val)
+      # Format as "7:30 AM" not "7 AM:30"
+      if hour_24 == 0
+        "12:#{format('%02d', minute_val)} AM"
+      elsif hour_24 < 12
+        "#{hour_24}:#{format('%02d', minute_val)} AM"
+      elsif hour_24 == 12
+        "12:#{format('%02d', minute_val)} PM"
+      else
+        "#{hour_24 - 12}:#{format('%02d', minute_val)} PM"
       end
     end
 

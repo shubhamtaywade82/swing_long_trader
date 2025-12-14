@@ -94,7 +94,7 @@ module Screeners
         # Log slow instruments
         if instrument_time > 2.0
           Rails.logger.warn(
-            "[Screeners::SwingScreener] Slow instrument: #{instrument.symbol} " \
+            "[Screeners::SwingScreener] Slow instrument: #{instrument.symbol_name} " \
             "took #{instrument_time.round(2)}s",
           )
         end
@@ -395,8 +395,8 @@ module Screeners
       # Validate SMC structure (optional)
       smc_validation = validate_smc_structure(daily_series, indicators)
 
-      # Build candidate hash with multi-timeframe data
-      {
+      # Build initial candidate hash
+      candidate = {
         instrument_id: instrument.id,
         symbol: instrument.symbol_name,
         score: combined_score,
@@ -406,6 +406,70 @@ module Screeners
         multi_timeframe: mtf_analysis,
         metadata: build_metadata(instrument, daily_series, indicators, smc_validation, mtf_analysis),
       }
+
+      # CRITICAL: Determine setup status (READY vs WAIT vs NOT_READY)
+      # This is the decision layer that separates "bullish" from "tradeable"
+      # Note: Portfolio not available here, so IN_POSITION check will be done later
+      setup_result = Screeners::SetupDetector.call(
+        candidate: candidate,
+        daily_series: daily_series,
+        indicators: indicators,
+        mtf_analysis: mtf_analysis,
+        portfolio: nil, # Portfolio available in later layers
+      )
+
+      candidate[:setup_status] = setup_result[:status]
+      candidate[:setup_reason] = setup_result[:reason]
+      candidate[:invalidate_if] = setup_result[:invalidate_if]
+      candidate[:entry_conditions] = setup_result[:entry_conditions]
+
+      # Generate trade plan for READY setups only (without portfolio for now)
+      # Portfolio-aware quantity calculation will be done in later layers
+      if setup_result[:status] == Screeners::SetupDetector::READY
+        trade_plan = Screeners::TradePlanBuilder.call(
+          candidate: candidate,
+          daily_series: daily_series,
+          indicators: indicators,
+          setup_status: setup_result,
+          portfolio: nil, # Will use default calculation, enhanced later with portfolio
+        )
+
+        if trade_plan
+          candidate[:trade_plan] = trade_plan
+          # Update recommendation to be actionable
+          candidate[:recommendation] = build_actionable_recommendation(trade_plan, setup_result)
+        else
+          # Trade plan generation failed (likely RR too low)
+          candidate[:setup_status] = Screeners::SetupDetector::NOT_READY
+          candidate[:setup_reason] = "Setup ready but risk-reward ratio too low"
+          candidate[:recommendation] = "NOT READY: Risk-reward ratio < 2.0"
+        end
+      else
+        # Not ready - provide guidance
+        candidate[:recommendation] = build_wait_recommendation(setup_result)
+      end
+
+      candidate
+    end
+
+    def build_actionable_recommendation(trade_plan, _setup_result)
+      "BUY #{trade_plan[:entry_zone]}, SL #{trade_plan[:stop_loss]}, TP #{trade_plan[:take_profit]}, " \
+        "Qty #{trade_plan[:quantity]}, Risk ₹#{trade_plan[:risk_amount]}, RR #{trade_plan[:risk_reward]}R"
+    end
+
+    def build_wait_recommendation(setup_result)
+      case setup_result[:status]
+      when Screeners::SetupDetector::WAIT_PULLBACK
+        "WAIT: #{setup_result[:reason]}"
+      when Screeners::SetupDetector::WAIT_BREAKOUT
+        "WAIT: #{setup_result[:reason]}"
+      when Screeners::SetupDetector::IN_POSITION
+        "Already in position - Monitor"
+      when Screeners::SetupDetector::NOT_READY
+        "NOT READY: #{setup_result[:reason]}"
+      else
+        "WAIT: #{setup_result[:reason]}"
+      end
     end
 
     def calculate_indicators(series)
