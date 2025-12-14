@@ -210,9 +210,12 @@ module Screeners
       Rails.logger.info("[Screeners::LongtermScreener] Preloading candles for #{@instruments.count} instruments...")
 
       # Get instrument IDs as a simple array to avoid any relation issues
-      # Unscope any GROUP BY clauses that might be inherited from load_universe
+      # The relation has joins and WHERE clauses referencing candle_series table
+      # Execute the full query with all clauses to get the correct IDs
       instrument_ids = if @instruments.is_a?(ActiveRecord::Relation)
-                         @instruments.unscope(:includes, :joins, :group, :having, :select).pluck(:id)
+                         # Execute the query with all its clauses (joins, WHERE, GROUP BY, HAVING)
+                         # to get the correct instrument IDs, then extract just the IDs
+                         @instruments.select(:id).to_a.map(&:id)
                        else
                          @instruments.map(&:id)
                        end

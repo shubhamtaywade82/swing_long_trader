@@ -68,13 +68,34 @@ class ScreenerResult < ApplicationRecord
 
   # Convert to candidate hash format for compatibility with existing views
   def to_candidate_hash
+    indicators = deep_symbolize_keys(indicators_hash)
+
+    # Split indicators into daily_indicators and weekly_indicators
+    # The stored format for longterm screener has daily indicators at top level and weekly_indicators nested
+    # For swing screener, indicators might be structured differently
+    if indicators.key?(:daily_indicators) && indicators.key?(:weekly_indicators)
+      # Already split format (shouldn't happen in stored data but handle gracefully)
+      daily_indicators = indicators[:daily_indicators] || {}
+      weekly_indicators = indicators[:weekly_indicators] || {}
+    elsif indicators.key?(:weekly_indicators)
+      # Longterm format: daily at top level, weekly nested
+      weekly_indicators = indicators.delete(:weekly_indicators) || {}
+      daily_indicators = indicators.dup # Remaining keys are daily indicators
+    else
+      # Swing format or unknown: treat all as daily indicators
+      daily_indicators = indicators
+      weekly_indicators = {}
+    end
+
     {
       instrument_id: instrument_id,
       symbol: symbol,
       score: score.to_f,
       base_score: base_score.to_f,
       mtf_score: mtf_score.to_f,
-      indicators: deep_symbolize_keys(indicators_hash),
+      daily_indicators: daily_indicators,
+      weekly_indicators: weekly_indicators,
+      indicators: daily_indicators.merge(weekly_indicators: weekly_indicators), # Keep for backward compatibility
       metadata: deep_symbolize_keys(metadata_hash),
       multi_timeframe: deep_symbolize_keys(multi_timeframe_hash),
       trade_quality_score: trade_quality_score&.to_f,

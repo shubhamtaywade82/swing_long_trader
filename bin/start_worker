@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# Start SolidQueue worker in a separate process
+# This script ensures jobs run independently of the web server
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+# Load environment from .env file if it exists
+# Only load lines that look like valid KEY=VALUE pairs (skip comments and invalid lines)
+if [ -f .env ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    # Skip empty lines and comments
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line// }" ]] && continue
+    # Only export lines that match KEY=VALUE pattern
+    if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      export "$line"
+    fi
+  done < .env
+fi
+
+# Ensure SOLID_QUEUE_IN_PUMA is not set (or set to false)
+unset SOLID_QUEUE_IN_PUMA
+
+# Start SolidQueue worker
+exec bundle exec rails solid_queue:start

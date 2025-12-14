@@ -14,7 +14,11 @@ module Screeners
     discard_on ArgumentError, NoMethodError
 
     def perform(instruments: nil, limit: nil)
-      Rails.logger.info("[Screeners::SwingScreenerJob] Starting 4-layer decision pipeline")
+      # Log PID to verify job runs in worker process, not web process
+      Rails.logger.info(
+        "[Screeners::SwingScreenerJob] Starting 4-layer decision pipeline " \
+        "worker_pid=#{Process.pid} queue=#{queue_name}",
+      )
 
       # Create screener run for isolation and tracking
       universe_size = instruments&.count || Instrument.where(segment: %w[equity index], exchange: "NSE").count
@@ -32,13 +36,13 @@ module Screeners
         # Layer 1: Technical Eligibility (SwingScreener)
         # Result: 100-150 bullish candidates (sorted by score, highest first)
         Rails.logger.info("[Screeners::SwingScreenerJob] Layer 1: Technical Eligibility Screening")
-        layer1_candidates = SwingScreener.call(
+        layer1_candidates = Screeners::SwingScreener.call(
           instruments: instruments,
           limit: nil,
           persist_results: true,
           screener_run_id: screener_run.id,
         )
-      
+
         # Ensure Layer 1 results are sorted by score (highest first)
         layer1_candidates = layer1_candidates.sort_by { |c| -(c[:score] || 0) }
 
@@ -49,7 +53,7 @@ module Screeners
 
         Rails.logger.info(
           "[Screeners::SwingScreenerJob] Layer 1 complete: #{layer1_candidates.size} candidates " \
-          "(top score: #{layer1_candidates.first&.dig(:score)&.round(1)})"
+          "(top score: #{layer1_candidates.first&.dig(:score)&.round(1)})",
         )
 
         return handle_empty_results(screener_run) if layer1_candidates.empty?
@@ -57,7 +61,7 @@ module Screeners
         # Layer 2: Trade Quality Ranking
         # Result: 30-40 high-quality setups (sorted by combined score, highest first)
         Rails.logger.info("[Screeners::SwingScreenerJob] Layer 2: Trade Quality Ranking")
-        layer2_candidates = TradeQualityRanker.call(
+        layer2_candidates = Screeners::TradeQualityRanker.call(
           candidates: layer1_candidates,
           limit: 40,
           screener_run_id: screener_run.id,
@@ -70,7 +74,7 @@ module Screeners
 
         Rails.logger.info(
           "[Screeners::SwingScreenerJob] Layer 2 complete: #{layer2_candidates.size} candidates " \
-          "(top quality score: #{layer2_candidates.first&.dig(:trade_quality_score)&.round(1)})"
+          "(top quality score: #{layer2_candidates.first&.dig(:trade_quality_score)&.round(1)})",
         )
 
         return handle_empty_results(screener_run) if layer2_candidates.empty?
@@ -86,7 +90,7 @@ module Screeners
 
         Rails.logger.info(
           "[Screeners::SwingScreenerJob] Pre-filtered #{layer2_candidates.size} → #{prefiltered_candidates.size} " \
-          "tradable candidates before AI evaluation"
+          "tradable candidates before AI evaluation",
         )
 
         # Layer 3: AI Evaluation & Ranking
@@ -94,9 +98,9 @@ module Screeners
         # IMPORTANT: AI evaluation runs ONLY on tradable screener results, processing highest scores first
         Rails.logger.info(
           "[Screeners::SwingScreenerJob] Layer 3: AI Evaluation " \
-          "(evaluating #{prefiltered_candidates.size} tradable candidates, highest scores first)"
+          "(evaluating #{prefiltered_candidates.size} tradable candidates, highest scores first)",
         )
-        layer3_candidates = AIEvaluator.call(
+        layer3_candidates = Screeners::AIEvaluator.call(
           candidates: prefiltered_candidates,
           limit: 15,
           screener_run_id: screener_run.id,
@@ -113,7 +117,7 @@ module Screeners
         Rails.logger.info(
           "[Screeners::SwingScreenerJob] Layer 3 complete: #{layer3_candidates.size} candidates" +
           (top_ai_confidence ? " (top AI confidence: #{top_ai_confidence.round(1)})" : " (AI disabled or rate limited)") +
-          " (#{ai_calls} AI calls)"
+          " (#{ai_calls} AI calls)",
         )
 
         return handle_empty_results(screener_run) if layer3_candidates.empty?
@@ -121,7 +125,7 @@ module Screeners
         # Layer 4: Portfolio & Capacity Filter
         # Result: 3-5 tradable positions
         Rails.logger.info("[Screeners::SwingScreenerJob] Layer 4: Portfolio & Capacity Filter")
-        final_result = FinalSelector.call(
+        final_result = Screeners::FinalSelector.call(
           swing_candidates: layer3_candidates,
           swing_limit: limit || 5,
           portfolio: portfolio,
@@ -149,12 +153,12 @@ module Screeners
           Rails.logger.info(
             "[Screeners::SwingScreenerJob] Run ##{screener_run.id} completed successfully " \
             "(compression: #{health[:compression_efficiency]}%, " \
-            "overlap: #{health[:overlap]}%)"
+            "overlap: #{health[:overlap]}%)",
           )
         else
           Rails.logger.warn(
             "[Screeners::SwingScreenerJob] Run ##{screener_run.id} completed with issues: " \
-            "#{health[:issues].join(', ')}"
+            "#{health[:issues].join(', ')}",
           )
         end
 
@@ -237,19 +241,13 @@ module Screeners
       candidates.each do |candidate|
         # Check sector limit
         sector = get_sector(candidate)
-        if sector && sector_counts[sector].to_i >= constraints[:max_per_sector]
-          next
-        end
+        next if sector && sector_counts[sector].to_i >= constraints[:max_per_sector]
 
         # Check capital availability
-        unless has_sufficient_capital?(candidate, constraints, portfolio)
-          next
-        end
+        next unless has_sufficient_capital?(candidate, constraints, portfolio)
 
         # Check max positions (lightweight check)
-        if current_positions.size >= constraints[:max_positions]
-          next
-        end
+        next if current_positions.size >= constraints[:max_positions]
 
         filtered << candidate
         sector_counts[sector] = (sector_counts[sector] || 0) + 1 if sector
@@ -313,7 +311,7 @@ module Screeners
       # Prefer paper portfolio for screening (safer, allows testing)
       # Initialize paper portfolio if it doesn't exist or has no capital
       paper_portfolio = CapitalAllocationPortfolio.paper.active.first
-      
+
       if paper_portfolio
         # Ensure it has valid capital allocated
         if paper_portfolio.total_equity.zero? || paper_portfolio.available_swing_capital <= 0
@@ -337,19 +335,19 @@ module Screeners
       return true unless portfolio
 
       max_position_value = constraints[:total_equity] * (constraints[:max_capital_pct] / 100.0)
-      
+
       # Get available capital based on portfolio type
       available = if portfolio.is_a?(CapitalAllocationPortfolio)
-                     # CapitalAllocationPortfolio (paper or live)
-                     portfolio.available_swing_capital || portfolio.swing_capital || 0
-                   elsif portfolio.is_a?(PaperPortfolio)
-                     # PaperPortfolio (legacy paper trading)
-                     portfolio.available_capital || (portfolio.capital - portfolio.total_exposure) || 0
-                   elsif portfolio.respond_to?(:available_capital)
-                     portfolio.available_capital || 0
-                   else
-                     0
-                   end
+                    # CapitalAllocationPortfolio (paper or live)
+                    portfolio.available_swing_capital || portfolio.swing_capital || 0
+                  elsif portfolio.is_a?(PaperPortfolio)
+                    # PaperPortfolio (legacy paper trading)
+                    portfolio.available_capital || (portfolio.capital - portfolio.total_exposure) || 0
+                  elsif portfolio.respond_to?(:available_capital)
+                    portfolio.available_capital || 0
+                  else
+                    0
+                  end
 
       # Require at least 50% of max position size to be available
       available >= max_position_value * 0.5
@@ -368,7 +366,7 @@ module Screeners
         )
 
         if result[:success]
-          Rails.logger.debug("[Screeners::SwingScreenerJob] Created TradeOutcome for #{candidate[:symbol]}")
+          Rails.logger.debug { "[Screeners::SwingScreenerJob] Created TradeOutcome for #{candidate[:symbol]}" }
         else
           Rails.logger.warn("[Screeners::SwingScreenerJob] Failed to create TradeOutcome for #{candidate[:symbol]}: #{result[:error]}")
         end
@@ -401,4 +399,3 @@ module Screeners
     end
   end
 end
-

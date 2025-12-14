@@ -33,7 +33,7 @@ module PortfolioServices
     def check_daily_loss
       # Calculate today's realized P&L from closed positions
       today_closed = @portfolio.closed_swing_positions
-                               .where("closed_at >= ?", Time.current.beginning_of_day)
+                                .where("closed_at >= ?", Time.current.beginning_of_day)
 
       daily_loss = today_closed.sum(&:realized_pnl)
       daily_loss_pct = @portfolio.total_equity > 0 ? (daily_loss.abs / @portfolio.total_equity * 100).round(2) : 0
@@ -66,9 +66,7 @@ module PortfolioServices
 
       if current_dd >= max_allowed_dd
         log_error("Max drawdown limit reached: #{current_dd}% (limit: #{max_allowed_dd}%)")
-        notify(
-          "🚨 MAX DRAWDOWN LIMIT REACHED\n\nPortfolio: #{@portfolio.name}\nDrawdown: #{current_dd}%\nLimit: #{max_allowed_dd}%\n\nConsider switching to paper mode.", tag: "RISK_LIMIT"
-        )
+        notify("🚨 MAX DRAWDOWN LIMIT REACHED\n\nPortfolio: #{@portfolio.name}\nDrawdown: #{current_dd}%\nLimit: #{max_allowed_dd}%\n\nConsider switching to paper mode.", tag: "RISK_LIMIT")
         return false
       end
 

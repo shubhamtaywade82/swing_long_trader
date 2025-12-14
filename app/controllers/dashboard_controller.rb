@@ -301,135 +301,85 @@ class DashboardController < ApplicationController
 
   def run_swing_screener
     limit = params[:limit].presence&.to_i # nil = full universe
-    sync = params[:sync] == "true"
+    priority = params[:priority] || "normal" # "now" for high priority, "normal" for default
 
-    if sync
-      # Run synchronously for testing (bypasses queue)
-      begin
-        candidates = Screeners::SwingScreener.call(limit: limit, persist_results: true)
+    # CRITICAL: Always use perform_later - NEVER use perform_now or sync execution
+    # Jobs MUST run in worker process, not web process
+    queue_name = priority == "now" ? :screener_now : :screener
 
-        # Cache results
-        cache_key = "swing_screener_results_#{Date.current}"
-        Rails.cache.write(cache_key, candidates, expires_in: 24.hours)
-        Rails.cache.write("#{cache_key}_timestamp", Time.current, expires_in: 24.hours)
+    # Enqueue job with appropriate queue priority
+    job = Screeners::SwingScreenerJob.set(queue: queue_name).perform_later(limit: limit)
 
-        render json: {
-          status: "completed",
-          message: "Swing screener completed. Found #{candidates.size} candidates.",
-          candidate_count: candidates.size,
-        }
-      rescue StandardError => e
-        render json: { status: "error", message: e.message }, status: :unprocessable_content
-      end
-    else
-      # Run screener in background
-      job = Screeners::SwingScreenerJob.perform_later(limit: limit)
+    # Log job enqueueing with PID to verify process separation
+    Rails.logger.info(
+      "[DashboardController] Enqueued SwingScreenerJob: #{job.job_id} " \
+      "queue=#{queue_name} web_pid=#{Process.pid}"
+    )
 
-      # Log job enqueueing
-      Rails.logger.info("[DashboardController] Enqueued SwingScreenerJob: #{job.job_id}")
+    # Check if worker is running by checking queue status
+    queue_status = check_solid_queue_status
 
-      # Check if worker is running by checking queue status
-      queue_status = check_solid_queue_status
+    Rails.logger.info("[DashboardController] Queue status: #{queue_status.inspect}")
 
-      Rails.logger.info("[DashboardController] Queue status: #{queue_status.inspect}")
+    message = if queue_status[:worker_running]
+                priority_text = priority == "now" ? " (high priority)" : ""
+                "Swing screener job queued#{priority_text} (Job ID: #{job.job_id}). Results will appear shortly."
+              else
+                "Job queued but SolidQueue worker may not be running! " \
+                  "Please start it with: bin/rails solid_queue:start"
+              end
 
-      message = if queue_status[:worker_running]
-                  "Swing screener job queued (Job ID: #{job.job_id}). Results will appear shortly."
-                else
-                  "Job queued but SolidQueue worker may not be running! " \
-                    "Please start it with: bin/rails solid_queue:start"
-                end
-
-      render json: {
-        status: "queued",
-        message: message,
-        job_id: job.job_id,
-        queue_status: queue_status,
-      }
-    end
+    render json: {
+      status: "queued",
+      message: message,
+      job_id: job.job_id,
+      queue_status: queue_status,
+      queue: queue_name.to_s,
+    }
   rescue StandardError => e
+    Rails.logger.error("[DashboardController] Failed to enqueue SwingScreenerJob: #{e.message}")
     render json: { status: "error", message: e.message }, status: :unprocessable_content
   end
 
   def run_longterm_screener
     limit = params[:limit].presence&.to_i # nil = full universe
-    sync = params[:sync] == "true"
+    priority = params[:priority] || "normal" # "now" for high priority, "normal" for default
 
-    if sync
-      # Run synchronously for testing (bypasses queue)
-      begin
-        # Create screener run for tracking (same as background job)
-        universe_size = Instrument.where(segment: %w[equity index], exchange: "NSE").count
-        screener_run = ScreenerRun.create!(
-          screener_type: "longterm",
-          universe_size: universe_size,
-          started_at: Time.current,
-          status: "running",
-          metrics: {},
-        )
+    # CRITICAL: Always use perform_later - NEVER use perform_now or sync execution
+    # Jobs MUST run in worker process, not web process
+    queue_name = priority == "now" ? :screener_now : :screener
 
-        Rails.logger.info("[DashboardController] Created ScreenerRun ##{screener_run.id} for sync run")
+    # Enqueue job with appropriate queue priority
+    job = Screeners::LongtermScreenerJob.set(queue: queue_name).perform_later(limit: limit)
 
-        candidates = Screeners::LongtermScreener.call(
-          limit: limit,
-          persist_results: true,
-          screener_run_id: screener_run.id,
-        )
+    # Log job enqueueing with PID to verify process separation
+    Rails.logger.info(
+      "[DashboardController] Enqueued LongtermScreenerJob: #{job.job_id} " \
+      "queue=#{queue_name} web_pid=#{Process.pid}"
+    )
 
-        # Update screener run
-        screener_run.update!(
-          status: "completed",
-          completed_at: Time.current,
-        )
-        screener_run.update_metrics!(
-          eligible_count: candidates.size,
-        )
+    # Check if worker is running
+    queue_status = check_solid_queue_status
 
-        # Cache results for backward compatibility
-        cache_key = "longterm_screener_results_#{Date.current}"
-        Rails.cache.write(cache_key, candidates, expires_in: 24.hours)
-        Rails.cache.write("#{cache_key}_timestamp", Time.current, expires_in: 24.hours)
+    Rails.logger.info("[DashboardController] Queue status: #{queue_status.inspect}")
 
-        render json: {
-          status: "completed",
-          message: "Long-term screener completed. Found #{candidates.size} candidates.",
-          candidate_count: candidates.size,
-        }
-      rescue StandardError => e
-        screener_run&.update!(
-          status: "failed",
-          completed_at: Time.current,
-        )
-        Rails.logger.error("[DashboardController] Sync longterm screener failed: #{e.message}")
-        render json: { status: "error", message: e.message }, status: :unprocessable_content
-      end
-    else
-      # Run screener in background
-      job = Screeners::LongtermScreenerJob.perform_later(limit: limit)
+    message = if queue_status[:worker_running]
+                priority_text = priority == "now" ? " (high priority)" : ""
+                "Long-term screener job queued#{priority_text} (Job ID: #{job.job_id}). Results will appear shortly."
+              else
+                "Job queued but SolidQueue worker may not be running! " \
+                  "Please start it with: bin/rails solid_queue:start"
+              end
 
-      # Log job enqueueing
-      Rails.logger.info("[DashboardController] Enqueued LongtermScreenerJob: #{job.job_id}")
-
-      # Check if worker is running
-      queue_status = check_solid_queue_status
-
-      Rails.logger.info("[DashboardController] Queue status: #{queue_status.inspect}")
-
-      message = if queue_status[:worker_running]
-                  "Long-term screener job queued (Job ID: #{job.job_id}). Results will appear shortly."
-                else
-                  "Job queued but SolidQueue worker may not be running! " \
-                    "Please start it with: bin/rails solid_queue:start"
-                end
-
-      render json: {
-        status: "queued",
-        message: message,
-        job_id: job.job_id,
-        queue_status: queue_status,
-      }
-    end
+    render json: {
+      status: "queued",
+      message: message,
+      job_id: job.job_id,
+      queue_status: queue_status,
+      queue: queue_name.to_s,
+    }
   rescue StandardError => e
+    Rails.logger.error("[DashboardController] Failed to enqueue LongtermScreenerJob: #{e.message}")
     render json: { status: "error", message: e.message }, status: :unprocessable_content
   end
 

@@ -20,6 +20,11 @@ class ApplicationJob < ActiveJob::Base
 
   private
 
+  # -------- Logging ---------------------------------------------------------
+  %i[info warn error debug].each do |lvl|
+    define_method(:"log_#{lvl}") { |msg| Rails.logger.send(lvl, "[#{self.class.name}] #{msg}") }
+  end
+
   def log_job_duration
     start_time = Time.current
     log_info("Job started: #{self.class.name}")
