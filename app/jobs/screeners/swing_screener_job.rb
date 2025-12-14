@@ -156,17 +156,20 @@ module Screeners
           },
         )
 
-      # Send tiered results to Telegram
-      if final_result[:swing].any? && AlgoConfig.fetch(%i[notifications telegram notify_screener_results])
-        Telegram::Notifier.send_tiered_candidates(final_result)
-      end
+        # Create TradeOutcomes for final actionable candidates (Tier 1)
+        create_trade_outcomes_for_final_candidates(screener_run, final_result[:tiers][:tier_1])
 
-      # Optionally trigger swing analysis job for tier 1 candidates only
-      if final_result[:tiers][:tier_1].any? && AlgoConfig.fetch(%i[swing_trading strategy auto_analyze])
-        tier1_instrument_ids = final_result[:tiers][:tier_1].map { |c| c[:instrument_id] }.compact
-        Strategies::Swing::AnalysisJob.perform_later(tier1_instrument_ids)
-        Rails.logger.info("[Screeners::SwingScreenerJob] Triggered analysis job for #{tier1_instrument_ids.size} tier 1 candidates")
-      end
+        # Send tiered results to Telegram
+        if final_result[:swing].any? && AlgoConfig.fetch(%i[notifications telegram notify_screener_results])
+          Telegram::Notifier.send_tiered_candidates(final_result)
+        end
+
+        # Optionally trigger swing analysis job for tier 1 candidates only
+        if final_result[:tiers][:tier_1].any? && AlgoConfig.fetch(%i[swing_trading strategy auto_analyze])
+          tier1_instrument_ids = final_result[:tiers][:tier_1].map { |c| c[:instrument_id] }.compact
+          Strategies::Swing::AnalysisJob.perform_later(tier1_instrument_ids)
+          Rails.logger.info("[Screeners::SwingScreenerJob] Triggered analysis job for #{tier1_instrument_ids.size} tier 1 candidates")
+        end
 
         final_result
       rescue StandardError => e
@@ -287,6 +290,29 @@ module Screeners
       available = portfolio.available_swing_capital || portfolio.swing_capital || 0
 
       available >= max_position_value * 0.5
+    end
+
+    def create_trade_outcomes_for_final_candidates(screener_run, tier1_candidates)
+      return if tier1_candidates.empty?
+
+      Rails.logger.info("[Screeners::SwingScreenerJob] Creating TradeOutcomes for #{tier1_candidates.size} Tier 1 candidates")
+
+      tier1_candidates.each do |candidate|
+        result = TradeOutcomes::Creator.call(
+          screener_run: screener_run,
+          candidate: candidate,
+          trading_mode: "paper", # Default to paper, can be overridden
+        )
+
+        if result[:success]
+          Rails.logger.debug("[Screeners::SwingScreenerJob] Created TradeOutcome for #{candidate[:symbol]}")
+        else
+          Rails.logger.warn("[Screeners::SwingScreenerJob] Failed to create TradeOutcome for #{candidate[:symbol]}: #{result[:error]}")
+        end
+      end
+    rescue StandardError => e
+      Rails.logger.error("[Screeners::SwingScreenerJob] Failed to create TradeOutcomes: #{e.message}")
+      # Don't fail the entire job if outcome creation fails
     end
 
     def handle_empty_results(screener_run = nil)

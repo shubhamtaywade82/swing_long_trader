@@ -39,6 +39,9 @@ module PaperTrading
         signal: @signal,
       )
 
+      # Create TradeOutcome if this is from a screener run
+      create_trade_outcome_if_from_screener(position, signal_record)
+
       # Update signal record as executed
       signal_record&.mark_as_executed!(
         execution_type: "paper",

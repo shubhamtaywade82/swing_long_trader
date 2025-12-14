@@ -115,6 +115,9 @@ module PaperTrading
         holding_days: position.days_held,
       )
 
+      # Update TradeOutcome if it exists
+      update_trade_outcome_for_paper_position(position, exit_price: exit_price, exit_reason: reason)
+
       # Release reserved capital
       entry_value = position.entry_price * position.quantity
       @portfolio.decrement!(:reserved_capital, entry_value)
@@ -206,6 +209,39 @@ module PaperTrading
       Telegram::Notifier.send_error_alert(message, context: "Paper Trade Exit")
     rescue StandardError => e
       log_error("Failed to send exit notification: #{e.message}")
+    end
+
+    def update_trade_outcome_for_paper_position(position, exit_price:, exit_reason:)
+      outcome = TradeOutcome.find_by(
+        position_id: position.id,
+        position_type: "paper_position",
+        status: "open",
+      )
+
+      return unless outcome
+
+      mapped_reason = case exit_reason.to_s.downcase
+                      when /target|take.profit|tp/
+                        "target_hit"
+                      when /stop|sl|stop.loss/
+                        "stop_hit"
+                      when /time|holding|days/
+                        "time_based"
+                      when /signal|invalid|screener/
+                        "signal_invalidated"
+                      else
+                        "manual"
+                      end
+
+      TradeOutcomes::Updater.call(
+        outcome: outcome,
+        exit_price: exit_price,
+        exit_reason: mapped_reason,
+        exit_time: Time.current,
+      )
+    rescue StandardError => e
+      Rails.logger.error("[PaperTrading::Simulator] Failed to update TradeOutcome: #{e.message}")
+      # Don't fail position closing if outcome update fails
     end
   end
 end

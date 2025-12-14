@@ -78,6 +78,43 @@ class SwingPosition < ApplicationRecord
     self.status = "closed"
     self.closed_at = Time.current
     save!
+
+    # Update TradeOutcome if it exists
+    update_trade_outcome_on_close(exit_price: exit_price, exit_reason: exit_reason)
+  end
+
+  private
+
+  def update_trade_outcome_on_close(exit_price:, exit_reason:)
+    outcome = TradeOutcome.find_by(
+      position_id: id,
+      position_type: "swing_position",
+      status: "open",
+    )
+
+    return unless outcome
+
+    TradeOutcomes::Updater.call(
+      outcome: outcome,
+      exit_price: exit_price,
+      exit_reason: map_exit_reason(exit_reason),
+    )
+  end
+
+  def map_exit_reason(reason)
+    # Map position exit reasons to TradeOutcome exit reasons
+    case reason.to_s.downcase
+    when /target|take.profit|tp/
+      "target_hit"
+    when /stop|sl|stop.loss/
+      "stop_hit"
+    when /time|holding|days/
+      "time_based"
+    when /signal|invalid|screener/
+      "signal_invalidated"
+    else
+      "manual"
+    end
   end
 
   def metadata_hash
