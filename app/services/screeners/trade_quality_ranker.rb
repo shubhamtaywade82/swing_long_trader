@@ -36,11 +36,24 @@ module Screeners
         )
       end
 
-      # Sort by quality score and take top N
-      sorted = ranked.sort_by { |c| -c[:trade_quality_score] }.first(@limit)
+      # Sort by combined score (screener score + quality score) - highest first
+      # This ensures best candidates are evaluated by AI first
+      sorted = ranked.sort_by do |c|
+        screener_score = c[:score] || 0
+        quality_score = c[:trade_quality_score] || 0
+        # Combined: 50% screener score, 50% quality score
+        -(screener_score * 0.5 + quality_score * 0.5)
+      end.first(@limit)
+      
       sorted.each_with_index do |candidate, index|
         candidate[:trade_quality_rank] = index + 1
       end
+
+      Rails.logger.info(
+        "[Screeners::TradeQualityRanker] Ranked #{sorted.size} candidates " \
+        "(top score: #{sorted.first&.dig(:trade_quality_score)&.round(1)}, " \
+        "screener score: #{sorted.first&.dig(:score)&.round(1)})"
+      )
 
       sorted
     end

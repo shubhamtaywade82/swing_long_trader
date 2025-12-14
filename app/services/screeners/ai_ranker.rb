@@ -42,12 +42,27 @@ module Screeners
       # Check rate limit
       return handle_rate_limit if rate_limit_exceeded?
 
+      # Ensure candidates are sorted by score (highest first) before AI evaluation
+      # This ensures best candidates are evaluated first
+      sorted_candidates = @candidates.sort_by do |c|
+        screener_score = c[:score] || 0
+        quality_score = c[:trade_quality_score] || 0
+        # Combined: 50% screener score, 50% quality score
+        -(screener_score * 0.5 + quality_score * 0.5)
+      end
+
+      Rails.logger.info(
+        "[Screeners::AIEvaluator] Starting AI evaluation on #{sorted_candidates.size} candidates " \
+        "(top combined score: #{(sorted_candidates.first&.dig(:score) || 0) * 0.5 + (sorted_candidates.first&.dig(:trade_quality_score) || 0) * 0.5})"
+      )
+
       evaluated = []
-      total_count = @candidates.size
+      total_count = sorted_candidates.size
       processed_count = 0
       start_time = Time.current
 
-      @candidates.each do |candidate|
+      # Process highest scores first
+      sorted_candidates.each do |candidate|
         processed_count += 1
         result = evaluate_candidate(candidate)
         
