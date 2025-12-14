@@ -395,7 +395,7 @@
 
     <!-- Filters - Compact Inline -->
     <div class="filter-section">
-      <%= form_with url: admin_solid_queue_index_path, method: :get, local: true, class: "row g-2 align-items-end" do |f| %>
+      <%= form_with url: admin_solid_queue_index_path, method: :get, local: true, class: "row g-2 align-items-end", id: "filter-form" do |f| %>
         <div class="col-md-2 col-sm-6">
           <%= f.label :status, "Status", class: "form-label fw-bold mb-1" %>
           <%= f.select :status,
@@ -433,6 +433,16 @@
               placeholder: "ID, class, queue...",
               class: "form-control" %>
         </div>
+
+        <% if @filter_status == "all" %>
+          <div class="col-md-2 col-sm-6">
+            <label class="form-label fw-bold mb-1" style="display: block;">&nbsp;</label>
+            <div class="form-check mt-2">
+              <%= f.check_box :show_finished_successful, { checked: @show_finished_successful, class: "form-check-input" }, "true", "false" %>
+              <%= f.label :show_finished_successful, "Show successful finished", class: "form-check-label", style: "font-size: 0.75rem;" %>
+            </div>
+          </div>
+        <% end %>
 
         <div class="col-md-3 col-sm-12">
           <%= f.submit "Apply", class: "btn btn-primary btn-sm" %>
@@ -902,20 +912,54 @@
     updateBulkActions();
   }
 
-  // Optimize: Debounce search input
-  let searchTimeout;
-  const searchInput = document.querySelector('input[name="search"]');
-  if (searchInput) {
-    searchInput.addEventListener('input', function() {
-      clearTimeout(searchTimeout);
-      // Auto-submit after 500ms of no typing
-      searchTimeout = setTimeout(function() {
-        if (searchInput.value.length >= 3 || searchInput.value.length === 0) {
-          searchInput.form.submit();
-        }
-      }, 500);
+  // Auto-submit form when filters change - using event delegation for reliability
+  (function() {
+    let searchTimeout;
+
+    function getFilterForm() {
+      return document.getElementById('filter-form');
+    }
+
+    function submitFilterForm() {
+      const filterForm = getFilterForm();
+      if (filterForm) {
+        filterForm.submit();
+      }
+    }
+
+    // Use event delegation on document to catch all changes
+    document.addEventListener('change', function(e) {
+      const filterForm = getFilterForm();
+      if (!filterForm || !filterForm.contains(e.target)) {
+        return;
+      }
+
+      // Check if the changed element is one of our filter controls
+      const target = e.target;
+      if (target.matches('select[name="status"], select[name="queue"], select[name="class_name"], input[name="show_finished_successful"]')) {
+        submitFilterForm();
+      }
     });
-  }
+
+    // Handle search input with debouncing
+    document.addEventListener('input', function(e) {
+      const filterForm = getFilterForm();
+      if (!filterForm || !filterForm.contains(e.target)) {
+        return;
+      }
+
+      const target = e.target;
+      if (target.matches('input[name="search"]')) {
+        clearTimeout(searchTimeout);
+        // Auto-submit after 500ms of no typing
+        searchTimeout = setTimeout(function() {
+          if (target.value.length >= 3 || target.value.length === 0) {
+            submitFilterForm();
+          }
+        }, 500);
+      }
+    });
+  })();
 
   // Prefill arguments based on job class selection
   const jobClassSelect = document.getElementById('job_class_select');

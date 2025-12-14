@@ -14,6 +14,18 @@ production:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
 
+  # Daily candle ingestion - 07:30 IST every day
+  # Fetches latest daily candles from DhanHQ API and stores in database
+  daily_candle_ingestion:
+    class: Candles::DailyIngestorJob
+    schedule: "30 7 * * *" # 07:30 IST daily
+
+  # Weekly candle ingestion - 07:30 IST Monday only
+  # Aggregates daily candles into weekly candles
+  weekly_candle_ingestion:
+    class: Candles::WeeklyIngestorJob
+    schedule: "30 7 * * 1" # 07:30 IST Monday only
+
   # Automated screening during market hours (9:15 AM - 3:30 PM IST, Monday-Friday)
   # Runs every 30 minutes to keep results up-to-date
   # Note: Job checks MarketHours::Checker.market_open? before running
@@ -27,8 +39,34 @@ production:
     args: [{ screener_type: "longterm" }]
     schedule: "15,45 9-15 * * 1-5" # At :15 and :45 past each hour, 9 AM - 3 PM, weekdays
 
+  # Entry monitoring - Every 30 minutes during market hours (9 AM - 3:30 PM IST, Monday-Friday)
+  # Checks top candidates for entry conditions and generates signals
+  entry_monitor:
+    class: Strategies::Swing::EntryMonitorJob
+    schedule: "0,30 9-15 * * 1-5" # At :00 and :30 past each hour, 9 AM - 3 PM, weekdays
+
+  # Exit monitoring - Every 30 minutes during market hours (9 AM - 3:30 PM IST, Monday-Friday)
+  # Checks open positions for exit conditions (stop loss, take profit, trailing stop)
+  exit_monitor:
+    class: Strategies::Swing::ExitMonitorJob
+    schedule: "0,30 9-15 * * 1-5" # At :00 and :30 past each hour, 9 AM - 3 PM, weekdays
+
+  # Health monitoring - Every 30 minutes during market hours (9 AM - 3:30 PM IST, Monday-Friday)
+  # Checks system health, API connectivity, job queue status, and OpenAI costs
+  health_monitor:
+    class: MonitorJob
+    schedule: "0,30 9-15 * * 1-5" # At :00 and :30 past each hour, 9 AM - 3 PM, weekdays
+
 development:
   # Same schedule for development (can be adjusted)
+  daily_candle_ingestion:
+    class: Candles::DailyIngestorJob
+    schedule: "30 7 * * *" # 07:30 IST daily
+
+  weekly_candle_ingestion:
+    class: Candles::WeeklyIngestorJob
+    schedule: "30 7 * * 1" # 07:30 IST Monday only
+
   automated_swing_screener:
     class: Screeners::AutomatedScreenerJob
     args: [{ screener_type: "swing" }]
@@ -38,3 +76,15 @@ development:
     class: Screeners::AutomatedScreenerJob
     args: [{ screener_type: "longterm" }]
     schedule: "15,45 9-15 * * 1-5"
+
+  entry_monitor:
+    class: Strategies::Swing::EntryMonitorJob
+    schedule: "0,30 9-15 * * 1-5"
+
+  exit_monitor:
+    class: Strategies::Swing::ExitMonitorJob
+    schedule: "0,30 9-15 * * 1-5"
+
+  health_monitor:
+    class: MonitorJob
+    schedule: "0,30 9-15 * * 1-5"

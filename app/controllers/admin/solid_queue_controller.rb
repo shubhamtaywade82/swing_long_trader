@@ -11,6 +11,7 @@ module Admin
       @filter_queue = params[:queue].presence
       @filter_class = params[:class_name].presence
       @search_term = params[:search].presence
+      @show_finished_successful = params[:show_finished_successful] == "true"
       @page = [params[:page].to_i, 1].max
 
       # OPTIMIZE: Use single query with conditional counts
@@ -248,6 +249,22 @@ module Admin
       when "finished"
         jobs = jobs.where.not(finished_at: nil)
                    .where("finished_at > ?", 24.hours.ago)
+      when "all"
+        # By default, exclude finished jobs without errors unless explicitly requested
+        unless @show_finished_successful
+          # Get job IDs that have failed executions (these should be shown even if finished)
+          failed_job_ids = SolidQueue::FailedExecution.pluck(:job_id)
+
+          # Show: unfinished jobs OR finished jobs that have failed executions
+          # This excludes successful finished jobs (finished but no failed execution)
+          jobs = if failed_job_ids.any?
+                   jobs.where("finished_at IS NULL OR id IN (?)", failed_job_ids)
+                 else
+                   # No failed jobs exist, so only show unfinished jobs
+                   jobs.where(finished_at: nil)
+                 end
+        end
+        # If @show_finished_successful is true, show all jobs (no additional filtering)
       end
 
       # Filter by queue
