@@ -7,8 +7,9 @@ class ApplicationJob < ActiveJob::Base
   # Most jobs are safe to ignore if the underlying records are no longer available
   discard_on ActiveJob::DeserializationError
 
-  # Retry on standard errors with exponential backoff
-  retry_on StandardError, wait: :exponentially_longer, attempts: 3
+  # Retry on standard errors with polynomial backoff (Rails 8.1+)
+  # Using :polynomially_longer instead of deprecated :exponentially_longer
+  retry_on StandardError, wait: :polynomially_longer, attempts: 3
 
   # Log job execution time
   around_perform :log_job_duration

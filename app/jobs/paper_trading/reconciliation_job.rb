@@ -10,7 +10,7 @@ module PaperTrading
     queue_as :monitoring
 
     # Retry strategy: exponential backoff, max 2 attempts
-    retry_on StandardError, wait: :exponentially_longer, attempts: 2
+    retry_on StandardError, wait: :polynomially_longer, attempts: 2
 
     def perform(portfolio_id: nil)
       return unless Rails.configuration.x.paper_trading.enabled

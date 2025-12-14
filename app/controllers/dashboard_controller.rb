@@ -358,9 +358,34 @@ class DashboardController < ApplicationController
     if sync
       # Run synchronously for testing (bypasses queue)
       begin
-        candidates = Screeners::LongtermScreener.call(limit: limit, persist_results: true)
+        # Create screener run for tracking (same as background job)
+        universe_size = Instrument.where(segment: %w[equity index], exchange: "NSE").count
+        screener_run = ScreenerRun.create!(
+          screener_type: "longterm",
+          universe_size: universe_size,
+          started_at: Time.current,
+          status: "running",
+          metrics: {},
+        )
 
-        # Cache results
+        Rails.logger.info("[DashboardController] Created ScreenerRun ##{screener_run.id} for sync run")
+
+        candidates = Screeners::LongtermScreener.call(
+          limit: limit,
+          persist_results: true,
+          screener_run_id: screener_run.id,
+        )
+
+        # Update screener run
+        screener_run.update!(
+          status: "completed",
+          completed_at: Time.current,
+        )
+        screener_run.update_metrics!(
+          eligible_count: candidates.size,
+        )
+
+        # Cache results for backward compatibility
         cache_key = "longterm_screener_results_#{Date.current}"
         Rails.cache.write(cache_key, candidates, expires_in: 24.hours)
         Rails.cache.write("#{cache_key}_timestamp", Time.current, expires_in: 24.hours)
@@ -371,6 +396,11 @@ class DashboardController < ApplicationController
           candidate_count: candidates.size,
         }
       rescue StandardError => e
+        screener_run&.update!(
+          status: "failed",
+          completed_at: Time.current,
+        )
+        Rails.logger.error("[DashboardController] Sync longterm screener failed: #{e.message}")
         render json: { status: "error", message: e.message }, status: :unprocessable_content
       end
     else
@@ -510,7 +540,6 @@ class DashboardController < ApplicationController
       # Recalculate from actual positions (unified Position model)
       open_positions = Position.paper.open.includes(:instrument)
       calculated_exposure = open_positions.sum { |pos| (pos.current_price || 0) * (pos.quantity || 0) }
-      calculated_unrealized = open_positions.sum { |pos| pos.unrealized_pnl || 0 }
 
       # Update equity to ensure it's current
       portfolio.update_equity! if portfolio.respond_to?(:update_equity!)

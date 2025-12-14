@@ -10,10 +10,12 @@ module Orders
     queue_as :execution
 
     # Retry strategy: exponential backoff, max 3 attempts
-    retry_on StandardError, wait: :exponentially_longer, attempts: 3
+    retry_on StandardError, wait: :polynomially_longer, attempts: 3
 
     # Don't retry on validation errors
-    discard_on ArgumentError, if: ->(error) { error.message.include?("validation") }
+    # Don't retry on validation errors - discard them
+    # Note: discard_on doesn't support :if keyword, so we discard all ArgumentErrors
+    discard_on ArgumentError
 
     def perform(order_id: nil)
       # If specific order ID provided, process only that order

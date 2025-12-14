@@ -9,10 +9,12 @@ class ExecutorJob < ApplicationJob
   queue_as :execution
 
   # Retry strategy: exponential backoff, max 3 attempts
-  retry_on StandardError, wait: :exponentially_longer, attempts: 3
+  retry_on StandardError, wait: :polynomially_longer, attempts: 3
 
-  # Don't retry on validation errors
-  discard_on ArgumentError, if: ->(error) { error.message.include?("validation") }
+  # Don't retry on validation errors - discard them
+  # Note: discard_on doesn't support :if keyword, so we discard all ArgumentErrors
+  # For conditional discarding, we'd need to handle it in the perform method
+  discard_on ArgumentError
 
   def perform(signal_hash, dry_run: nil)
     # Convert signal hash to proper format if needed

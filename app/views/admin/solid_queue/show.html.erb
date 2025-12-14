@@ -1,0 +1,317 @@
+<% content_for :page_title, "Solid Queue Job ##{@job.id}" %>
+
+<style>
+  .job-detail-page {
+    background: #f8f9fa;
+    min-height: 100vh;
+    padding: 1.5rem 0;
+  }
+
+  .detail-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 1.5rem;
+  }
+
+  .detail-card .card-header {
+    border-radius: 12px 12px 0 0;
+    font-weight: 600;
+  }
+
+  .code-block {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 0.5rem;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    display: block;
+    overflow-x: auto;
+  }
+
+  .json-viewer {
+    background: #282c34;
+    color: #abb2bf;
+    border-radius: 8px;
+    padding: 1rem;
+    max-height: 500px;
+    overflow-y: auto;
+    overflow-x: auto;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.85em;
+  }
+
+  .json-viewer pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .status-badge-large {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .info-row {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e9ecef;
+  }
+
+  .info-row:last-child {
+    border-bottom: none;
+  }
+
+  .info-label {
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+  }
+
+  .info-value {
+    color: #212529;
+    font-size: 0.95rem;
+  }
+</style>
+
+<div class="job-detail-page">
+  <div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <%= link_to admin_solid_queue_index_path, class: "btn btn-outline-secondary mb-2" do %>
+          <i class="bi bi-arrow-left"></i> Back to Queue
+        <% end %>
+        <h1 class="h2 mb-1">
+          <i class="bi bi-list-task text-primary"></i> Job #<%= @job.id %>
+        </h1>
+        <p class="text-muted mb-0">
+          <span class="code-block d-inline-block"><%= @job.class_name %></span>
+        </p>
+      </div>
+      <div>
+        <% if @failed_execution %>
+          <%= form_with url: retry_failed_admin_solid_queue_path(@failed_execution.id),
+              method: :post, class: "d-inline" do |f| %>
+            <%= f.submit "🔄 Retry Job", class: "btn btn-success" %>
+          <% end %>
+        <% end %>
+        <%= form_with url: delete_job_admin_solid_queue_path(@job.id),
+            method: :delete, class: "d-inline" do |f| %>
+          <%= f.submit "🗑️ Delete", class: "btn btn-outline-danger",
+              data: { confirm: "Delete job ##{@job.id} permanently?" } %>
+        <% end %>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <!-- Main Details -->
+      <div class="col-lg-8">
+        <!-- Job Information -->
+        <div class="card detail-card">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-info-circle"></i> Job Information</h5>
+          </div>
+          <div class="card-body">
+            <div class="info-row">
+              <div class="info-label">Status</div>
+              <div class="info-value mt-1">
+                <% if @job.finished_at.nil? %>
+                  <% if @job.scheduled_at && @job.scheduled_at > Time.current %>
+                    <span class="badge bg-secondary status-badge-large">Scheduled</span>
+                  <% else %>
+                    <span class="badge bg-warning status-badge-large">Pending</span>
+                  <% end %>
+                <% else %>
+                  <span class="badge bg-success status-badge-large">Finished</span>
+                <% end %>
+              </div>
+            </div>
+
+            <div class="info-row">
+              <div class="info-label">Job ID</div>
+              <div class="info-value mt-1">
+                <span class="code-block d-inline-block"><%= @job.id %></span>
+              </div>
+            </div>
+
+            <div class="info-row">
+              <div class="info-label">Class Name</div>
+              <div class="info-value mt-1">
+                <span class="code-block"><%= @job.class_name %></span>
+              </div>
+            </div>
+
+            <div class="info-row">
+              <div class="info-label">Queue</div>
+              <div class="info-value mt-1">
+                <span class="code-block d-inline-block"><%= @job.queue_name %></span>
+              </div>
+            </div>
+
+            <div class="info-row">
+              <div class="info-label">Priority</div>
+              <div class="info-value mt-1"><%= @job.priority %></div>
+            </div>
+
+            <div class="info-row">
+              <div class="info-label">Created At</div>
+              <div class="info-value mt-1">
+                <%= @job.created_at.strftime("%Y-%m-%d %H:%M:%S") %>
+                <small class="text-muted">(<%= time_ago_in_words(@job.created_at) %> ago)</small>
+              </div>
+            </div>
+
+            <% if @job.scheduled_at %>
+              <div class="info-row">
+                <div class="info-label">Scheduled At</div>
+                <div class="info-value mt-1">
+                  <%= @job.scheduled_at.strftime("%Y-%m-%d %H:%M:%S") %>
+                  <% if @job.scheduled_at > Time.current %>
+                    <small class="text-muted">(in <%= time_ago_in_words(@job.scheduled_at) %>)</small>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+
+            <% if @job.finished_at %>
+              <div class="info-row">
+                <div class="info-label">Finished At</div>
+                <div class="info-value mt-1">
+                  <%= @job.finished_at.strftime("%Y-%m-%d %H:%M:%S") %>
+                  <small class="text-muted">(<%= time_ago_in_words(@job.finished_at) %> ago)</small>
+                  <% if @job.created_at %>
+                    <br><small class="text-success">
+                      Duration: <%= ((@job.finished_at - @job.created_at) / 1.second).round(2) %>s
+                    </small>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+
+            <% if @job.active_job_id %>
+              <div class="info-row">
+                <div class="info-label">Active Job ID</div>
+                <div class="info-value mt-1">
+                  <span class="code-block d-inline-block"><%= @job.active_job_id %></span>
+                </div>
+              </div>
+            <% end %>
+
+            <% if @job.concurrency_key %>
+              <div class="info-row">
+                <div class="info-label">Concurrency Key</div>
+                <div class="info-value mt-1">
+                  <span class="code-block d-inline-block"><%= @job.concurrency_key %></span>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+
+        <!-- Arguments -->
+        <div class="card detail-card">
+          <div class="card-header bg-dark text-white">
+            <h5 class="mb-0"><i class="bi bi-code-square"></i> Job Arguments</h5>
+          </div>
+          <div class="card-body">
+            <% if @job.arguments.present? %>
+              <div class="json-viewer">
+                <pre><%= JSON.pretty_generate(@job.arguments) %></pre>
+              </div>
+            <% else %>
+              <p class="text-muted mb-0">No arguments provided</p>
+            <% end %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="col-lg-4">
+        <!-- Current Execution -->
+        <% if @execution %>
+          <div class="card detail-card border-primary">
+            <div class="card-header bg-primary text-white">
+              <h5 class="mb-0"><i class="bi bi-play-circle"></i> Current Execution</h5>
+            </div>
+            <div class="card-body">
+              <div class="info-row">
+                <div class="info-label">Process ID</div>
+                <div class="info-value mt-1">
+                  <span class="code-block d-inline-block"><%= @execution.process_id %></span>
+                </div>
+              </div>
+              <div class="info-row">
+                <div class="info-label">Started At</div>
+                <div class="info-value mt-1">
+                  <%= @execution.created_at.strftime("%Y-%m-%d %H:%M:%S") %>
+                  <small class="text-muted">(<%= time_ago_in_words(@execution.created_at) %> ago)</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Failed Execution -->
+        <% if @failed_execution %>
+          <div class="card detail-card border-danger">
+            <div class="card-header bg-danger text-white">
+              <h5 class="mb-0"><i class="bi bi-x-circle"></i> Failed Execution</h5>
+            </div>
+            <div class="card-body">
+              <div class="info-row">
+                <div class="info-label">Failed At</div>
+                <div class="info-value mt-1">
+                  <%= @failed_execution.created_at.strftime("%Y-%m-%d %H:%M:%S") %>
+                  <small class="text-muted">(<%= time_ago_in_words(@failed_execution.created_at) %> ago)</small>
+                </div>
+              </div>
+
+              <% if @failed_execution.error.present? %>
+                <div class="info-row">
+                  <div class="info-label">Error Message</div>
+                  <div class="info-value mt-2">
+                    <div class="json-viewer" style="max-height: 400px;">
+                      <pre><%= @failed_execution.error %></pre>
+                    </div>
+                  </div>
+                </div>
+              <% end %>
+
+              <div class="mt-3">
+                <%= form_with url: retry_failed_admin_solid_queue_path(@failed_execution.id),
+                    method: :post, class: "d-inline w-100" do |f| %>
+                  <%= f.submit "🔄 Retry Job", class: "btn btn-success w-100" %>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Actions -->
+        <div class="card detail-card">
+          <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0"><i class="bi bi-gear"></i> Actions</h5>
+          </div>
+          <div class="card-body">
+            <%= link_to admin_solid_queue_index_path, class: "btn btn-outline-secondary w-100 mb-2" do %>
+              <i class="bi bi-arrow-left"></i> Back to Queue
+            <% end %>
+            <button type="button" class="btn btn-outline-primary w-100 mb-2" onclick="location.reload()">
+              <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+            <%= form_with url: delete_job_admin_solid_queue_path(@job.id),
+                method: :delete, class: "d-inline w-100" do |f| %>
+              <%= f.submit "🗑️ Delete Job", class: "btn btn-outline-danger w-100",
+                  data: { confirm: "Delete job ##{@job.id} permanently?" } %>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

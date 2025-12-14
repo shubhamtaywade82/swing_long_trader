@@ -12,7 +12,7 @@ module Strategies
       queue_as :monitoring
 
       # Retry strategy: exponential backoff, max 2 attempts
-      retry_on StandardError, wait: :exponentially_longer, attempts: 2
+      retry_on StandardError, wait: :polynomially_longer, attempts: 2
 
       def perform
         # Get all open positions (preferred) or active orders (fallback)

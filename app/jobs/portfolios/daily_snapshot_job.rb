@@ -10,7 +10,7 @@ module Portfolios
     queue_as :background
 
     # Retry strategy: exponential backoff, max 2 attempts
-    retry_on StandardError, wait: :exponentially_longer, attempts: 2
+    retry_on StandardError, wait: :polynomially_longer, attempts: 2
 
     def perform(date: nil, portfolio_type: "all")
       date ||= Time.zone.today

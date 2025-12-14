@@ -10,7 +10,7 @@ module Screeners
     queue_as :screener
 
     # Retry strategy: exponential backoff, max 2 attempts (scheduled job)
-    retry_on StandardError, wait: :exponentially_longer, attempts: 2
+    retry_on StandardError, wait: :polynomially_longer, attempts: 2
 
     def perform(screener_type: "swing")
       # Check if market is open

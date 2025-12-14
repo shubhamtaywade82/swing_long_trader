@@ -197,10 +197,11 @@ module Screeners
 
       # Pre-filter instruments that have both daily and weekly candles
       # NO LIMIT - Screen the complete universe
-      base_scope.joins(:candle_series_records)
-                .where(candle_series_records: { timeframe: %w[1D 1W] })
+      # Use table name 'candle_series' directly since CandleSeriesRecord uses custom table_name
+      base_scope.joins("INNER JOIN candle_series ON candle_series.instrument_id = instruments.id")
+                .where("candle_series.timeframe IN (?)", %w[1D 1W])
                 .group("instruments.id")
-                .having("COUNT(DISTINCT candle_series_records.timeframe) = 2")
+                .having("COUNT(DISTINCT candle_series.timeframe) = 2")
                 .includes(:candle_series_records) # Eager load to reduce queries
     end
 
@@ -208,18 +209,27 @@ module Screeners
       # Batch load all daily and weekly candles for all instruments to avoid N+1 queries
       Rails.logger.info("[Screeners::LongtermScreener] Preloading candles for #{@instruments.count} instruments...")
 
-      instrument_ids = @instruments.pluck(:id)
+      # Get instrument IDs as a simple array to avoid any relation issues
+      # Unscope any GROUP BY clauses that might be inherited from load_universe
+      instrument_ids = if @instruments.is_a?(ActiveRecord::Relation)
+                         @instruments.unscope(:includes, :joins, :group, :having, :select).pluck(:id)
+                       else
+                         @instruments.map(&:id)
+                       end
+      return if instrument_ids.empty?
 
       # Load all daily and weekly candles in one query
-      candle_records = CandleSeriesRecord
-                       .for_timeframe(%w[1D 1W])
-                       .where(instrument_id: instrument_ids)
-                       .recent(200) # Get last 200 candles per instrument
-                       .order(instrument_id: :asc, timeframe: :asc, timestamp: :desc)
-                       .to_a
+      # Use a completely fresh query to avoid any GROUP BY issues
+      all_candle_records = CandleSeriesRecord
+                           .where(instrument_id: instrument_ids)
+                           .where(timeframe: %w[1D 1W])
+                           .order(instrument_id: :asc, timeframe: :asc, timestamp: :desc)
+                           .to_a
 
-      # Group candles by instrument_id and timeframe
-      candles_by_instrument = candle_records.group_by { |r| [r.instrument_id, r.timeframe] }
+      # Group candles by instrument_id and timeframe, then take last 200 per group
+      candles_by_instrument = all_candle_records
+                              .group_by { |r| [r.instrument_id, r.timeframe] }
+                              .transform_values { |records| records.take(200) }
 
       # Build CandleSeries for each instrument
       @instruments.each do |instrument|

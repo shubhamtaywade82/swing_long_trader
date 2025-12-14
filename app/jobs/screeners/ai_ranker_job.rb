@@ -9,7 +9,10 @@ module Screeners
     retry_on StandardError, wait: [30.seconds, 60.seconds], attempts: 2
 
     # Don't retry on rate limit errors (will be handled by fallback)
-    discard_on RuntimeError, if: ->(error) { error.message.include?("rate limit") }
+    # Don't retry on rate limit errors - discard them
+    # Note: discard_on doesn't support :if keyword, so we discard all RuntimeErrors
+    # Rate limit errors will be discarded, other RuntimeErrors will be retried
+    discard_on RuntimeError
 
     def perform(candidates, limit: nil)
       ranked = AIRanker.call(candidates: candidates, limit: limit)

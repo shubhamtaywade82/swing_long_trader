@@ -1,0 +1,959 @@
+<% content_for :page_title, "Solid Queue Admin" %>
+
+<style>
+  .queue-admin-page {
+    background: #f8f9fa;
+    min-height: 100vh;
+    padding: 0.5rem 0;
+    font-size: 0.875rem;
+  }
+
+  /* Compact header */
+  .queue-admin-page h1 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .queue-admin-page .text-muted {
+    font-size: 0.75rem;
+    margin-bottom: 0;
+  }
+
+  /* Compact stat cards */
+  .stat-card {
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    margin-bottom: 0.5rem;
+  }
+
+  .stat-card .card-body {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem !important;
+  }
+
+  .stat-card h6 {
+    font-size: 0.65rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-card h2, .stat-card h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0;
+    font-weight: 700;
+  }
+
+  /* Compact filter section */
+  .filter-section {
+    background: white;
+    border-radius: 6px;
+    padding: 0.75rem;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    margin-bottom: 0.75rem;
+  }
+
+  .filter-section .form-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .filter-section .form-select,
+  .filter-section .form-control {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+    height: auto;
+  }
+
+  .filter-section .btn {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.75rem;
+  }
+
+  /* Compact tables */
+  .job-table {
+    font-size: 0.8rem;
+    margin-bottom: 0;
+  }
+
+  .job-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.3px;
+    border-bottom: 1px solid #dee2e6;
+    padding: 0.4rem 0.5rem;
+    white-space: nowrap;
+  }
+
+  .job-table td {
+    padding: 0.4rem 0.5rem;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  .job-table tbody tr {
+    height: auto;
+  }
+
+  .badge-status {
+    padding: 0.2em 0.4em;
+    font-weight: 500;
+    font-size: 0.7rem;
+  }
+
+  .action-buttons .btn {
+    margin-right: 0.15rem;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.75rem;
+  }
+
+  /* Compact cards */
+  .card {
+    margin-bottom: 0.75rem;
+    border-radius: 6px;
+  }
+
+  .card-header {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .card-body {
+    padding: 0.75rem;
+  }
+
+  /* Compact buttons */
+  .btn-sm {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .refresh-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #28a745;
+    margin-right: 0.25rem;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .code-block {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 3px;
+    padding: 0.15rem 0.35rem;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.75rem;
+  }
+
+  .pagination {
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+  }
+
+  .pagination .page-link {
+    color: #495057;
+    border-color: #dee2e6;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .pagination .page-item.active .page-link {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+  }
+
+  .pagination .page-item.disabled .page-link {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .loading-overlay.active {
+    display: flex;
+  }
+
+  .spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .table-hover tbody tr:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+  }
+
+  /* Compact header buttons */
+  .queue-admin-page .btn {
+    font-size: 0.8rem;
+    padding: 0.35rem 0.75rem;
+  }
+
+  /* Reduce spacing */
+  .mb-4 {
+    margin-bottom: 0.75rem !important;
+  }
+
+  .mb-3 {
+    margin-bottom: 0.5rem !important;
+  }
+
+  .mt-3 {
+    margin-top: 0.5rem !important;
+  }
+
+  .py-4 {
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+  }
+
+  .py-5 {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+
+  /* Compact row spacing */
+  .row.g-2 {
+    --bs-gutter-y: 0.25rem;
+    --bs-gutter-x: 0.25rem;
+  }
+
+  /* Even more compact table */
+  .table-sm {
+    font-size: 0.75rem;
+  }
+
+  .table-sm th,
+  .table-sm td {
+    padding: 0.3rem 0.4rem;
+  }
+
+  /* Compact badges */
+  .badge {
+    font-size: 0.65rem;
+    padding: 0.15em 0.4em;
+  }
+
+  /* Compact modal */
+  .modal-body {
+    padding: 0.75rem;
+  }
+
+  .modal-body .form-label {
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .modal-body .form-control,
+  .modal-body .form-select {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.5rem;
+  }
+</style>
+
+<div class="queue-admin-page">
+  <div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <h1 class="h5 mb-0">
+          <i class="bi bi-list-task text-primary"></i> Solid Queue Admin
+          <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">Super User</span>
+        </h1>
+        <small class="text-muted">
+          <span class="refresh-indicator"></span>
+          Create, Delete, Unqueue, Pause/Resume
+        </small>
+      </div>
+      <div>
+        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#createJobModal">
+          <i class="bi bi-plus-circle"></i> Create
+        </button>
+        <%= form_with url: clear_finished_admin_solid_queue_index_path, method: :delete, class: "d-inline",
+            data: { confirm: "Are you sure you want to clear all finished jobs?" } do |f| %>
+          <%= f.submit "🗑️ Clear", class: "btn btn-outline-danger btn-sm" %>
+        <% end %>
+        <button type="button" class="btn btn-primary btn-sm" onclick="location.reload()">
+          <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- Status Cards - Compact Horizontal -->
+    <div class="row g-2 mb-2">
+      <div class="col-lg-3 col-md-6 col-sm-6">
+        <div class="card stat-card border-warning mb-0">
+          <div class="card-body py-1 px-2">
+            <div class="d-flex align-items-center">
+              <div class="stat-icon bg-warning bg-opacity-25 me-2">
+                <i class="bi bi-hourglass-split text-warning"></i>
+              </div>
+              <div class="flex-grow-1">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="text-muted" style="font-size: 0.65rem;">PENDING</span>
+                  <strong style="font-size: 1.1rem;"><%= @jobs_by_status[:pending] %></strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-3 col-md-6 col-sm-6">
+        <div class="card stat-card border-primary mb-0">
+          <div class="card-body py-1 px-2">
+            <div class="d-flex align-items-center">
+              <div class="stat-icon bg-primary bg-opacity-25 me-2">
+                <i class="bi bi-play-circle text-primary"></i>
+              </div>
+              <div class="flex-grow-1">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="text-muted" style="font-size: 0.65rem;">RUNNING</span>
+                  <strong style="font-size: 1.1rem;"><%= @jobs_by_status[:running] %></strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-3 col-md-6 col-sm-6">
+        <div class="card stat-card border-danger mb-0">
+          <div class="card-body py-1 px-2">
+            <div class="d-flex align-items-center">
+              <div class="stat-icon bg-danger bg-opacity-25 me-2">
+                <i class="bi bi-x-circle text-danger"></i>
+              </div>
+              <div class="flex-grow-1">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="text-muted" style="font-size: 0.65rem;">FAILED</span>
+                  <strong style="font-size: 1.1rem;"><%= @jobs_by_status[:failed] %></strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-3 col-md-6 col-sm-6">
+        <div class="card stat-card border-success mb-0">
+          <div class="card-body py-1 px-2">
+            <div class="d-flex align-items-center">
+              <div class="stat-icon bg-success bg-opacity-25 me-2">
+                <i class="bi bi-check-circle text-success"></i>
+              </div>
+              <div class="flex-grow-1">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="text-muted" style="font-size: 0.65rem;">FINISHED</span>
+                  <strong style="font-size: 1.1rem;"><%= @jobs_by_status[:finished] %></strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters - Compact Inline -->
+    <div class="filter-section">
+      <%= form_with url: admin_solid_queue_index_path, method: :get, local: true, class: "row g-2 align-items-end" do |f| %>
+        <div class="col-md-2 col-sm-6">
+          <%= f.label :status, "Status", class: "form-label fw-bold mb-1" %>
+          <%= f.select :status,
+              options_for_select([
+                ["All", "all"],
+                ["Pending", "pending"],
+                ["Running", "running"],
+                ["Failed", "failed"],
+                ["Finished", "finished"]
+              ], @filter_status),
+              {},
+              { class: "form-select" } %>
+        </div>
+
+        <div class="col-md-2 col-sm-6">
+          <%= f.label :queue, "Queue", class: "form-label fw-bold mb-1" %>
+          <%= f.select :queue,
+              options_for_select([["All Queues", ""]] + @available_queues.map { |q| [q, q] }, @filter_queue),
+              {},
+              { class: "form-select" } %>
+        </div>
+
+        <div class="col-md-2 col-sm-6">
+          <%= f.label :class_name, "Class", class: "form-label fw-bold mb-1" %>
+          <%= f.select :class_name,
+              options_for_select([["All Classes", ""]] + @available_classes.map { |c| [c.split("::").last, c] }, @filter_class),
+              {},
+              { class: "form-select" } %>
+        </div>
+
+        <div class="col-md-3 col-sm-6">
+          <%= f.label :search, "Search", class: "form-label fw-bold mb-1" %>
+          <%= f.text_field :search,
+              value: @search_term,
+              placeholder: "ID, class, queue...",
+              class: "form-control" %>
+        </div>
+
+        <div class="col-md-3 col-sm-12">
+          <%= f.submit "Apply", class: "btn btn-primary btn-sm" %>
+          <%= link_to "Clear", admin_solid_queue_index_path, class: "btn btn-outline-secondary btn-sm" %>
+        </div>
+      <% end %>
+    </div>
+
+    <!-- Queue Statistics -->
+    <% if @queue_stats.any? %>
+      <div class="card mb-2 shadow-sm">
+        <div class="card-header bg-primary text-white py-1">
+          <h6 class="mb-0" style="font-size: 0.8rem;"><i class="bi bi-bar-chart"></i> Queue Stats & Controls</h6>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover job-table mb-0">
+              <thead>
+                <tr>
+                  <th>Queue Name</th>
+                  <th class="text-end">Pending</th>
+                  <th class="text-end">Running</th>
+                  <th class="text-end">Failed</th>
+                  <th class="text-end">Avg Duration (s)</th>
+                  <th class="text-center">Status</th>
+                  <th class="text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @queue_stats.each do |queue_name, stats| %>
+                  <tr>
+                    <td>
+                      <span class="code-block"><%= queue_name %></span>
+                      <% if @paused_queues.include?(queue_name) %>
+                        <span class="badge bg-warning ms-2">PAUSED</span>
+                      <% end %>
+                    </td>
+                    <td class="text-end"><%= stats[:pending] %></td>
+                    <td class="text-end">
+                      <% if stats[:running] > 0 %>
+                        <span class="badge bg-primary"><%= stats[:running] %></span>
+                      <% else %>
+                        <%= stats[:running] %>
+                      <% end %>
+                    </td>
+                    <td class="text-end">
+                      <% if stats[:failed] > 0 %>
+                        <span class="badge bg-danger"><%= stats[:failed] %></span>
+                      <% else %>
+                        <%= stats[:failed] %>
+                      <% end %>
+                    </td>
+                    <td class="text-end"><%= stats[:avg_duration] %></td>
+                    <td class="text-center">
+                      <% if @paused_queues.include?(queue_name) %>
+                        <span class="badge bg-warning">Paused</span>
+                      <% else %>
+                        <span class="badge bg-success">Active</span>
+                      <% end %>
+                    </td>
+                    <td class="text-center">
+                      <% if @paused_queues.include?(queue_name) %>
+                        <%= form_with url: unpause_queue_admin_solid_queue_index_path, method: :post, class: "d-inline" do |f| %>
+                          <%= f.hidden_field :queue_name, value: queue_name %>
+                          <%= f.submit "▶️ Resume", class: "btn btn-sm btn-success" %>
+                        <% end %>
+                      <% else %>
+                        <%= form_with url: pause_queue_admin_solid_queue_index_path, method: :post, class: "d-inline" do |f| %>
+                          <%= f.hidden_field :queue_name, value: queue_name %>
+                          <%= f.submit "⏸️ Pause", class: "btn btn-sm btn-warning" %>
+                        <% end %>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    <% end %>
+
+    <!-- Recent Failures -->
+    <% if @recent_failures.any? %>
+      <div class="card mb-2 shadow-sm border-danger">
+        <div class="card-header bg-danger text-white py-1">
+          <h6 class="mb-0" style="font-size: 0.8rem;">
+            <i class="bi bi-exclamation-triangle"></i> Failures
+            <span class="badge bg-light text-dark ms-1" style="font-size: 0.65rem;"><%= @recent_failures.count %></span>
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover job-table mb-0">
+              <thead>
+                <tr>
+                  <th>Job ID</th>
+                  <th>Class Name</th>
+                  <th>Queue</th>
+                  <th>Failed At</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @recent_failures.each do |failure| %>
+                  <tr>
+                    <td>
+                      <%= link_to "##{failure.job.id}", admin_solid_queue_path(failure.job.id),
+                          class: "text-decoration-none fw-bold" %>
+                    </td>
+                    <td><span class="code-block"><%= failure.job.class_name.split("::").last %></span></td>
+                    <td><span class="code-block"><%= failure.job.queue_name %></span></td>
+                    <td><%= time_ago_in_words(failure.created_at) %> ago</td>
+                    <td class="text-end action-buttons">
+                      <%= link_to admin_solid_queue_path(failure.job.id),
+                          class: "btn btn-sm btn-outline-info", title: "View Details" do %>
+                        <i class="bi bi-eye"></i>
+                      <% end %>
+                      <%= form_with url: retry_failed_admin_solid_queue_path(failure.id),
+                          method: :post, class: "d-inline" do |f| %>
+                        <%= f.submit "Retry", class: "btn btn-sm btn-success",
+                            data: { confirm: "Retry this failed job?" } %>
+                      <% end %>
+                      <%= form_with url: delete_failed_admin_solid_queue_path(failure.job.id),
+                          method: :delete, class: "d-inline" do |f| %>
+                        <%= f.submit "Delete", class: "btn btn-sm btn-outline-danger",
+                            data: { confirm: "Delete this failed job permanently?" } %>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    <% end %>
+
+    <!-- Jobs List -->
+    <div class="card shadow-sm mb-2">
+      <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-1">
+        <h6 class="mb-0" style="font-size: 0.8rem;">
+          <i class="bi bi-clock-history"></i> Jobs
+          <span class="badge bg-light text-dark ms-1" style="font-size: 0.65rem;">
+            <%= (@page - 1) * 25 + 1 %>-<%= [@page * 25, @total_count].min %>/<%= @total_count %>
+          </span>
+        </h6>
+        <div id="bulkActions" style="display: none;">
+          <%= form_with url: bulk_delete_admin_solid_queue_index_path, method: :post, class: "d-inline" do |f| %>
+            <%= f.hidden_field :job_ids, id: "bulkDeleteIds" %>
+            <%= f.submit "🗑️ Delete Selected", class: "btn btn-sm btn-danger",
+                data: { confirm: "Delete selected jobs?" } %>
+          <% end %>
+          <%= form_with url: bulk_unqueue_admin_solid_queue_index_path, method: :post, class: "d-inline" do |f| %>
+            <%= f.hidden_field :job_ids, id: "bulkUnqueueIds" %>
+            <%= f.submit "⏹️ Unqueue Selected", class: "btn btn-sm btn-warning",
+                data: { confirm: "Unqueue selected jobs?" } %>
+          <% end %>
+          <button type="button" class="btn btn-sm btn-outline-light" onclick="clearSelection()">Clear Selection</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <% if @recent_jobs.any? %>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover job-table mb-0">
+              <thead>
+                <tr>
+                  <th style="width: 40px;">
+                    <input type="checkbox" id="selectAll" onchange="toggleAll(this)">
+                  </th>
+                  <th>ID</th>
+                  <th>Class Name</th>
+                  <th>Queue</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Finished</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @recent_jobs.each do |job| %>
+                  <tr>
+                    <td>
+                      <input type="checkbox" class="job-checkbox" value="<%= job.id %>" onchange="updateBulkActions()">
+                    </td>
+                    <td>
+                      <%= link_to "##{job.id}", admin_solid_queue_path(job.id),
+                          class: "text-decoration-none fw-bold" %>
+                    </td>
+                    <td><span class="code-block"><%= job.class_name.split("::").last %></span></td>
+                    <td><span class="code-block"><%= job.queue_name %></span></td>
+                    <td>
+                      <% if job.finished_at.nil? %>
+                        <% if job.scheduled_at && job.scheduled_at > Time.current %>
+                          <span class="badge bg-secondary badge-status">Scheduled</span>
+                        <% else %>
+                          <span class="badge bg-warning badge-status">Pending</span>
+                        <% end %>
+                      <% else %>
+                        <span class="badge bg-success badge-status">Finished</span>
+                      <% end %>
+                    </td>
+                    <td><%= time_ago_in_words(job.created_at) %> ago</td>
+                    <td>
+                      <% if job.finished_at %>
+                        <%= time_ago_in_words(job.finished_at) %> ago
+                      <% else %>
+                        <span class="text-muted">—</span>
+                      <% end %>
+                    </td>
+                    <td class="text-end action-buttons">
+                      <%= link_to admin_solid_queue_path(job.id),
+                          class: "btn btn-sm btn-outline-primary", title: "View Details" do %>
+                        <i class="bi bi-eye"></i>
+                      <% end %>
+                      <% if job.finished_at.nil? %>
+                        <%= form_with url: unqueue_job_admin_solid_queue_path(job.id),
+                            method: :post, class: "d-inline" do |f| %>
+                          <%= f.submit "⏹️ Unqueue", class: "btn btn-sm btn-outline-warning",
+                              data: { confirm: "Unqueue job ##{job.id}?" } %>
+                        <% end %>
+                      <% end %>
+                      <%= form_with url: delete_job_admin_solid_queue_path(job.id),
+                          method: :delete, class: "d-inline" do |f| %>
+                        <%= f.submit "Delete", class: "btn btn-sm btn-outline-danger",
+                            data: { confirm: "Delete job ##{job.id} permanently?" } %>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <% if @total_pages > 1 %>
+            <nav aria-label="Jobs pagination" class="mt-3">
+              <ul class="pagination justify-content-center mb-0">
+                <%
+                  # Build pagination URL with current filters
+                  base_params = {
+                    status: @filter_status,
+                    queue: @filter_queue,
+                    class_name: @filter_class,
+                    search: @search_term
+                  }.compact
+                %>
+
+                <!-- First & Previous -->
+                <li class="page-item <%= 'disabled' if @page == 1 %>">
+                  <%= link_to admin_solid_queue_index_path(base_params.merge(page: 1)),
+                      class: "page-link" do %>
+                    <i class="bi bi-chevron-double-left"></i>
+                  <% end %>
+                </li>
+                <li class="page-item <%= 'disabled' if @page == 1 %>">
+                  <%= link_to admin_solid_queue_index_path(base_params.merge(page: @page - 1)),
+                      class: "page-link" do %>
+                    <i class="bi bi-chevron-left"></i> Previous
+                  <% end %>
+                </li>
+
+                <!-- Page Numbers -->
+                <%
+                  start_page = [@page - 2, 1].max
+                  end_page = [start_page + 4, @total_pages].min
+                  start_page = [end_page - 4, 1].max if end_page - start_page < 4
+                %>
+
+                <% if start_page > 1 %>
+                  <li class="page-item">
+                    <%= link_to "1", admin_solid_queue_index_path(base_params.merge(page: 1)),
+                        class: "page-link" %>
+                  </li>
+                  <% if start_page > 2 %>
+                    <li class="page-item disabled">
+                      <span class="page-link">...</span>
+                    </li>
+                  <% end %>
+                <% end %>
+
+                <% (start_page..end_page).each do |p| %>
+                  <li class="page-item <%= 'active' if p == @page %>">
+                    <%= link_to p.to_s, admin_solid_queue_index_path(base_params.merge(page: p)),
+                        class: "page-link" %>
+                  </li>
+                <% end %>
+
+                <% if end_page < @total_pages %>
+                  <% if end_page < @total_pages - 1 %>
+                    <li class="page-item disabled">
+                      <span class="page-link">...</span>
+                    </li>
+                  <% end %>
+                  <li class="page-item">
+                    <%= link_to @total_pages.to_s,
+                        admin_solid_queue_index_path(base_params.merge(page: @total_pages)),
+                        class: "page-link" %>
+                  </li>
+                <% end %>
+
+                <!-- Next & Last -->
+                <li class="page-item <%= 'disabled' if @page >= @total_pages %>">
+                  <%= link_to admin_solid_queue_index_path(base_params.merge(page: @page + 1)),
+                      class: "page-link" do %>
+                    Next <i class="bi bi-chevron-right"></i>
+                  <% end %>
+                </li>
+                <li class="page-item <%= 'disabled' if @page >= @total_pages %>">
+                  <%= link_to admin_solid_queue_index_path(base_params.merge(page: @total_pages)),
+                      class: "page-link" do %>
+                    <i class="bi bi-chevron-double-right"></i>
+                  <% end %>
+                </li>
+              </ul>
+            </nav>
+          <% end %>
+        <% else %>
+          <div class="text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted"></i>
+            <p class="text-muted mt-3">No jobs found matching your filters.</p>
+            <%= link_to "Clear Filters", admin_solid_queue_index_path, class: "btn btn-primary" %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Job Modal -->
+<div class="modal fade" id="createJobModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Create New Job</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <%= form_with url: create_job_admin_solid_queue_index_path, method: :post, local: true do |f| %>
+        <div class="modal-body">
+          <div class="mb-3">
+            <%= f.label :class_name, "Job Class Name", class: "form-label fw-bold" %>
+            <%= f.select :class_name,
+                options_for_select(
+                  [["-- Select a Job Class --", ""]] +
+                  @available_job_classes.map { |c| [c.split("::").last, c] },
+                  params[:class_name]
+                ),
+                {},
+                { class: "form-select", required: true, id: "job_class_select" } %>
+            <small class="form-text text-muted">Select from available job classes</small>
+          </div>
+
+          <div class="mb-3">
+            <%= f.label :queue_name, "Queue", class: "form-label fw-bold" %>
+            <%
+              # Common queues used in the application
+              common_queues = ["default", "screener", "monitoring", "background",
+                              "data_ingestion", "ai_evaluation", "execution", "notifier"]
+              # Combine with queues from database, removing duplicates
+              all_queues = (common_queues + @available_queues).uniq.sort
+            %>
+            <%= f.select :queue_name,
+                options_for_select(
+                  all_queues.map { |q| [q, q] },
+                  params[:queue_name] || "default"
+                ),
+                {},
+                { class: "form-select" } %>
+            <small class="form-text text-muted">Queue name for job execution</small>
+          </div>
+
+          <div class="mb-3">
+            <%= f.label :arguments, "Arguments (JSON or Ruby array)", class: "form-label fw-bold" %>
+            <%= f.text_area :arguments,
+                value: params[:arguments] || "",
+                placeholder: '[] or {"key": "value"}',
+                class: "form-control",
+                rows: 4,
+                id: "job_arguments" %>
+            <small class="form-text text-muted">JSON array or Ruby array syntax. Leave empty for no arguments.</small>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6">
+              <div class="mb-3">
+                <%= f.label :priority, "Priority", class: "form-label fw-bold" %>
+                <%= f.number_field :priority,
+                    value: params[:priority] || 0,
+                    class: "form-control",
+                    min: -10,
+                    max: 10 %>
+                <small class="form-text text-muted">Higher priority runs first (default: 0)</small>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-3">
+                <%= f.label :scheduled_at, "Schedule At (optional)", class: "form-label fw-bold" %>
+                <%= f.datetime_local_field :scheduled_at,
+                    value: params[:scheduled_at],
+                    class: "form-control" %>
+                <small class="form-text text-muted">Leave empty to run immediately</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <%= f.submit "Create Job", class: "btn btn-success" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+</div>
+
+<script>
+  // Show loading on form submissions
+  document.addEventListener('DOMContentLoaded', function() {
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+      form.addEventListener('submit', function() {
+        document.getElementById('loadingOverlay').classList.add('active');
+      });
+    });
+
+    // Hide loading on page load
+    document.getElementById('loadingOverlay').classList.remove('active');
+  });
+
+  // Auto-refresh every 30 seconds (only if no filters applied to avoid losing state)
+  <% unless @filter_status != "all" || @filter_queue.present? || @filter_class.present? || @search_term.present? %>
+    setTimeout(function() {
+      location.reload();
+    }, 30000);
+  <% end %>
+
+  // Bulk selection
+  function toggleAll(checkbox) {
+    document.querySelectorAll('.job-checkbox').forEach(cb => {
+      cb.checked = checkbox.checked;
+    });
+    updateBulkActions();
+  }
+
+  function updateBulkActions() {
+    const checked = document.querySelectorAll('.job-checkbox:checked');
+    const bulkActions = document.getElementById('bulkActions');
+    const bulkDeleteIds = document.getElementById('bulkDeleteIds');
+    const bulkUnqueueIds = document.getElementById('bulkUnqueueIds');
+
+    if (checked.length > 0) {
+      bulkActions.style.display = 'block';
+      bulkDeleteIds.value = Array.from(checked).map(cb => cb.value).join(',');
+      bulkUnqueueIds.value = Array.from(checked).map(cb => cb.value).join(',');
+    } else {
+      bulkActions.style.display = 'none';
+    }
+  }
+
+  function clearSelection() {
+    document.querySelectorAll('.job-checkbox').forEach(cb => cb.checked = false);
+    document.getElementById('selectAll').checked = false;
+    updateBulkActions();
+  }
+
+  // Optimize: Debounce search input
+  let searchTimeout;
+  const searchInput = document.querySelector('input[name="search"]');
+  if (searchInput) {
+    searchInput.addEventListener('input', function() {
+      clearTimeout(searchTimeout);
+      // Auto-submit after 500ms of no typing
+      searchTimeout = setTimeout(function() {
+        if (searchInput.value.length >= 3 || searchInput.value.length === 0) {
+          searchInput.form.submit();
+        }
+      }, 500);
+    });
+  }
+
+  // Prefill arguments based on job class selection
+  const jobClassSelect = document.getElementById('job_class_select');
+  const jobArguments = document.getElementById('job_arguments');
+
+  if (jobClassSelect && jobArguments) {
+    // Example arguments for common job classes
+    const jobExamples = {
+      'Screeners::SwingScreenerJob': '{}',
+      'Screeners::LongtermScreenerJob': '{}',
+      'Screeners::AutomatedScreenerJob': '{"screener_type": "swing"}',
+      'Screeners::AiRankerJob': '{}',
+      'Candles::DailyIngestorJob': '{}',
+      'Candles::WeeklyIngestorJob': '{}',
+      'Candles::IntradayFetcherJob': '{}',
+      'Strategies::Swing::AnalysisJob': '{}',
+      'Strategies::Swing::EntryMonitorJob': '{}',
+      'Strategies::Swing::ExitMonitorJob': '{}',
+      'MonitorJob': '{}',
+      'NotifierJob': '{"message": "Test notification"}',
+      'Portfolios::DailySnapshotJob': '{}',
+      'Positions::SyncJob': '{}',
+      'Orders::ProcessApprovedJob': '{}',
+      'PaperTrading::ReconciliationJob': '{}',
+      'PaperTrading::ExitMonitorJob': '{}',
+      'AiConfidence::CalibrationJob': '{}',
+      'ExecutorJob': '{}'
+    };
+
+    jobClassSelect.addEventListener('change', function() {
+      const selectedClass = this.value;
+      if (selectedClass && jobExamples[selectedClass]) {
+        jobArguments.value = jobExamples[selectedClass];
+        jobArguments.placeholder = `Example: ${jobExamples[selectedClass]}`;
+      } else {
+        jobArguments.value = '';
+        jobArguments.placeholder = '[] or {"key": "value"}';
+      }
+    });
+  }
+</script>

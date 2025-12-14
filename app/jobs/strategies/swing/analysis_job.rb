@@ -7,7 +7,7 @@ module Strategies
       queue_as :background
 
       # Retry strategy: exponential backoff, max 2 attempts
-      retry_on StandardError, wait: :exponentially_longer, attempts: 2
+      retry_on StandardError, wait: :polynomially_longer, attempts: 2
 
       def perform(candidate_ids)
         candidates = candidate_ids.map { |id| { instrument_id: id } }

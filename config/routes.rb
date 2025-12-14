@@ -34,10 +34,20 @@ Rails.application.routes.draw do
 
   # Admin routes for Solid Queue monitoring
   namespace :admin do
-    resources :solid_queue, only: [:index, :show] do
+    resources :solid_queue, only: %i[index show] do
       member do
         post :retry_failed
+        delete :delete_job
+        delete :delete_failed
+        post :unqueue_job
+      end
+      collection do
         delete :clear_finished
+        post :create_job
+        post :pause_queue
+        post :unpause_queue
+        post :bulk_delete
+        post :bulk_unqueue
       end
     end
   end

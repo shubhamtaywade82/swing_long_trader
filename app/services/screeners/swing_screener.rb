@@ -5,7 +5,8 @@ module Screeners
     DEFAULT_LIMIT = 50
 
     def self.call(instruments: nil, limit: nil, persist_results: true, screener_run_id: nil)
-      new(instruments: instruments, limit: limit, persist_results: persist_results, screener_run_id: screener_run_id).call
+      new(instruments: instruments, limit: limit, persist_results: persist_results,
+          screener_run_id: screener_run_id).call
     end
 
     def initialize(instruments: nil, limit: nil, persist_results: true, screener_run_id: nil)
@@ -206,13 +207,13 @@ module Screeners
     def load_universe
       # Load from IndexConstituent database table (preferred)
       base_scope = if IndexConstituent.exists?
-        universe_symbols = IndexConstituent.distinct.pluck(:symbol).map(&:upcase)
-        Instrument.where(symbol_name: universe_symbols)
-                 .or(Instrument.where(isin: IndexConstituent.where.not(isin_code: nil).distinct.pluck(:isin_code).map(&:upcase)))
-      else
-        # Fallback: use all equity/index instruments from NSE
-        Instrument.where(segment: %w[equity index], exchange: "NSE")
-      end
+                     universe_symbols = IndexConstituent.distinct.pluck(:symbol).map(&:upcase)
+                     Instrument.where(symbol_name: universe_symbols)
+                               .or(Instrument.where(isin: IndexConstituent.where.not(isin_code: nil).distinct.pluck(:isin_code).map(&:upcase)))
+                   else
+                     # Fallback: use all equity/index instruments from NSE
+                     Instrument.where(segment: %w[equity index], exchange: "NSE")
+                   end
 
       # Pre-filter instruments that have daily candles to avoid N+1 queries
       # Use distinct to avoid duplicates from joins

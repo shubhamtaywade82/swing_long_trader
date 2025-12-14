@@ -9,7 +9,7 @@ module AIConfidence
     queue_as :background
 
     # Retry strategy: exponential backoff, max 2 attempts
-    retry_on StandardError, wait: :exponentially_longer, attempts: 2
+    retry_on StandardError, wait: :polynomially_longer, attempts: 2
 
     def perform(scope: nil, min_outcomes: 50)
       Rails.logger.info("[AIConfidence::CalibrationJob] Starting calibration")

@@ -10,7 +10,7 @@ module Candles
     queue_as :data_ingestion
 
     # Retry strategy: exponential backoff, max 2 attempts
-    retry_on StandardError, wait: :exponentially_longer, attempts: 2
+    retry_on StandardError, wait: :polynomially_longer, attempts: 2
 
     def perform(instrument_ids: nil, interval: "15")
       instruments = if instrument_ids

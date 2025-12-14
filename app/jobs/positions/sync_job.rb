@@ -9,7 +9,7 @@ module Positions
     queue_as :monitoring
 
     # Retry strategy: exponential backoff, max 3 attempts
-    retry_on StandardError, wait: :exponentially_longer, attempts: 3
+    retry_on StandardError, wait: :polynomially_longer, attempts: 3
 
     def perform(sync_type: "all")
       case sync_type
