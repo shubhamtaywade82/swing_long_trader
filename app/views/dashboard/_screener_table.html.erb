@@ -3,6 +3,11 @@
 
 <div class="card">
   <div class="card-body p-2">
+    <div class="mb-2 d-flex justify-content-end">
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-tech-details-full" style="font-size: 0.75rem;">
+        <i class="bi bi-chevron-down" id="tech-icon-full"></i> Show Technical Details
+      </button>
+    </div>
     <div class="table-responsive">
       <table class="table table-sm table-hover mb-0 screener-table" id="screener-results-table">
         <thead>
@@ -10,8 +15,8 @@
             <th class="sortable text-right" data-sort="rank" data-sort-type="number">Rank</th>
             <th class="sortable" data-sort="symbol" data-sort-type="string">Symbol</th>
             <th class="sortable text-right" data-sort="score" data-sort-type="number">Score</th>
-            <th class="sortable text-right" data-sort="base_score" data-sort-type="number">Base Score</th>
-            <th class="sortable text-right" data-sort="mtf_score" data-sort-type="number">MTF Score</th>
+            <th class="sortable text-right tech-col" data-sort="base_score" data-sort-type="number" style="display: none;">Base</th>
+            <th class="sortable text-right tech-col" data-sort="mtf_score" data-sort-type="number" style="display: none;">MTF</th>
             <th class="sortable" data-sort="setup_status" data-sort-type="string">Setup</th>
             <th class="sortable text-right" data-sort="price" data-sort-type="number">Price</th>
             <% has_trade_plan = candidates.any? { |c| c[:trade_plan] } %>
@@ -23,11 +28,9 @@
               <th class="sortable text-right" data-sort="qty" data-sort-type="number">Qty</th>
               <th class="sortable text-right" data-sort="risk" data-sort-type="number">Risk ₹</th>
             <% end %>
-            <th class="sortable text-right" data-sort="rsi" data-sort-type="number">RSI</th>
-            <th class="sortable text-right" data-sort="adx" data-sort-type="number">ADX</th>
-            <th class="sortable" data-sort="supertrend" data-sort-type="string">Supertrend</th>
-            <th class="sortable" data-sort="ema_trend" data-sort-type="string">EMA Trend</th>
-            <th class="sortable" data-sort="macd" data-sort-type="string">MACD</th>
+            <th class="sortable text-right tech-col" data-sort="rsi" data-sort-type="number" style="display: none;">RSI</th>
+            <th class="sortable text-right tech-col" data-sort="adx" data-sort-type="number" style="display: none;">ADX</th>
+            <th class="sortable" data-sort="trend" data-sort-type="string">Trend</th>
             <% has_ai_data = candidates.any? { |c| c[:ai_score] || c[:ai_confidence] } %>
             <% if has_ai_data %>
               <th class="sortable text-right" data-sort="ai_score" data-sort-type="number">AI Score</th>
@@ -87,8 +90,8 @@
                   <%= number_with_precision(candidate[:score], precision: 1) %>
                 </span>
               </td>
-              <td class="text-right"><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
-              <td class="text-right"><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
+              <td class="text-right tech-col" style="display: none;"><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
+              <td class="text-right tech-col" style="display: none;"><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
               <td>
                 <% setup_status = candidate[:setup_status] || "UNKNOWN" %>
                 <% setup_class = case setup_status
@@ -140,7 +143,7 @@
                   <td colspan="6" class="text-muted text-center">-</td>
                 <% end %>
               <% end %>
-              <td class="text-right">
+              <td class="text-right tech-col" style="display: none;">
                 <% if rsi %>
                   <span class="badge bg-<%= rsi > 70 ? 'danger' : rsi < 30 ? 'success' : 'info' %>">
                     <%= number_with_precision(rsi, precision: 1) %>
@@ -149,7 +152,7 @@
                   <span class="text-muted">-</span>
                 <% end %>
               </td>
-              <td class="text-right">
+              <td class="text-right tech-col" style="display: none;">
                 <% if adx %>
                   <span class="badge bg-<%= adx > 25 ? 'success' : 'secondary' %>">
                     <%= number_with_precision(adx, precision: 1) %>
@@ -159,27 +162,19 @@
                 <% end %>
               </td>
               <td>
+                <% trend_indicators = [] %>
                 <% if st && st_direction %>
-                  <span class="badge bg-<%= st_direction == :bullish ? 'success' : 'danger' %>">
-                    <%= st_direction.to_s.upcase %>
-                  </span>
-                <% else %>
-                  <span class="text-muted">-</span>
+                  <% trend_indicators << st_direction.to_s.upcase %>
                 <% end %>
-              </td>
-              <td>
                 <% if ema_trend.present? %>
-                  <span class="badge bg-<%= ema_trend == 'BULL' ? 'success' : 'danger' %>">
-                    <%= ema_trend %>
-                  </span>
-                <% else %>
-                  <span class="text-muted">-</span>
+                  <% trend_indicators << ema_trend %>
                 <% end %>
-              </td>
-              <td>
-                <% if macd_trend.present? %>
-                  <span class="badge bg-<%= macd_trend == 'BULL' ? 'success' : 'secondary' %>">
-                    <%= macd_trend %>
+                <% if macd_trend.present? && macd_trend == 'BULL' %>
+                  <% trend_indicators << 'MACD' %>
+                <% end %>
+                <% if trend_indicators.any? %>
+                  <span class="badge bg-success" title="<%= trend_indicators.join(', ') %>">
+                    <%= trend_indicators.uniq.join(' / ') %>
                   </span>
                 <% else %>
                   <span class="text-muted">-</span>
@@ -269,6 +264,27 @@
   (function() {
     const table = document.getElementById('screener-results-table');
     if (!table) return;
+
+    // Toggle technical details
+    const toggleBtn = document.getElementById('toggle-tech-details-full');
+    if (toggleBtn) {
+      let detailsVisible = false;
+      toggleBtn.addEventListener('click', function() {
+        detailsVisible = !detailsVisible;
+        const cols = table.querySelectorAll('.tech-col');
+        const icon = document.getElementById('tech-icon-full');
+
+        cols.forEach(col => {
+          col.style.display = detailsVisible ? '' : 'none';
+        });
+
+        if (icon) {
+          icon.className = detailsVisible ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
+        }
+
+        toggleBtn.innerHTML = (detailsVisible ? '<i class="bi bi-chevron-up" id="tech-icon-full"></i> Hide' : '<i class="bi bi-chevron-down" id="tech-icon-full"></i> Show') + ' Technical Details';
+      });
+    }
 
     const tbody = table.querySelector('tbody');
     const headers = table.querySelectorAll('th.sortable');

@@ -485,29 +485,30 @@ module Admin
       if hour.include?("-") && minute.include?(",")
         start_hour, end_hour = hour.split("-").map(&:to_i)
         minutes = minute.split(",").map(&:to_i).sort
-        
+
         # Show first few times with full HH:MM AM/PM format
         # Example: "9:15 AM, 9:45 AM, 10:15 AM, 10:45 AM... (every :15 and :45 until 3 PM)"
         times = []
         hour_count = 0
         max_hours_to_show = 3
-        
+
         (start_hour..end_hour).each do |h|
           break if hour_count >= max_hours_to_show
+
           minutes.each do |m|
             times << format_single_time(h, m)
           end
           hour_count += 1
         end
-        
+
         minute_list = minutes.map { |m| format("%02d", m) }.join(" and :")
-        if (end_hour - start_hour) <= max_hours_to_show
-          # Small range: show all times
-          return times.join(", ")
-        else
-          # Large range: show first few, then pattern
-          return "#{times.join(', ')}... (every :#{minute_list} until #{format_hour(end_hour)})"
-        end
+        return times.join(", ") if (end_hour - start_hour) <= max_hours_to_show
+
+        # Small range: show all times
+
+        # Large range: show first few, then pattern
+        return "#{times.join(', ')}... (every :#{minute_list} until #{format_hour(end_hour)})"
+
       end
 
       # Handle hour ranges with single minute (e.g., "30 7-15")
@@ -525,14 +526,14 @@ module Admin
         hour_24 = hour.to_i
         minutes = minute.split(",").map(&:to_i).sort
         # Format as "9:15 AM and 9:45 AM" not "9:15 and :45 AM"
-        am_pm = (hour_24 == 0 || hour_24 < 12) ? "AM" : "PM"
+        am_pm = hour_24 == 0 || hour_24 < 12 ? "AM" : "PM"
         display_hour = if hour_24 == 0
-                        12
-                      elsif hour_24 <= 12
-                        hour_24
-                      else
-                        hour_24 - 12
-                      end
+                         12
+                       elsif hour_24 <= 12
+                         hour_24
+                       else
+                         hour_24 - 12
+                       end
         time_list = minutes.map { |m| "#{display_hour}:#{format('%02d', m)} #{am_pm}" }.join(" and ")
         return time_list
       end
