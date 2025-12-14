@@ -480,26 +480,31 @@ class DashboardController < ApplicationController
       # Use CapitalAllocationPortfolio and ensure it's initialized
       portfolio = CapitalAllocationPortfolio.paper.active.first
 
-      # Initialize portfolio if it doesn't exist or has zero balance
-      if portfolio.nil? || portfolio.total_equity.zero?
-        initializer_result = Portfolios::PaperPortfolioInitializer.call
-        if initializer_result[:success]
-          portfolio = initializer_result[:portfolio]
-        else
-          Rails.logger.error("[DashboardController] Failed to initialize paper portfolio: #{initializer_result[:error]}")
-          # Return zero balance if initialization fails
-          return {
-            available_balance: 0,
-            total_equity: 0,
-            capital: 0,
-            reserved_capital: 0,
-            unrealized_pnl: 0,
-            realized_pnl: 0,
-            total_exposure: 0,
-            utilization_pct: 0,
-            type: "paper",
-          }
-        end
+      # Always ensure portfolio is initialized and capital is allocated
+      initializer_result = Portfolios::PaperPortfolioInitializer.call
+      if initializer_result[:success]
+        portfolio = initializer_result[:portfolio]
+      else
+        Rails.logger.error("[DashboardController] Failed to initialize paper portfolio: #{initializer_result[:error]}")
+        # Return zero balance if initialization fails
+        return {
+          available_balance: 0,
+          total_equity: 0,
+          capital: 0,
+          reserved_capital: 0,
+          unrealized_pnl: 0,
+          realized_pnl: 0,
+          total_exposure: 0,
+          utilization_pct: 0,
+          type: "paper",
+        }
+      end
+
+      # Ensure capital is allocated if swing_capital is still zero
+      if portfolio.swing_capital.zero? && portfolio.total_equity.positive?
+        Rails.logger.info("[DashboardController] Swing capital is zero, triggering rebalance...")
+        portfolio.rebalance_capital!
+        portfolio.reload
       end
 
       # Recalculate from actual positions (unified Position model)
