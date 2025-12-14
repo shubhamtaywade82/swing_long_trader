@@ -142,17 +142,23 @@ rails indicators:test
 rails metrics:daily
 ```
 
-### Step 8: (Optional) Start Background Jobs
+### Step 8: Start Background Workers
 
 For automated daily operations, start SolidQueue workers:
 
 ```bash
-# Start SolidQueue worker (in a separate terminal)
-bin/rails solid_queue:start
+# Development: Use Foreman (recommended - runs web + worker together)
+foreman start -f Procfile.dev
 
-# Or use Foreman (if using Procfile.dev)
+# Or manually start worker in separate terminal
+bundle exec rails solid_queue:start
+
+# Production: Use Procfile (runs web + worker)
 foreman start
+# Or deploy with process manager that reads Procfile
 ```
+
+**Important:** The `Procfile` includes both web server and worker. In production, ensure both processes are running.
 
 Jobs are scheduled via `config/recurring.yml`. See [Jobs & Scheduling](#jobs--scheduling) section below.
 
@@ -296,12 +302,20 @@ Jobs are scheduled via `config/recurring.yml` using SolidQueue's recurring jobs 
 ### Starting Background Workers
 
 ```bash
-# Start SolidQueue worker
-bin/rails solid_queue:start
-
-# Or use Foreman (recommended for development)
+# Development: Use Foreman (runs web + worker + assets)
 foreman start -f Procfile.dev
+
+# Production: Use Procfile (runs web + worker)
+foreman start
+
+# Or manually start worker
+bundle exec rails solid_queue:start
 ```
+
+**Queue Configuration:**
+- Default: Processes all queues with 5 threads
+- Override: `QUEUES=screener,ai_evaluation RAILS_MAX_THREADS=3 bundle exec rails solid_queue:start`
+- Check status: `rake solid_queue:check`
 
 ### Manual Job Execution
 
