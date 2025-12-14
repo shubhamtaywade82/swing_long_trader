@@ -12,6 +12,15 @@ class ScreenerResult < ApplicationRecord
   validates :score, presence: true, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
   validates :analyzed_at, presence: true
 
+  # CRITICAL RULE: No ScreenerResult without screener_run_id (enforced in production)
+  validate :must_have_screener_run_id, if: -> { Rails.env.production? }
+
+  def must_have_screener_run_id
+    return if screener_run_id.present?
+
+    errors.add(:screener_run_id, "is required - no ScreenerResult may exist without run isolation")
+  end
+
   scope :swing, -> { where(screener_type: "swing") }
   scope :longterm, -> { where(screener_type: "longterm") }
   scope :recent, -> { order(analyzed_at: :desc) }
