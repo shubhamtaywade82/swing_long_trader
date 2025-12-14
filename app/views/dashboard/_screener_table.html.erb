@@ -4,27 +4,27 @@
 <div class="card">
   <div class="card-body p-2">
     <div class="table-responsive">
-      <table class="table table-sm table-hover mb-0">
+      <table class="table table-sm table-hover mb-0 screener-table" id="screener-results-table">
         <thead>
           <tr>
-            <th>Rank</th>
-            <th>Symbol</th>
-            <th>Score</th>
-            <th>Base Score</th>
-            <th>MTF Score</th>
-            <th>Price</th>
-            <th>RSI</th>
-            <th>ADX</th>
-            <th>Supertrend</th>
-            <th>EMA Trend</th>
-            <th>MACD</th>
+            <th class="sortable text-right" data-sort="rank" data-sort-type="number">Rank</th>
+            <th class="sortable" data-sort="symbol" data-sort-type="string">Symbol</th>
+            <th class="sortable text-right" data-sort="score" data-sort-type="number">Score</th>
+            <th class="sortable text-right" data-sort="base_score" data-sort-type="number">Base Score</th>
+            <th class="sortable text-right" data-sort="mtf_score" data-sort-type="number">MTF Score</th>
+            <th class="sortable text-right" data-sort="price" data-sort-type="number">Price</th>
+            <th class="sortable text-right" data-sort="rsi" data-sort-type="number">RSI</th>
+            <th class="sortable text-right" data-sort="adx" data-sort-type="number">ADX</th>
+            <th class="sortable" data-sort="supertrend" data-sort-type="string">Supertrend</th>
+            <th class="sortable" data-sort="ema_trend" data-sort-type="string">EMA Trend</th>
+            <th class="sortable" data-sort="macd" data-sort-type="string">MACD</th>
             <% has_ai_data = candidates.any? { |c| c[:ai_score] || c[:ai_confidence] } %>
             <% if has_ai_data %>
-              <th>AI Score</th>
-              <th>AI Confidence</th>
+              <th class="sortable text-right" data-sort="ai_score" data-sort-type="number">AI Score</th>
+              <th class="sortable text-right" data-sort="ai_confidence" data-sort-type="number">AI Confidence</th>
             <% end %>
             <% if show_recommendation %>
-              <th>Recommendation</th>
+              <th class="sortable" data-sort="recommendation" data-sort-type="string">Recommendation</th>
             <% end %>
             <% if show_position %>
               <th>Position</th>
@@ -33,21 +33,45 @@
         </thead>
         <tbody data-screener-results="true" data-screener-type="swing">
           <% candidates.each_with_index do |candidate, index| %>
-            <tr data-screener-symbol="<%= candidate[:symbol] %>" data-screener-instrument-id="<%= candidate[:instrument_id] %>">
-              <td><strong>#<%= index + 1 %></strong></td>
+            <% indicators = candidate[:indicators] || {} %>
+            <% latest_close = indicators[:latest_close] || indicators["latest_close"] || candidate.dig(:daily_indicators, :latest_close) || 0 %>
+            <% rsi = indicators[:rsi] || indicators["rsi"] || candidate.dig(:daily_indicators, :rsi) %>
+            <% adx = indicators[:adx] || indicators["adx"] || candidate.dig(:daily_indicators, :adx) %>
+            <% st = indicators[:supertrend] || indicators["supertrend"] || candidate.dig(:weekly_indicators, :supertrend) %>
+            <% st_direction = st ? (st[:direction] || st["direction"]) : nil %>
+            <% st_direction = st_direction.to_sym if st_direction.is_a?(String) %>
+            <% ema20 = indicators[:ema20] || indicators["ema20"] || candidate.dig(:daily_indicators, :ema20) %>
+            <% ema50 = indicators[:ema50] || indicators["ema50"] || candidate.dig(:daily_indicators, :ema50) %>
+            <% ema_trend = (ema20 && ema50) ? (ema20 > ema50 ? "BULL" : "BEAR") : "" %>
+            <% macd = indicators[:macd] || indicators["macd"] || candidate.dig(:daily_indicators, :macd) %>
+            <% macd_trend = (macd.is_a?(Array) && macd.size >= 2) ? (macd[0] > macd[1] ? "BULL" : "BEAR") : "" %>
+            <tr data-screener-symbol="<%= candidate[:symbol] %>"
+                data-screener-instrument-id="<%= candidate[:instrument_id] %>"
+                data-rank="<%= index + 1 %>"
+                data-symbol="<%= candidate[:symbol] %>"
+                data-score="<%= candidate[:score] || 0 %>"
+                data-base-score="<%= candidate[:base_score] || 0 %>"
+                data-mtf-score="<%= candidate[:mtf_score] || 0 %>"
+                data-price="<%= latest_close %>"
+                data-rsi="<%= rsi || 0 %>"
+                data-adx="<%= adx || 0 %>"
+                data-supertrend="<%= st_direction ? st_direction.to_s.upcase : '' %>"
+                data-ematrend="<%= ema_trend %>"
+                data-macd="<%= macd_trend %>"
+                data-ai-score="<%= candidate[:ai_score] || 0 %>"
+                data-ai-confidence="<%= candidate[:ai_confidence] || 0 %>"
+                data-recommendation="<%= candidate[:recommendation] || '' %>">
+              <td class="text-right"><strong>#<%= index + 1 %></strong></td>
               <td><strong><%= candidate[:symbol] %></strong></td>
-              <td>
+              <td class="text-right">
                 <span class="badge bg-<%= candidate[:score] >= 70 ? 'success' : candidate[:score] >= 50 ? 'warning' : 'secondary' %>">
                   <%= number_with_precision(candidate[:score], precision: 1) %>
                 </span>
               </td>
-              <td><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
-              <td><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
-              <% indicators = candidate[:indicators] || {} %>
-              <% latest_close = indicators[:latest_close] || indicators["latest_close"] || candidate.dig(:daily_indicators, :latest_close) || 0 %>
-              <td>₹<%= number_with_precision(latest_close, precision: 2) %></td>
-              <td>
-                <% rsi = indicators[:rsi] || indicators["rsi"] || candidate.dig(:daily_indicators, :rsi) %>
+              <td class="text-right"><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
+              <td class="text-right"><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
+              <td class="text-right">₹<%= number_with_precision(latest_close, precision: 2) %></td>
+              <td class="text-right">
                 <% if rsi %>
                   <span class="badge bg-<%= rsi > 70 ? 'danger' : rsi < 30 ? 'success' : 'info' %>">
                     <%= number_with_precision(rsi, precision: 1) %>
@@ -56,8 +80,7 @@
                   <span class="text-muted">-</span>
                 <% end %>
               </td>
-              <td>
-                <% adx = indicators[:adx] || indicators["adx"] || candidate.dig(:daily_indicators, :adx) %>
+              <td class="text-right">
                 <% if adx %>
                   <span class="badge bg-<%= adx > 25 ? 'success' : 'secondary' %>">
                     <%= number_with_precision(adx, precision: 1) %>
@@ -67,10 +90,7 @@
                 <% end %>
               </td>
               <td>
-                <% st = indicators[:supertrend] || indicators["supertrend"] || candidate.dig(:weekly_indicators, :supertrend) %>
-                <% if st %>
-                  <% st_direction = st[:direction] || st["direction"] %>
-                  <% st_direction = st_direction.to_sym if st_direction.is_a?(String) %>
+                <% if st && st_direction %>
                   <span class="badge bg-<%= st_direction == :bullish ? 'success' : 'danger' %>">
                     <%= st_direction.to_s.upcase %>
                   </span>
@@ -79,30 +99,25 @@
                 <% end %>
               </td>
               <td>
-                <% ema20 = indicators[:ema20] || indicators["ema20"] || candidate.dig(:daily_indicators, :ema20) %>
-                <% ema50 = indicators[:ema50] || indicators["ema50"] || candidate.dig(:daily_indicators, :ema50) %>
-                <% if ema20 && ema50 %>
-                  <span class="badge bg-<%= ema20 > ema50 ? 'success' : 'danger' %>">
-                    <%= ema20 > ema50 ? 'BULL' : 'BEAR' %>
+                <% if ema_trend.present? %>
+                  <span class="badge bg-<%= ema_trend == 'BULL' ? 'success' : 'danger' %>">
+                    <%= ema_trend %>
                   </span>
                 <% else %>
                   <span class="text-muted">-</span>
                 <% end %>
               </td>
               <td>
-                <% macd = indicators[:macd] || indicators["macd"] || candidate.dig(:daily_indicators, :macd) %>
-                <% if macd.is_a?(Array) && macd.size >= 2 %>
-                  <% macd_line = macd[0] %>
-                  <% signal_line = macd[1] %>
-                  <span class="badge bg-<%= macd_line > signal_line ? 'success' : 'secondary' %>">
-                    <%= macd_line > signal_line ? 'BULL' : 'BEAR' %>
+                <% if macd_trend.present? %>
+                  <span class="badge bg-<%= macd_trend == 'BULL' ? 'success' : 'secondary' %>">
+                    <%= macd_trend %>
                   </span>
                 <% else %>
                   <span class="text-muted">-</span>
                 <% end %>
               </td>
               <% if candidate[:ai_score] || candidate[:ai_confidence] %>
-                <td>
+                <td class="text-right">
                   <% if candidate[:ai_score] %>
                     <span class="badge bg-<%= candidate[:ai_score] >= 80 ? 'success' : candidate[:ai_score] >= 60 ? 'warning' : 'secondary' %>">
                       <%= number_with_precision(candidate[:ai_score], precision: 1) %>
@@ -111,7 +126,7 @@
                     <span class="text-muted">-</span>
                   <% end %>
                 </td>
-                <td>
+                <td class="text-right">
                   <% if candidate[:ai_confidence] %>
                     <span class="badge bg-info">
                       <%= number_with_precision(candidate[:ai_confidence], precision: 1) %>
@@ -160,3 +175,64 @@
     </div>
   </div>
 </div>
+
+<script>
+  (function() {
+    const table = document.getElementById('screener-results-table');
+    if (!table) return;
+
+    const tbody = table.querySelector('tbody');
+    const headers = table.querySelectorAll('th.sortable');
+    let currentSort = { column: null, direction: null };
+
+    headers.forEach(header => {
+      header.addEventListener('click', function() {
+        const sortColumn = this.dataset.sort;
+        const sortType = this.dataset.sortType || 'string';
+
+        // Determine sort direction
+        let direction = 'asc';
+        if (currentSort.column === sortColumn && currentSort.direction === 'asc') {
+          direction = 'desc';
+        }
+
+        // Update current sort
+        currentSort = { column: sortColumn, direction: direction };
+
+        // Remove all sort classes
+        headers.forEach(h => {
+          h.classList.remove('sort-asc', 'sort-desc');
+        });
+
+        // Add sort class to current header
+        this.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+
+        // Sort rows
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a, b) => {
+          // Convert kebab-case to camelCase for dataset access (e.g., ema-trend -> ematrend)
+          const dataKey = sortColumn.replace(/-/g, '');
+          let aVal = a.dataset[dataKey] || '';
+          let bVal = b.dataset[dataKey] || '';
+
+          if (sortType === 'number') {
+            aVal = parseFloat(aVal) || 0;
+            bVal = parseFloat(bVal) || 0;
+            return direction === 'asc' ? aVal - bVal : bVal - aVal;
+          } else {
+            aVal = (aVal || '').toString().toLowerCase();
+            bVal = (bVal || '').toString().toLowerCase();
+            if (direction === 'asc') {
+              return aVal.localeCompare(bVal);
+            } else {
+              return bVal.localeCompare(aVal);
+            }
+          }
+        });
+
+        // Re-append sorted rows
+        rows.forEach(row => tbody.appendChild(row));
+      });
+    });
+  })();
+</script>

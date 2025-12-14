@@ -1,15 +1,45 @@
 <% content_for :page_title, "Swing Screener" %>
 
+<style>
+  .screener-page { padding: 0.5rem 0; }
+  .screener-page .text-muted { margin-bottom: 0.5rem !important; font-size: 0.85rem; }
+  .screener-controls { margin-bottom: 0.75rem !important; }
+  .screener-controls .form-select { width: auto; display: inline-block; margin-right: 0.5rem; }
+  .last-run-info { padding: 0.375rem 0.75rem !important; margin-bottom: 0.75rem !important; font-size: 0.85rem; }
+  .screener-table { font-size: 0.875rem; }
+  .screener-table th, .screener-table td { white-space: nowrap; padding: 0.375rem 0.5rem !important; vertical-align: middle; }
+  .screener-table th { cursor: pointer; user-select: none; position: relative; }
+  .screener-table th:hover { background-color: #f8f9fa; }
+  .screener-table th.sortable::after { content: ' ↕'; opacity: 0.3; font-size: 0.75rem; }
+  .screener-table th.sort-asc::after { content: ' ↑'; opacity: 1; color: #0d6efd; }
+  .screener-table th.sort-desc::after { content: ' ↓'; opacity: 1; color: #0d6efd; }
+  .screener-table th[data-sort-type="number"], .screener-table td.text-right { text-align: right !important; }
+  .nav-tabs { margin-bottom: 0.75rem !important; }
+  .tab-content { margin-top: 0.5rem; }
+</style>
+
 <div class="screener-page">
-  <p class="text-muted mb-3 small">Find swing trading opportunities based on technical indicators</p>
-  <div class="d-flex justify-content-end align-items-center mb-3">
-    <div>
+  <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <span class="text-muted small">Find swing trading opportunities based on technical indicators</span>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <% if @last_run %>
+        <span class="text-muted small">
+          <i class="bi bi-info-circle"></i>
+          Last run: <%= @last_run.strftime("%Y-%m-%d %H:%M:%S") %> |
+          Found <%= @candidates.size %> candidates
+          <% if @recommendations&.any? %>
+            | <strong><%= @recommendations.size %> Recommendations</strong>
+          <% end %>
+          <% if @flag_stocks&.any? %>
+            | <strong><%= @flag_stocks.size %> Already in Positions</strong>
+          <% end %>
+        </span>
+      <% end %>
       <%= form_with url: run_swing_screener_path, method: :post, local: false, class: "d-inline", data: { controller: "screener" } do |f| %>
-        <%= f.number_field :limit, value: @limit, min: 0, placeholder: "All", class: "form-control d-inline-block", style: "width: 100px; margin-right: 10px;", title: "Leave empty to screen full universe" %>
-        <small class="text-muted me-2" title="Leave empty to screen all instruments">Limit (optional)</small>
+        <%= f.select :limit, options_for_select([["ALL", ""], ["10", 10], ["20", 20], ["50", 50], ["100", 100], ["200", 200]], @limit || ""), {}, { class: "form-select form-select-sm d-inline-block", style: "width: 80px;", title: "Limit number of results" } %>
         <%= f.hidden_field :sync, value: "false", id: "sync_mode" %>
-        <%= f.submit "Run Screener", class: "btn btn-primary", data: { screener_target: "runButton" } %>
-        <button type="button" class="btn btn-outline-secondary ms-2" onclick="document.getElementById('sync_mode').value='true'; this.form.requestSubmit();" title="Run synchronously (bypasses queue, for testing)">
+        <%= f.submit "Run Screener", class: "btn btn-primary btn-sm", data: { screener_target: "runButton" } %>
+        <button type="button" class="btn btn-outline-secondary btn-sm ms-1" onclick="document.getElementById('sync_mode').value='true'; this.form.requestSubmit();" title="Run synchronously (bypasses queue, for testing)">
           <i class="bi bi-play-fill"></i> Run Now
         </button>
       <% end %>
@@ -43,20 +73,6 @@
     </div>
   </div>
 
-  <!-- Results Info -->
-  <% if @last_run %>
-    <div class="alert alert-info mb-4" data-candidates-count="<%= @candidates.size %>">
-      <i class="bi bi-info-circle"></i>
-      Last run: <%= @last_run.strftime("%Y-%m-%d %H:%M:%S") %> |
-      Found <%= @candidates.size %> candidates
-      <% if @recommendations&.any? %>
-        | <strong><%= @recommendations.size %> Recommendations</strong>
-      <% end %>
-      <% if @flag_stocks&.any? %>
-        | <strong><%= @flag_stocks.size %> Already in Positions</strong>
-      <% end %>
-    </div>
-  <% end %>
 
   <!-- Tabs for Categories -->
   <% if @candidates.any? %>

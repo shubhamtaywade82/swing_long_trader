@@ -4,22 +4,22 @@
 <div class="card">
   <div class="card-body p-2">
     <div class="table-responsive">
-      <table class="table table-sm table-hover mb-0">
+      <table class="table table-sm table-hover mb-0 screener-table" id="longterm-screener-results-table">
         <thead>
           <tr>
-            <th>Rank</th>
-            <th>Symbol</th>
-            <th>Score</th>
-            <th>Base Score</th>
-            <th>MTF Score</th>
-            <th>Price</th>
-            <th>Weekly Trend</th>
-            <th>Daily Trend</th>
-            <th>Weekly ADX</th>
-            <th>Daily RSI</th>
-            <th>Momentum</th>
+            <th class="sortable text-right" data-sort="rank" data-sort-type="number">Rank</th>
+            <th class="sortable" data-sort="symbol" data-sort-type="string">Symbol</th>
+            <th class="sortable text-right" data-sort="score" data-sort-type="number">Score</th>
+            <th class="sortable text-right" data-sort="base_score" data-sort-type="number">Base Score</th>
+            <th class="sortable text-right" data-sort="mtf_score" data-sort-type="number">MTF Score</th>
+            <th class="sortable text-right" data-sort="price" data-sort-type="number">Price</th>
+            <th class="sortable" data-sort="weekly_trend" data-sort-type="string">Weekly Trend</th>
+            <th class="sortable" data-sort="daily_trend" data-sort-type="string">Daily Trend</th>
+            <th class="sortable text-right" data-sort="weekly_adx" data-sort-type="number">Weekly ADX</th>
+            <th class="sortable text-right" data-sort="daily_rsi" data-sort-type="number">Daily RSI</th>
+            <th class="sortable" data-sort="momentum" data-sort-type="string">Momentum</th>
             <% if show_recommendation %>
-              <th>Recommendation</th>
+              <th class="sortable" data-sort="recommendation" data-sort-type="string">Recommendation</th>
             <% end %>
             <% if show_position %>
               <th>Position</th>
@@ -28,41 +28,58 @@
         </thead>
         <tbody>
           <% candidates.each_with_index do |candidate, index| %>
-            <tr>
-              <td><strong>#<%= index + 1 %></strong></td>
+            <% weekly_ema20 = candidate.dig(:weekly_indicators, :ema20) %>
+            <% weekly_ema50 = candidate.dig(:weekly_indicators, :ema50) %>
+            <% weekly_trend = (weekly_ema20 && weekly_ema50) ? (weekly_ema20 > weekly_ema50 ? "BULL" : "BEAR") : "" %>
+            <% daily_ema20 = candidate.dig(:daily_indicators, :ema20) %>
+            <% daily_ema50 = candidate.dig(:daily_indicators, :ema50) %>
+            <% daily_trend = (daily_ema20 && daily_ema50) ? (daily_ema20 > daily_ema50 ? "BULL" : "BEAR") : "" %>
+            <% weekly_adx = candidate.dig(:weekly_indicators, :adx) %>
+            <% daily_rsi = candidate.dig(:daily_indicators, :rsi) %>
+            <% weekly_supertrend = candidate.dig(:weekly_indicators, :supertrend) %>
+            <% momentum = weekly_supertrend ? (weekly_supertrend[:direction] || weekly_supertrend["direction"] || "").to_s.upcase : "" %>
+            <% price = candidate.dig(:daily_indicators, :latest_close) || 0 %>
+            <tr data-rank="<%= index + 1 %>"
+                data-symbol="<%= candidate[:symbol] %>"
+                data-score="<%= candidate[:score] || 0 %>"
+                data-base-score="<%= candidate[:base_score] || 0 %>"
+                data-mtf-score="<%= candidate[:mtf_score] || 0 %>"
+                data-price="<%= price %>"
+                data-weeklytrend="<%= weekly_trend %>"
+                data-dailytrend="<%= daily_trend %>"
+                data-weeklyadx="<%= weekly_adx || 0 %>"
+                data-dailyrsi="<%= daily_rsi || 0 %>"
+                data-momentum="<%= momentum %>"
+                data-recommendation="<%= candidate[:recommendation] || '' %>">
+              <td class="text-right"><strong>#<%= index + 1 %></strong></td>
               <td><strong><%= candidate[:symbol] %></strong></td>
-              <td>
+              <td class="text-right">
                 <span class="badge bg-<%= candidate[:score] >= 70 ? 'success' : candidate[:score] >= 50 ? 'warning' : 'secondary' %>">
                   <%= number_with_precision(candidate[:score], precision: 1) %>
                 </span>
               </td>
-              <td><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
-              <td><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
-              <td>₹<%= number_with_precision(candidate.dig(:daily_indicators, :latest_close) || 0, precision: 2) %></td>
+              <td class="text-right"><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
+              <td class="text-right"><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
+              <td class="text-right">₹<%= number_with_precision(price, precision: 2) %></td>
               <td>
-                <% weekly_ema20 = candidate.dig(:weekly_indicators, :ema20) %>
-                <% weekly_ema50 = candidate.dig(:weekly_indicators, :ema50) %>
-                <% if weekly_ema20 && weekly_ema50 %>
-                  <span class="badge bg-<%= weekly_ema20 > weekly_ema50 ? 'success' : 'danger' %>">
-                    <%= weekly_ema20 > weekly_ema50 ? 'BULL' : 'BEAR' %>
+                <% if weekly_trend.present? %>
+                  <span class="badge bg-<%= weekly_trend == 'BULL' ? 'success' : 'danger' %>">
+                    <%= weekly_trend %>
                   </span>
                 <% else %>
                   <span class="text-muted">-</span>
                 <% end %>
               </td>
               <td>
-                <% daily_ema20 = candidate.dig(:daily_indicators, :ema20) %>
-                <% daily_ema50 = candidate.dig(:daily_indicators, :ema50) %>
-                <% if daily_ema20 && daily_ema50 %>
-                  <span class="badge bg-<%= daily_ema20 > daily_ema50 ? 'success' : 'danger' %>">
-                    <%= daily_ema20 > daily_ema50 ? 'BULL' : 'BEAR' %>
+                <% if daily_trend.present? %>
+                  <span class="badge bg-<%= daily_trend == 'BULL' ? 'success' : 'danger' %>">
+                    <%= daily_trend %>
                   </span>
                 <% else %>
                   <span class="text-muted">-</span>
                 <% end %>
               </td>
-              <td>
-                <% weekly_adx = candidate.dig(:weekly_indicators, :adx) %>
+              <td class="text-right">
                 <% if weekly_adx %>
                   <span class="badge bg-<%= weekly_adx > 25 ? 'success' : 'secondary' %>">
                     <%= number_with_precision(weekly_adx, precision: 1) %>
@@ -71,8 +88,7 @@
                   <span class="text-muted">-</span>
                 <% end %>
               </td>
-              <td>
-                <% daily_rsi = candidate.dig(:daily_indicators, :rsi) %>
+              <td class="text-right">
                 <% if daily_rsi %>
                   <span class="badge bg-<%= daily_rsi > 70 ? 'danger' : daily_rsi < 30 ? 'success' : 'info' %>">
                     <%= number_with_precision(daily_rsi, precision: 1) %>
@@ -82,10 +98,9 @@
                 <% end %>
               </td>
               <td>
-                <% weekly_supertrend = candidate.dig(:weekly_indicators, :supertrend) %>
-                <% if weekly_supertrend %>
-                  <span class="badge bg-<%= weekly_supertrend[:direction] == :bullish ? 'success' : 'danger' %>">
-                    <%= weekly_supertrend[:direction].to_s.upcase %>
+                <% if momentum.present? %>
+                  <span class="badge bg-<%= momentum == 'BULLISH' ? 'success' : 'danger' %>">
+                    <%= momentum %>
                   </span>
                 <% else %>
                   <span class="text-muted">-</span>
@@ -113,8 +128,7 @@
                   <span class="badge bg-<%= mode == 'live' ? 'danger' : 'info' %>">
                     <%= mode.upcase %>
                   </span>
-                  <br>
-                  <small class="text-muted">
+                  <small class="text-muted d-inline ms-1" style="font-size: 0.75rem;">
                     Entry: ₹<%= number_with_precision(pos.entry_price, precision: 2) %>
                     <% if pos.respond_to?(:unrealized_pnl) %>
                       | P&L: <span class="<%= pos.unrealized_pnl >= 0 ? 'text-success' : 'text-danger' %>">
@@ -131,3 +145,64 @@
     </div>
   </div>
 </div>
+
+<script>
+  (function() {
+    const table = document.getElementById('longterm-screener-results-table');
+    if (!table) return;
+
+    const tbody = table.querySelector('tbody');
+    const headers = table.querySelectorAll('th.sortable');
+    let currentSort = { column: null, direction: null };
+
+    headers.forEach(header => {
+      header.addEventListener('click', function() {
+        const sortColumn = this.dataset.sort;
+        const sortType = this.dataset.sortType || 'string';
+
+        // Determine sort direction
+        let direction = 'asc';
+        if (currentSort.column === sortColumn && currentSort.direction === 'asc') {
+          direction = 'desc';
+        }
+
+        // Update current sort
+        currentSort = { column: sortColumn, direction: direction };
+
+        // Remove all sort classes
+        headers.forEach(h => {
+          h.classList.remove('sort-asc', 'sort-desc');
+        });
+
+        // Add sort class to current header
+        this.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+
+        // Sort rows
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a, b) => {
+          // Convert kebab-case to camelCase for dataset access (e.g., weekly-trend -> weeklytrend)
+          const dataKey = sortColumn.replace(/-/g, '');
+          let aVal = a.dataset[dataKey] || '';
+          let bVal = b.dataset[dataKey] || '';
+
+          if (sortType === 'number') {
+            aVal = parseFloat(aVal) || 0;
+            bVal = parseFloat(bVal) || 0;
+            return direction === 'asc' ? aVal - bVal : bVal - aVal;
+          } else {
+            aVal = (aVal || '').toString().toLowerCase();
+            bVal = (bVal || '').toString().toLowerCase();
+            if (direction === 'asc') {
+              return aVal.localeCompare(bVal);
+            } else {
+              return bVal.localeCompare(aVal);
+            }
+          }
+        });
+
+        // Re-append sorted rows
+        rows.forEach(row => tbody.appendChild(row));
+      });
+    });
+  })();
+</script>

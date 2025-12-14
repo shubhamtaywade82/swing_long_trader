@@ -2,14 +2,16 @@
 
 module Screeners
   class LongtermScreener < ApplicationService
-    def self.call(instruments: nil, limit: nil, persist_results: true)
-      new(instruments: instruments, limit: limit, persist_results: persist_results).call
+    def self.call(instruments: nil, limit: nil, persist_results: true, screener_run_id: nil)
+      new(instruments: instruments, limit: limit, persist_results: persist_results,
+          screener_run_id: screener_run_id).call
     end
 
-    def initialize(instruments: nil, limit: nil, persist_results: true)
+    def initialize(instruments: nil, limit: nil, persist_results: true, screener_run_id: nil)
       @instruments = instruments || load_universe
       @limit = limit # Remove default limit to screen full universe
       @persist_results = persist_results
+      @screener_run_id = screener_run_id
       @config = AlgoConfig.fetch[:long_term_trading] || {}
       @strategy_config = @config[:strategy] || {}
       @candle_cache = {} # Cache candles to avoid N+1 queries
@@ -101,9 +103,7 @@ module Screeners
         candidates << analysis
 
         # Persist result to database immediately (incremental updates)
-        if @persist_results
-          persist_result(analysis)
-        end
+        persist_result(analysis) if @persist_results
 
         # Cache and broadcast partial results incrementally (every 3 new candidates)
         # This allows UI to show results as they're found
@@ -187,13 +187,13 @@ module Screeners
     def load_universe
       # Load from IndexConstituent database table (preferred)
       base_scope = if IndexConstituent.exists?
-        universe_symbols = IndexConstituent.distinct.pluck(:symbol).map(&:upcase)
-        Instrument.where(symbol_name: universe_symbols)
-                 .or(Instrument.where(isin: IndexConstituent.where.not(isin_code: nil).distinct.pluck(:isin_code).map(&:upcase)))
-      else
-        # Fallback: use all equity/index instruments from NSE
-        Instrument.where(segment: %w[equity index], exchange: "NSE")
-      end
+                     universe_symbols = IndexConstituent.distinct.pluck(:symbol).map(&:upcase)
+                     Instrument.where(symbol_name: universe_symbols)
+                               .or(Instrument.where(isin: IndexConstituent.where.not(isin_code: nil).distinct.pluck(:isin_code).map(&:upcase)))
+                   else
+                     # Fallback: use all equity/index instruments from NSE
+                     Instrument.where(segment: %w[equity index], exchange: "NSE")
+                   end
 
       # Pre-filter instruments that have both daily and weekly candles
       # NO LIMIT - Screen the complete universe
@@ -245,22 +245,22 @@ module Screeners
         end
 
         # Build weekly series
-        if weekly_records.any?
-          weekly_series = CandleSeries.new(symbol: instrument.symbol_name, interval: "1W")
-          weekly_records.sort_by(&:timestamp).each do |record|
-            candle = Candle.new(
-              timestamp: record.timestamp,
-              open: record.open,
-              high: record.high,
-              low: record.low,
-              close: record.close,
-              volume: record.volume,
-            )
-            weekly_series.add_candle(candle)
-          end
-          @candle_cache[instrument.id] ||= {}
-          @candle_cache[instrument.id]["1W"] = weekly_series
+        next unless weekly_records.any?
+
+        weekly_series = CandleSeries.new(symbol: instrument.symbol_name, interval: "1W")
+        weekly_records.sort_by(&:timestamp).each do |record|
+          candle = Candle.new(
+            timestamp: record.timestamp,
+            open: record.open,
+            high: record.high,
+            low: record.low,
+            close: record.close,
+            volume: record.volume,
+          )
+          weekly_series.add_candle(candle)
         end
+        @candle_cache[instrument.id] ||= {}
+        @candle_cache[instrument.id]["1W"] = weekly_series
       end
 
       Rails.logger.info("[Screeners::LongtermScreener] Preloaded candles for #{@candle_cache.size} instruments")
@@ -292,6 +292,8 @@ module Screeners
         indicators: (analysis[:daily_indicators] || {}).merge(weekly_indicators: analysis[:weekly_indicators] || {}),
         metadata: analysis[:metadata] || {},
         multi_timeframe: analysis[:multi_timeframe] || {},
+        screener_run_id: @screener_run_id,
+        stage: "screener",
         analyzed_at: @analyzed_at,
       )
     rescue StandardError => e
