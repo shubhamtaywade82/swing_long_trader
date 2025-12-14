@@ -21,6 +21,7 @@ class CapitalAllocationPortfolio < ApplicationRecord
 
   after_create :initialize_capital_buckets
   after_create :initialize_risk_config
+  after_create :initialize_capital_allocation, if: -> { mode == "paper" }
 
   def paper?
     mode == "paper"
@@ -160,5 +161,18 @@ class CapitalAllocationPortfolio < ApplicationRecord
 
   def initialize_risk_config
     create_swing_risk_config! unless swing_risk_config
+  end
+
+  def initialize_capital_allocation
+    # For paper portfolios, ensure capital is allocated if total_equity is set
+    return unless total_equity&.positive?
+
+    # Set initial available_cash if not set
+    if available_cash.zero? && total_equity.positive?
+      update!(available_cash: total_equity)
+    end
+
+    # Rebalance to allocate swing_capital
+    rebalance_capital! if swing_capital.zero? && total_equity.positive?
   end
 end

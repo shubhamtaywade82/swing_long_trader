@@ -50,9 +50,21 @@ module Screeners
 
     def load_default_portfolio
       # Prefer paper portfolio for screening (safer, allows testing)
-      # But allow live if paper doesn't exist
+      # Initialize paper portfolio if it doesn't exist or has no capital
       paper_portfolio = CapitalAllocationPortfolio.paper.active.first
-      return paper_portfolio if paper_portfolio
+      
+      if paper_portfolio
+        # Ensure it has valid capital allocated
+        if paper_portfolio.total_equity.zero? || paper_portfolio.available_swing_capital <= 0
+          result = Portfolios::PaperPortfolioInitializer.call
+          paper_portfolio = result[:portfolio] if result[:success]
+        end
+        return paper_portfolio if paper_portfolio&.available_swing_capital&.positive?
+      else
+        # Create paper portfolio if none exists
+        result = Portfolios::PaperPortfolioInitializer.call
+        return result[:portfolio] if result[:success]
+      end
 
       # Fallback to any active portfolio (could be live)
       CapitalAllocationPortfolio.active.first || nil
