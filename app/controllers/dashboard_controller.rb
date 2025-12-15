@@ -939,23 +939,25 @@ class DashboardController < ApplicationController
       end
 
       # Add to recommendations if:
-      # 1. Has actionable BUY recommendation (from trade plan), OR
-      # 2. Setup status is READY (tradeable), OR
+      # 1. Has actionable BUY/ACCUMULATE recommendation (from trade plan/accumulation plan), OR
+      # 2. Setup status is READY or ACCUMULATE (tradeable), OR
       # 3. Generic "Buy" or "Strong Buy" recommendation
       is_actionable = candidate[:setup_status] == "READY" ||
+                      candidate[:setup_status] == "ACCUMULATE" ||
                       candidate[:trade_plan].present? ||
-                      /(BUY|Strong Buy|Buy)/i.match?(recommendation)
+                      candidate[:accumulation_plan].present? ||
+                      /(BUY|ACCUMULATE|Strong Buy|Buy)/i.match?(recommendation)
       @recommendations << candidate_with_rec if is_actionable
     end
 
-    # Sort recommendations by setup status (READY first), then by score
+    # Sort recommendations by setup status (READY/ACCUMULATE first), then by score
     # Sort others by score
     @bullish_stocks.sort_by! { |c| [-(c[:score] || 0)] }
     @bearish_stocks.sort_by! { |c| [-(c[:score] || 0)] }
     @recommendations.sort_by! do |c|
       setup_priority = case c[:setup_status]
-                       when "READY" then 0
-                       when "WAIT_PULLBACK", "WAIT_BREAKOUT" then 1
+                       when "READY", "ACCUMULATE" then 0
+                       when "WAIT_PULLBACK", "WAIT_BREAKOUT", "WAIT_DIP" then 1
                        when "IN_POSITION" then 2
                        else 3
                        end

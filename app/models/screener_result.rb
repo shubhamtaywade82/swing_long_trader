@@ -106,12 +106,14 @@ class ScreenerResult < ApplicationRecord
       ai_holding_days: ai_holding_days,
       ai_comment: ai_comment,
       ai_avoid: ai_avoid || false,
-      # Extract setup_status and trade_plan from metadata
+      # Extract setup_status and trade_plan/accumulation_plan from metadata
       setup_status: metadata[:setup_status],
       setup_reason: metadata[:setup_reason],
       invalidate_if: metadata[:invalidate_if],
       entry_conditions: metadata[:entry_conditions],
-      trade_plan: metadata[:trade_plan],
+      accumulation_conditions: metadata[:accumulation_conditions],
+      trade_plan: metadata[:trade_plan], # For swing
+      accumulation_plan: metadata[:accumulation_plan], # For long-term
       recommendation: metadata[:recommendation],
     }
   end

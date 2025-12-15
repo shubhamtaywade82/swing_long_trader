@@ -295,6 +295,16 @@ module Screeners
 
     def persist_result(analysis)
       # Persist each result immediately to database
+      # Include setup_status and accumulation_plan in metadata for retrieval
+      metadata = (analysis[:metadata] || {}).merge(
+        setup_status: analysis[:setup_status],
+        setup_reason: analysis[:setup_reason],
+        invalidate_if: analysis[:invalidate_if],
+        accumulation_conditions: analysis[:accumulation_conditions],
+        accumulation_plan: analysis[:accumulation_plan],
+        recommendation: analysis[:recommendation],
+      )
+
       ScreenerResult.upsert_result(
         instrument_id: analysis[:instrument_id],
         screener_type: "longterm",
@@ -303,7 +313,7 @@ module Screeners
         base_score: analysis[:base_score] || 0,
         mtf_score: analysis[:mtf_score] || 0,
         indicators: (analysis[:daily_indicators] || {}).merge(weekly_indicators: analysis[:weekly_indicators] || {}),
-        metadata: analysis[:metadata] || {},
+        metadata: metadata,
         multi_timeframe: analysis[:multi_timeframe] || {},
         screener_run_id: @screener_run_id,
         stage: "screener",
@@ -397,8 +407,8 @@ module Screeners
       # Combined score: 50% base score, 50% MTF score (more weight to MTF for long-term)
       combined_score = ((base_score * 0.5) + (mtf_score * 0.5)).round(2)
 
-      # Build candidate hash
-      {
+      # Build initial candidate hash
+      candidate = {
         instrument_id: instrument.id,
         symbol: instrument.symbol_name,
         score: combined_score,
@@ -410,6 +420,72 @@ module Screeners
         metadata: build_metadata(instrument, daily_series, weekly_series, daily_indicators, weekly_indicators,
                                  mtf_analysis),
       }
+
+      # CRITICAL: Determine accumulation setup status (ACCUMULATE vs WAIT vs NOT_READY)
+      # This is the decision layer that separates "bullish" from "accumulation-ready"
+      setup_result = Screeners::LongtermSetupDetector.call(
+        candidate: candidate,
+        daily_series: daily_series,
+        weekly_series: weekly_series,
+        daily_indicators: daily_indicators,
+        weekly_indicators: weekly_indicators,
+        mtf_analysis: mtf_analysis,
+        portfolio: nil, # Portfolio available in later layers
+      )
+
+      candidate[:setup_status] = setup_result[:status]
+      candidate[:setup_reason] = setup_result[:reason]
+      candidate[:invalidate_if] = setup_result[:invalidate_if]
+      candidate[:accumulation_conditions] = setup_result[:accumulation_conditions]
+
+      # Generate accumulation plan for ACCUMULATE setups only
+      if setup_result[:status] == Screeners::LongtermSetupDetector::ACCUMULATE
+        accumulation_plan = Screeners::LongtermTradePlanBuilder.call(
+          candidate: candidate,
+          daily_series: daily_series,
+          weekly_series: weekly_series,
+          daily_indicators: daily_indicators,
+          weekly_indicators: weekly_indicators,
+          setup_status: setup_result,
+          portfolio: nil, # Will use default calculation, enhanced later with portfolio
+        )
+
+        if accumulation_plan
+          candidate[:accumulation_plan] = accumulation_plan
+          # Update recommendation to be actionable
+          candidate[:recommendation] = build_actionable_recommendation(accumulation_plan, setup_result)
+        else
+          # Plan generation failed
+          candidate[:setup_status] = Screeners::LongtermSetupDetector::NOT_READY
+          candidate[:setup_reason] = "Accumulation conditions not met"
+          candidate[:recommendation] = "NOT READY: Accumulation conditions not optimal"
+        end
+      else
+        # Not ready - provide guidance
+        candidate[:recommendation] = build_wait_recommendation(setup_result)
+      end
+
+      candidate
+    end
+
+    def build_actionable_recommendation(accumulation_plan, _setup_result)
+      "ACCUMULATE #{accumulation_plan[:buy_zone]}, Invalid: ₹#{accumulation_plan[:invalid_level]}, " \
+        "Horizon: #{accumulation_plan[:time_horizon]} months, Allocation: #{accumulation_plan[:allocation_pct]}%"
+    end
+
+    def build_wait_recommendation(setup_result)
+      case setup_result[:status]
+      when Screeners::LongtermSetupDetector::WAIT_DIP
+        "WAIT: #{setup_result[:reason]}"
+      when Screeners::LongtermSetupDetector::WAIT_BREAKOUT
+        "WAIT: #{setup_result[:reason]}"
+      when Screeners::LongtermSetupDetector::IN_POSITION
+        "Already in position - Monitor"
+      when Screeners::LongtermSetupDetector::NOT_READY
+        "NOT READY: #{setup_result[:reason]}"
+      else
+        "WAIT: #{setup_result[:reason]}"
+      end
     end
 
     def calculate_indicators(series)

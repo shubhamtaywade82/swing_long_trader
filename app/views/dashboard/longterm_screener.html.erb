@@ -134,7 +134,7 @@
 
         <div id="recommendations-content-lt">
           <% if @recommendations&.any? %>
-            <%= render partial: "longterm_screener_table", locals: { candidates: @recommendations, show_recommendation: true } %>
+            <%= render partial: "longterm_screener_table_compact", locals: { candidates: @recommendations, show_recommendation: true, compact_mode: true } %>
           <% else %>
             <div class="card">
               <div class="card-body text-center py-5">
@@ -149,7 +149,7 @@
         <!-- Hidden templates for toggle views -->
         <div id="buy-recommendations-html-lt" style="display: none;">
           <% if @recommendations&.any? %>
-            <%= render partial: "longterm_screener_table", locals: { candidates: @recommendations, show_recommendation: true } %>
+            <%= render partial: "longterm_screener_table_compact", locals: { candidates: @recommendations, show_recommendation: true, compact_mode: true } %>
           <% else %>
             <div class="card">
               <div class="card-body text-center py-5">
