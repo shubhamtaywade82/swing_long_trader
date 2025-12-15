@@ -379,7 +379,7 @@ export default class extends Controller {
       return;
     }
 
-    fetch("/dashboard/toggle_mode", {
+    fetch("/trading_mode/toggle", {
       method: "POST",
       headers: {
         "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')

@@ -13,23 +13,27 @@ Rails.application.routes.draw do
 
   # Dashboard routes
   root "dashboard#index"
-
   get "dashboard", to: "dashboard#index", as: :dashboard
-  get "positions", to: "dashboard#positions", as: :positions
-  get "portfolio", to: "dashboard#portfolio", as: :portfolio
-  get "signals", to: "dashboard#signals", as: :signals
-  get "ai-evaluations", to: "dashboard#ai_evaluations", as: :ai_evaluations
-  get "orders", to: "dashboard#orders", as: :orders
-  get "monitoring", to: "dashboard#monitoring", as: :monitoring
+
+  # Page-specific controllers
+  get "positions", to: "positions#index", as: :positions
+  get "portfolio", to: "portfolios#show", as: :portfolio
+  get "signals", to: "signals#index", as: :signals
+  get "ai-evaluations", to: "ai_evaluations#index", as: :ai_evaluations
+  get "orders", to: "orders#index", as: :orders
+  get "monitoring", to: "monitoring#index", as: :monitoring
   get "about", to: "about#index", as: :about
-  get "screeners/swing", to: "dashboard#swing_screener", as: :swing_screener
-  get "screeners/longterm", to: "dashboard#longterm_screener", as: :longterm_screener
-  post "screeners/swing/run", to: "dashboard#run_swing_screener", as: :run_swing_screener
-  post "screeners/longterm/run", to: "dashboard#run_longterm_screener", as: :run_longterm_screener
-  get "screeners/check", to: "dashboard#check_screener_results", as: :check_screener_results
-  post "screeners/ltp/start", to: "dashboard#start_ltp_updates", as: :start_ltp_updates
-  post "screeners/ltp/stop", to: "dashboard#stop_ltp_updates", as: :stop_ltp_updates
-  post "dashboard/toggle_mode", to: "dashboard#toggle_trading_mode", as: :toggle_trading_mode
+
+  # Screener routes
+  get "screeners/swing", to: "screeners#swing", as: :swing_screener
+  get "screeners/longterm", to: "screeners#longterm", as: :longterm_screener
+  post "screeners/:type/run", to: "screeners#run", as: :run_screener, constraints: { type: /swing|longterm/ }
+  get "screeners/check", to: "screeners#check_results", as: :check_screener_results
+  post "screeners/ltp/start", to: "screeners#start_ltp_updates", as: :start_ltp_updates
+  post "screeners/ltp/stop", to: "screeners#stop_ltp_updates", as: :stop_ltp_updates
+
+  # Trading mode toggle
+  post "trading_mode/toggle", to: "trading_mode#toggle", as: :toggle_trading_mode
 
   # ActionCable for live updates
   mount ActionCable.server => "/cable"
