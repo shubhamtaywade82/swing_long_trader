@@ -42,11 +42,11 @@ rescue NameError
 end
 
 # Configure Rails app settings for DhanHQ integration
-# Swing trading uses REST API only - WebSocket disabled
+# WebSocket can be enabled via DHANHQ_WS_ENABLED=true environment variable
 Rails.application.configure do
   config.x.dhanhq = ActiveSupport::InheritableOptions.new(
     enabled: !Rails.env.test?,  # Disable in test environment
-    ws_enabled: false,  # WebSocket disabled for swing trading
+    ws_enabled: ENV["DHANHQ_WS_ENABLED"] == "true",  # WebSocket enabled via environment variable
     order_ws_enabled: false,  # Order WebSocket disabled for swing trading
     enable_order_logging: ENV["ENABLE_ORDER"] == "true",  # Order payload logging
     # Removed WebSocket-specific config (ws_mode, ws_watchlist, etc.)

@@ -12,6 +12,10 @@ module MarketHub
   class WebsocketTickStreamerJob < ApplicationJob
     queue_as :monitoring
 
+    # Don't retry on WebSocket-specific errors that won't resolve by retrying
+    discard_on NameError # WebSocket API not available in gem
+    discard_on LoadError # DhanHQ gem not installed
+
     # Thread tracking: in-process threads (for quick access)
     @@active_threads = Concurrent::Map.new
 
@@ -20,11 +24,27 @@ module MarketHub
     STREAM_TTL = 1.hour # Stream should refresh every hour if healthy
 
     def perform(screener_type: nil, instrument_ids: nil, symbols: nil)
-      return unless market_open?
+      Rails.logger.info(
+        "[MarketHub::WebsocketTickStreamerJob] Job started (pid=#{Process.pid}, screener_type=#{screener_type})",
+      )
+
+      unless market_open?
+        Rails.logger.info(
+          "[MarketHub::WebsocketTickStreamerJob] Market is closed, skipping",
+        )
+        return
+      end
 
       # Convert instrument_ids string to array if needed
-      instrument_ids = instrument_ids.split(",").map(&:to_i) if instrument_ids.is_a?(String)
-      symbols = symbols.split(",") if symbols.is_a?(String)
+      begin
+        instrument_ids = instrument_ids.split(",").map(&:to_i) if instrument_ids.is_a?(String)
+        symbols = symbols.split(",") if symbols.is_a?(String)
+      rescue StandardError => e
+        Rails.logger.error(
+          "[MarketHub::WebsocketTickStreamerJob] Error parsing parameters: #{e.message}",
+        )
+        return
+      end
 
       # Create unique key for this stream
       stream_key = stream_key(screener_type, instrument_ids, symbols)
@@ -137,11 +157,26 @@ module MarketHub
 
       # Job completes immediately, thread continues running
       Rails.logger.info(
-        "[MarketHub::WebsocketTickStreamerJob] Job completed, WebSocket running in thread: #{websocket_thread.name}",
+        "[MarketHub::WebsocketTickStreamerJob] Job completed successfully, WebSocket running in thread: #{websocket_thread.name}",
       )
+    rescue NameError => e
+      # WebSocket API not available - don't retry
+      Rails.logger.error(
+        "[MarketHub::WebsocketTickStreamerJob] WebSocket API not available: #{e.message}. Discarding job.",
+      )
+      Rails.logger.error("Please ensure dhanhq-client gem supports WebSocket: #{e.backtrace.first(3).join("\n")}")
+      # Don't re-raise - let discard_on handle it
+    rescue LoadError => e
+      # DhanHQ gem not installed - don't retry
+      Rails.logger.error(
+        "[MarketHub::WebsocketTickStreamerJob] DhanHQ gem not installed: #{e.message}. Discarding job.",
+      )
+      # Don't re-raise - let discard_on handle it
     rescue StandardError => e
       Rails.logger.error("[MarketHub::WebsocketTickStreamerJob] Job error: #{e.message}")
       Rails.logger.error(e.backtrace.first(10).join("\n"))
+      # Re-raise to trigger retry mechanism for other errors
+      raise
     end
 
     # Class method to stop all active WebSocket streams (useful for graceful shutdown)

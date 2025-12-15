@@ -566,9 +566,15 @@
         .slice(0, 200); // Limit to 200 stocks
 
       if (instrumentIds.length === 0) {
-        console.log('No screener results found. LTP updates will start when results are available.');
+        console.log('[Screener] No screener results found. LTP updates will start when results are available.');
         return;
       }
+
+      console.log('[Screener] Starting LTP updates for instruments:', {
+        count: instrumentIds.length,
+        first10: instrumentIds.slice(0, 10),
+        screenerType: screenerType,
+      });
 
       // Start LTP updates (prefer WebSocket for real-time, fallback to polling)
       fetch('<%= start_ltp_updates_screeners_path %>', {
@@ -585,32 +591,36 @@
       })
       .then(response => response.json())
       .then(data => {
+        console.log('[Screener] LTP updates response:', data);
+
         if (data.status === 'already_running' || data.status === 'queued') {
-          console.log('LTP updates:', data.message);
+          console.log('[Screener] LTP updates:', data.message, 'Mode:', data.mode || 'unknown');
           // Still show indicator if already running
           if (!document.querySelector('.ltp-status-indicator.active')) {
             const indicator = document.createElement('span');
             indicator.className = 'ltp-status-indicator active';
-            indicator.title = 'Real-time LTP updates active';
+            indicator.title = `Real-time LTP updates active (${data.mode || 'unknown'})`;
             const header = document.querySelector('.page-title') || document.querySelector('h1');
             if (header) {
               header.appendChild(indicator);
             }
           }
-        } else {
-          console.log('LTP updates started:', data.message);
+        } else if (data.status === 'started') {
+          console.log('[Screener] LTP updates started:', data.message, 'Mode:', data.mode || 'unknown', 'Job ID:', data.job_id);
           // Add visual indicator
           const indicator = document.createElement('span');
           indicator.className = 'ltp-status-indicator active';
-          indicator.title = 'Real-time LTP updates active';
+          indicator.title = `Real-time LTP updates active (${data.mode || 'unknown'})`;
           const header = document.querySelector('.page-title') || document.querySelector('h1');
           if (header && !header.querySelector('.ltp-status-indicator')) {
             header.appendChild(indicator);
           }
+        } else {
+          console.warn('[Screener] Unexpected LTP updates status:', data);
         }
       })
       .catch(error => {
-        console.error('Failed to start LTP updates:', error);
+        console.error('[Screener] Failed to start LTP updates:', error);
       });
     }
 

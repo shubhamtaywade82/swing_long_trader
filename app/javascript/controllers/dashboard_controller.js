@@ -111,7 +111,50 @@ export default class extends Controller {
   handleScreenerStream(data) {
     // Handle real-time screener updates via ActionCable
     if (data.type === "screener_ltp_update") {
+      // Track statistics
+      window.ltpUpdateStats.count++;
+      window.ltpUpdateStats.lastUpdate = {
+        timestamp: new Date().toISOString(),
+        symbol: data.symbol,
+        instrument_id: data.instrument_id,
+        ltp: data.ltp,
+      };
+      window.ltpUpdateStats.updates.push(window.ltpUpdateStats.lastUpdate);
+      if (window.ltpUpdateStats.updates.length > 20) {
+        window.ltpUpdateStats.updates.shift(); // Keep only last 20
+      }
+
       // Update single LTP
+      console.log(
+        "[DashboardController] 🔔 Processing screener_ltp_update #" +
+          window.ltpUpdateStats.count,
+        {
+          symbol: data.symbol,
+          instrument_id: data.instrument_id,
+          ltp: data.ltp,
+          source: data.source,
+          timestamp: data.timestamp,
+        }
+      );
+
+      // Log available rows before update
+      const allRows = document.querySelectorAll(
+        "tr[data-screener-instrument-id]"
+      );
+      console.log(
+        "[DashboardController] Available rows in DOM:",
+        allRows.length
+      );
+      if (allRows.length > 0) {
+        const sampleIds = Array.from(allRows)
+          .slice(0, 5)
+          .map((r) => ({
+            id: r.getAttribute("data-screener-instrument-id"),
+            symbol: r.getAttribute("data-screener-symbol"),
+          }));
+        console.log("[DashboardController] Sample row IDs:", sampleIds);
+      }
+
       this.updateScreenerLtp(data.symbol, data.instrument_id, data.ltp);
     } else if (data.type === "screener_ltp_batch_update") {
       // Update multiple LTPs at once
@@ -208,6 +251,23 @@ export default class extends Controller {
         },
 
         received: (data) => {
+          // Always log LTP updates for debugging
+          if (
+            data.type === "screener_ltp_update" ||
+            data.type === "screener_ltp_batch_update"
+          ) {
+            console.log(
+              "[DashboardController] ActionCable received LTP update:",
+              data.type,
+              data
+            );
+          } else {
+            console.debug(
+              "[DashboardController] ActionCable received:",
+              data.type,
+              data
+            );
+          }
           this.handleUpdate(data);
           // Handle screener streaming updates
           if (
@@ -776,12 +836,101 @@ export default class extends Controller {
   }
 
   updateScreenerLtp(symbol, instrumentId, ltp) {
-    if (!symbol || !ltp) return;
+    // Enhanced validation and logging
+    if (!symbol || !ltp) {
+      console.warn(
+        "[DashboardController] updateScreenerLtp: Missing symbol or ltp",
+        { symbol, instrumentId, ltp, type: typeof ltp }
+      );
+      return;
+    }
 
-    // Find all rows with this symbol (could be in multiple tables/tabs)
-    const rows = document.querySelectorAll(
-      `tr[data-screener-symbol="${symbol}"], tr[data-screener-instrument-id="${instrumentId}"]`
-    );
+    // Validate ltp is a number
+    const ltpNum = parseFloat(ltp);
+    if (isNaN(ltpNum) || ltpNum <= 0) {
+      console.warn(
+        "[DashboardController] updateScreenerLtp: Invalid LTP value",
+        { symbol, instrumentId, ltp, parsed: ltpNum }
+      );
+      return;
+    }
+
+    // Try to find rows by instrument_id first (more reliable)
+    // Convert to string since HTML attributes are always strings
+    let rows = [];
+    if (instrumentId) {
+      const instrumentIdStr = String(instrumentId);
+      rows = document.querySelectorAll(
+        `tr[data-screener-instrument-id="${instrumentIdStr}"]`
+      );
+
+      // If no exact match, try without quotes (some browsers handle attributes differently)
+      if (rows.length === 0) {
+        const allRows = document.querySelectorAll(
+          "tr[data-screener-instrument-id]"
+        );
+        rows = Array.from(allRows).filter((row) => {
+          const rowId = row.getAttribute("data-screener-instrument-id");
+          return (
+            rowId &&
+            (rowId === instrumentIdStr ||
+              rowId === String(instrumentId) ||
+              parseInt(rowId) === parseInt(instrumentId))
+          );
+        });
+      }
+    }
+
+    // Fallback to symbol matching if no rows found by instrument_id
+    if (rows.length === 0 && symbol) {
+      // Try exact match first
+      rows = document.querySelectorAll(`tr[data-screener-symbol="${symbol}"]`);
+
+      // If still no match, try case-insensitive matching
+      if (rows.length === 0) {
+        const allRows = document.querySelectorAll("tr[data-screener-symbol]");
+        rows = Array.from(allRows).filter((row) => {
+          const rowSymbol = row.getAttribute("data-screener-symbol");
+          return (
+            rowSymbol &&
+            rowSymbol.toLowerCase().trim() === symbol.toLowerCase().trim()
+          );
+        });
+      }
+    }
+
+    if (rows.length === 0) {
+      // Get all available rows for debugging
+      const allRows = document.querySelectorAll(
+        "tr[data-screener-instrument-id]"
+      );
+      const allRowData = Array.from(allRows).map((r) => ({
+        id: r.getAttribute("data-screener-instrument-id"),
+        symbol: r.getAttribute("data-screener-symbol"),
+        price: r
+          .querySelector('td[data-price-cell="true"]')
+          ?.textContent.trim(),
+      }));
+
+      console.error(
+        "[DashboardController] ❌ updateScreenerLtp: No rows found",
+        {
+          searchingFor: { symbol, instrumentId },
+          availableRows: allRows.length,
+          allRowData: allRowData.slice(0, 10), // Show first 10 for debugging
+        }
+      );
+      return;
+    }
+
+    console.log("[DashboardController] ✅ updateScreenerLtp: Found rows", {
+      symbol,
+      instrumentId,
+      ltp,
+      rowCount: rows.length,
+      firstRowId: rows[0]?.getAttribute("data-screener-instrument-id"),
+      firstRowSymbol: rows[0]?.getAttribute("data-screener-symbol"),
+    });
 
     rows.forEach((row) => {
       // First, try to find the dedicated price cell using data attribute
@@ -797,7 +946,9 @@ export default class extends Controller {
             cellText.startsWith("₹") &&
             !cellText.includes("Entry:") &&
             !cellText.includes("SL:") &&
-            !cellText.includes("TP:")
+            !cellText.includes("TP:") &&
+            !cellText.includes("Buy Zone:") &&
+            !cellText.includes("Invalid:")
           ) {
             priceCell = cell;
           }
@@ -814,17 +965,39 @@ export default class extends Controller {
         );
         const newPrice = parseFloat(ltp);
 
+        if (isNaN(newPrice)) {
+          console.warn(
+            "[DashboardController] updateScreenerLtp: Invalid price",
+            { ltp, newPrice }
+          );
+          return;
+        }
+
+        console.log("[DashboardController] 💰 Updating price cell", {
+          symbol,
+          instrumentId,
+          oldPrice,
+          newPrice,
+          priceChange: newPrice - oldPrice,
+          cellHTML: priceCell.innerHTML,
+        });
+
         // Update the price - preserve the <strong> tag if present
         if (priceCell.querySelector("strong")) {
-          priceCell.querySelector("strong").textContent = `₹${newPrice.toFixed(
-            2
-          )}`;
+          const strongTag = priceCell.querySelector("strong");
+          strongTag.textContent = `₹${newPrice.toFixed(2)}`;
+          console.log("[DashboardController] ✅ Updated <strong> tag", {
+            newContent: strongTag.textContent,
+          });
         } else {
           priceCell.textContent = `₹${newPrice.toFixed(2)}`;
+          console.log("[DashboardController] ✅ Updated cell text", {
+            newContent: priceCell.textContent,
+          });
         }
 
         // Add visual indicator for price change
-        if (oldPrice && oldPrice !== newPrice) {
+        if (oldPrice && !isNaN(oldPrice) && oldPrice !== newPrice) {
           const changeClass = newPrice > oldPrice ? "price-up" : "price-down";
           priceCell.classList.add(changeClass);
           setTimeout(() => {
@@ -836,6 +1009,23 @@ export default class extends Controller {
         if (row.hasAttribute("data-price")) {
           row.setAttribute("data-price", newPrice.toFixed(2));
         }
+
+        console.log(
+          "[DashboardController] updateScreenerLtp: ✅ Updated price",
+          { symbol, instrumentId, oldPrice, newPrice }
+        );
+      } else {
+        console.warn(
+          "[DashboardController] updateScreenerLtp: ❌ Price cell not found",
+          {
+            symbol,
+            instrumentId,
+            rowHtml: row.outerHTML.substring(0, 200),
+            allCells: Array.from(row.querySelectorAll("td")).map((c) =>
+              c.textContent.trim().substring(0, 30)
+            ),
+          }
+        );
       }
 
       // Add flash animation to indicate update
@@ -845,4 +1035,296 @@ export default class extends Controller {
       }, 500);
     });
   }
+
+  // Test function to manually trigger price update (for debugging)
+  // Usage in console: testPriceUpdate(symbol, instrumentId, price)
+  testPriceUpdate(symbol, instrumentId, price) {
+    console.log("[DashboardController] Testing price update manually", {
+      symbol,
+      instrumentId,
+      price,
+    });
+    this.updateScreenerLtp(symbol, instrumentId, price);
+  }
 }
+
+// Expose test function globally for debugging
+window.testPriceUpdate = function (symbol, instrumentId, price) {
+  const dashboardElement = document.querySelector(
+    '[data-controller*="dashboard"]'
+  );
+  if (!dashboardElement) {
+    console.error("Dashboard controller not found");
+    return;
+  }
+
+  // Get Stimulus controller instance
+  const application = window.Stimulus || window.application;
+  if (!application) {
+    console.error("Stimulus not found");
+    return;
+  }
+
+  const controller = application.getControllerForElementAndIdentifier(
+    dashboardElement,
+    "dashboard"
+  );
+  if (controller) {
+    controller.testPriceUpdate(symbol, instrumentId, price);
+  } else {
+    console.error("Dashboard controller instance not found");
+  }
+};
+
+// Diagnostic function to check screener table state
+window.checkScreenerTableState = function () {
+  const rows = document.querySelectorAll("tr[data-screener-instrument-id]");
+  const sampleRows = Array.from(rows).slice(0, 10);
+
+  const diagnostic = {
+    totalRows: rows.length,
+    sampleRows: sampleRows.map((row) => ({
+      symbol: row.getAttribute("data-screener-symbol"),
+      instrumentId: row.getAttribute("data-screener-instrument-id"),
+      hasPriceCell: !!row.querySelector('td[data-price-cell="true"]'),
+      priceCellText: row
+        .querySelector('td[data-price-cell="true"]')
+        ?.textContent.trim(),
+      priceCellHTML: row.querySelector('td[data-price-cell="true"]')?.innerHTML,
+    })),
+    actionCableConnected: document
+      .querySelector('[data-dashboard-target="connectionStatus"]')
+      ?.textContent.includes("Connected"),
+  };
+
+  console.log(
+    "[DashboardController] 📊 Screener Table Diagnostic:",
+    diagnostic
+  );
+
+  // Also log first row details for manual testing
+  if (sampleRows.length > 0) {
+    const firstRow = sampleRows[0];
+    console.log("[DashboardController] 🧪 Test with first row:", {
+      testCommand: `testPriceUpdate('${firstRow.symbol}', '${firstRow.instrumentId}', 9999.99)`,
+      rowData: firstRow,
+    });
+  }
+
+  return diagnostic;
+};
+
+// Monitor ActionCable messages for debugging
+window.ltpUpdateStats = {
+  count: 0,
+  lastUpdate: null,
+  updates: [],
+};
+
+// Expose monitoring functions
+window.getLtpUpdateStats = function () {
+  const stats = window.ltpUpdateStats;
+  return {
+    totalUpdates: stats.count,
+    lastUpdate: stats.lastUpdate,
+    recentUpdates: stats.updates.slice(-5), // Last 5 updates
+    timeSinceLastUpdate: stats.lastUpdate
+      ? Math.round(
+          (Date.now() - new Date(stats.lastUpdate.timestamp).getTime()) / 1000
+        ) + " seconds ago"
+      : "never",
+  };
+};
+
+// Comprehensive diagnostic function
+window.diagnoseLtpUpdates = function () {
+  console.log("===== LTP Update Diagnostic =====");
+
+  // 1. Check ActionCable connection
+  const dashboardController = document.querySelector(
+    '[data-controller="dashboard"]'
+  );
+  const isConnected =
+    dashboardController?.dataset?.dashboardChannelValue === "DashboardChannel";
+  console.log("1. ActionCable Connection:", {
+    connected: isConnected,
+    channel: dashboardController?.dataset?.dashboardChannelValue,
+  });
+
+  // 2. Check table rows
+  const allRows = document.querySelectorAll("tr[data-screener-instrument-id]");
+  console.log("2. Table Rows:", {
+    totalRows: allRows.length,
+    sampleRows: Array.from(allRows)
+      .slice(0, 5)
+      .map((r) => ({
+        id: r.getAttribute("data-screener-instrument-id"),
+        symbol: r.getAttribute("data-screener-symbol"),
+        hasPriceCell: !!r.querySelector('td[data-price-cell="true"]'),
+        priceCellText: r
+          .querySelector('td[data-price-cell="true"]')
+          ?.textContent.trim(),
+      })),
+  });
+
+  // 3. Check LTP update stats
+  const stats = window.getLtpUpdateStats();
+  console.log("3. LTP Update Stats:", stats);
+
+  // 4. Check if WebSocket job is running (via server logs - user needs to check)
+  console.log("4. WebSocket Status:", {
+    note: "Check server logs for '[MarketHub::WebsocketTickStreamer] 📡 Broadcasted LTP update' messages",
+    checkServerLogs: "Look for WebSocket connection and subscription messages",
+  });
+
+  // 5. Test price update manually
+  if (allRows.length > 0) {
+    const firstRow = allRows[0];
+    const testId = firstRow.getAttribute("data-screener-instrument-id");
+    const testSymbol = firstRow.getAttribute("data-screener-symbol");
+    const testPrice = 1000.5; // Test price
+
+    console.log("5. Manual Test Available:", {
+      testCommand: `testPriceUpdate('${testSymbol}', '${testId}', ${testPrice})`,
+      note: "Run this command to test if JavaScript update logic works",
+    });
+  }
+
+  // 6. Check for common issues
+  const issues = [];
+  if (allRows.length === 0) {
+    issues.push("❌ No screener table rows found in DOM");
+  }
+  if (!stats.lastUpdate) {
+    issues.push("⚠️ No LTP updates received yet (check WebSocket connection)");
+  }
+  if (stats.lastUpdate && stats.timeSinceLastUpdate.includes("never")) {
+    issues.push("⚠️ LTP updates received but timestamp is invalid");
+  }
+
+  const rowsWithoutPriceCells = Array.from(allRows).filter(
+    (r) => !r.querySelector('td[data-price-cell="true"]')
+  );
+  if (rowsWithoutPriceCells.length > 0) {
+    issues.push(
+      `⚠️ ${rowsWithoutPriceCells.length} rows missing data-price-cell="true" attribute`
+    );
+  }
+
+  console.log(
+    "6. Issues Found:",
+    issues.length > 0 ? issues : ["✅ No obvious issues detected"]
+  );
+
+  return {
+    actionCableConnected: isConnected,
+    tableRows: allRows.length,
+    ltpStats: stats,
+    issues: issues,
+  };
+};
+
+// Check WebSocket status via API
+window.checkWebSocketStatus = async function () {
+  console.log("===== Checking WebSocket Status =====");
+
+  // Get instrument IDs from table
+  const rows = document.querySelectorAll("tr[data-screener-instrument-id]");
+  const instrumentIds = Array.from(rows)
+    .slice(0, 10)
+    .map((r) => r.getAttribute("data-screener-instrument-id"))
+    .filter((id) => id && id !== "null")
+    .join(",");
+
+  try {
+    const response = await fetch(
+      `/screeners/websocket/status?screener_type=swing&instrument_ids=${instrumentIds}`
+    );
+    const data = await response.json();
+    console.log("WebSocket Status:", data);
+    return data;
+  } catch (error) {
+    console.error("Error checking WebSocket status:", error);
+    return { error: error.message };
+  }
+};
+
+// Test ActionCable broadcast
+window.testActionCable = async function (symbol, instrumentId, price) {
+  console.log("===== Testing ActionCable Broadcast =====");
+
+  // Use first row if not provided
+  if (!symbol || !instrumentId) {
+    const row = document.querySelector("tr[data-screener-instrument-id]");
+    if (row) {
+      symbol = symbol || row.getAttribute("data-screener-symbol");
+      instrumentId =
+        instrumentId || row.getAttribute("data-screener-instrument-id");
+    }
+  }
+
+  if (!symbol || !instrumentId) {
+    console.error("No symbol or instrument ID available. Please provide them.");
+    return;
+  }
+
+  const testPrice = price || 1000.0;
+
+  try {
+    const response = await fetch("/screeners/websocket/test", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')
+          .content,
+      },
+      body: JSON.stringify({
+        symbol: symbol,
+        instrument_id: instrumentId,
+        ltp: testPrice,
+      }),
+    });
+    const data = await response.json();
+    console.log("Test broadcast sent:", data);
+    console.log(
+      "Watch console for '[DashboardController] 🔔 Processing screener_ltp_update' message"
+    );
+    return data;
+  } catch (error) {
+    console.error("Error sending test broadcast:", error);
+    return { error: error.message };
+  }
+};
+
+// Log available test functions on page load
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    console.log("[DashboardController] ===== Debug Functions Available =====");
+    console.log(
+      "[DashboardController] 1. testPriceUpdate(symbol, instrumentId, price) - Test price update"
+    );
+    console.log(
+      "[DashboardController] 2. checkScreenerTableState() - Check table state"
+    );
+    console.log(
+      "[DashboardController] 3. getLtpUpdateStats() - Get LTP update statistics"
+    );
+    console.log(
+      "[DashboardController] 4. diagnoseLtpUpdates() - Comprehensive diagnostic"
+    );
+    console.log(
+      "[DashboardController] 5. checkWebSocketStatus() - Check WebSocket job status"
+    );
+    console.log(
+      "[DashboardController] 6. testActionCable() - Test ActionCable broadcast"
+    );
+    console.log(
+      "[DashboardController] 3. getLtpUpdateStats() - Check LTP update statistics"
+    );
+    console.log(
+      "[DashboardController] Example: testPriceUpdate('TATACONSUM', '123', 1200.50)"
+    );
+    console.log("[DashboardController] Example: checkScreenerTableState()");
+    console.log("[DashboardController] Example: getLtpUpdateStats()");
+  }, 2000);
+});

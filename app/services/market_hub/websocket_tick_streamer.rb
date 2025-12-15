@@ -15,13 +15,38 @@ module MarketHub
     end
 
     def call
-      return { success: false, error: "WebSocket not enabled" } unless websocket_enabled?
+      Rails.logger.info(
+        "[MarketHub::WebsocketTickStreamer] Starting WebSocket streamer (instrument_ids: #{@instrument_ids.size}, symbols: #{@symbols.size})",
+      )
+
+      unless websocket_enabled?
+        Rails.logger.warn(
+          "[MarketHub::WebsocketTickStreamer] WebSocket not enabled. Set DHANHQ_WS_ENABLED=true or config.x.dhanhq.ws_enabled=true",
+        )
+        return { success: false, error: "WebSocket not enabled" }
+      end
 
       instruments = fetch_instruments
-      return { success: false, error: "No instruments found" } if instruments.empty?
+      if instruments.empty?
+        Rails.logger.warn(
+          "[MarketHub::WebsocketTickStreamer] No instruments found to subscribe to",
+        )
+        return { success: false, error: "No instruments found" }
+      end
+
+      Rails.logger.info(
+        "[MarketHub::WebsocketTickStreamer] Found #{instruments.size} instruments to subscribe",
+      )
 
       subscribe_to_ticks(instruments)
-      start_websocket_connection
+      result = start_websocket_connection
+
+      # If start_websocket_connection returned an error, return it
+      return result if result.is_a?(Hash) && result[:success] == false
+
+      Rails.logger.info(
+        "[MarketHub::WebsocketTickStreamer] Successfully started WebSocket streamer with #{@subscriptions.size} subscriptions",
+      )
 
       {
         success: true,
@@ -51,16 +76,25 @@ module MarketHub
     end
 
     def fetch_instruments
-      if @instrument_ids.any?
-        Instrument.where(id: @instrument_ids)
-      elsif @symbols.any?
-        Instrument.where(symbol_name: @symbols)
-      else
-        # Default: get latest screener results
-        latest_results = ScreenerResult.latest_for(screener_type: "swing", limit: 200)
-        instrument_ids = latest_results.pluck(:instrument_id).compact.uniq
-        Instrument.where(id: instrument_ids)
+      instruments = if @instrument_ids.any?
+                      Instrument.where(id: @instrument_ids)
+                    elsif @symbols.any?
+                      Instrument.where(symbol_name: @symbols)
+                    else
+                      # Default: get latest screener results
+                      latest_results = ScreenerResult.latest_for(screener_type: "swing", limit: 200)
+                      instrument_ids = latest_results.pluck(:instrument_id).compact.uniq
+                      Instrument.where(id: instrument_ids)
+                    end
+
+      Rails.logger.info(
+        "[MarketHub::WebsocketTickStreamer] Fetching instruments: requested #{@instrument_ids.size} IDs, #{@symbols.size} symbols, found #{instruments.count} instruments",
+      )
+      if instruments.any?
+        Rails.logger.debug { "[MarketHub::WebsocketTickStreamer] Instrument IDs: #{instruments.pluck(:id).first(10).inspect}" }
       end
+
+      instruments
     end
 
     def subscribe_to_ticks(instruments)
@@ -86,7 +120,15 @@ module MarketHub
         mode = ENV.fetch("DHANHQ_WS_MODE", "quote").to_sym
         mode = :quote unless %i[ticker quote full].include?(mode)
 
+        Rails.logger.info(
+          "[MarketHub::WebsocketTickStreamer] Initializing WebSocket client (mode: #{mode}) for #{@subscriptions.size} instruments",
+        )
+
         @websocket_client = DhanHQ::WS::Client.new(mode: mode).start
+
+        Rails.logger.info(
+          "[MarketHub::WebsocketTickStreamer] WebSocket client started successfully",
+        )
 
         # Set up tick handler
         # API: ws.on(:tick) { |t| ... }
@@ -94,26 +136,51 @@ module MarketHub
           handle_tick(tick)
         end
 
+        Rails.logger.info(
+          "[MarketHub::WebsocketTickStreamer] Tick handler registered",
+        )
+
         # Subscribe to all instruments
         # API: ws.subscribe_one(segment: "NSE_EQ", security_id: "12345")
         # Note: Up to 100 instruments per message (client auto-chunks)
+        subscribed_count = 0
         @subscriptions.each do |sub|
+          segment = sub[:ExchangeSegment] || sub["ExchangeSegment"]
+          security_id = sub[:SecurityId] || sub["SecurityId"]
+
+          Rails.logger.debug { "[MarketHub::WebsocketTickStreamer] Subscribing to segment: #{segment}, security_id: #{security_id}" }
+
           @websocket_client.subscribe_one(
-            segment: sub[:ExchangeSegment] || sub["ExchangeSegment"],
-            security_id: sub[:SecurityId] || sub["SecurityId"],
+            segment: segment,
+            security_id: security_id,
           )
+          subscribed_count += 1
         end
 
         Rails.logger.info(
-          "[MarketHub::WebsocketTickStreamer] Started WebSocket (mode: #{mode}) and subscribed to #{@subscriptions.size} instruments",
+          "[MarketHub::WebsocketTickStreamer] WebSocket connection established and subscribed to #{subscribed_count}/#{@subscriptions.size} instruments (mode: #{mode})",
         )
+
+        # Return success (nil means success, method will return nil by default)
+        nil
       rescue NameError => e
-        Rails.logger.error("[MarketHub::WebsocketTickStreamer] WebSocket API not available: #{e.message}")
+        error_msg = "WebSocket API not available in dhanhq-client gem: #{e.message}"
+        Rails.logger.error("[MarketHub::WebsocketTickStreamer] #{error_msg}")
         Rails.logger.error("Please ensure dhanhq-client gem is updated: https://github.com/shubhamtaywade82/dhanhq-client")
-        raise StandardError, "WebSocket not available in dhanhq-client gem. Error: #{e.message}"
+        Rails.logger.error("Backtrace: #{e.backtrace.first(5).join("\n")}")
+        # Return error instead of raising to prevent job crash
+        { success: false, error: error_msg }
+      rescue LoadError => e
+        error_msg = "DhanHQ gem not installed: #{e.message}"
+        Rails.logger.error("[MarketHub::WebsocketTickStreamer] #{error_msg}")
+        Rails.logger.error("Backtrace: #{e.backtrace.first(5).join("\n")}")
+        { success: false, error: error_msg }
       rescue StandardError => e
-        Rails.logger.error("[MarketHub::WebsocketTickStreamer] Failed to start WebSocket: #{e.message}")
-        raise
+        error_msg = "Failed to start WebSocket: #{e.message}"
+        Rails.logger.error("[MarketHub::WebsocketTickStreamer] #{error_msg}")
+        Rails.logger.error("Backtrace: #{e.backtrace.first(10).join("\n")}")
+        # Return error instead of raising to prevent job crash
+        { success: false, error: error_msg }
       end
     end
 
@@ -131,38 +198,58 @@ module MarketHub
       #   oi: 987654,                   # full or OI packet
       #   bid: 101.45, ask: 101.55      # from depth (mode :full)
       # }
-      
+
+      # Always log tick reception (not just in development) to verify WebSocket is receiving data
+      Rails.logger.info(
+        "[MarketHub::WebsocketTickStreamer] 📥 Received tick: segment=#{tick_data[:segment] || tick_data['segment']}, security_id=#{tick_data[:security_id] || tick_data['security_id']}, ltp=#{tick_data[:ltp] || tick_data['ltp']}",
+      )
+
       return unless tick_data.is_a?(Hash)
 
       segment = tick_data[:segment] || tick_data["segment"]
       security_id = tick_data[:security_id] || tick_data["security_id"]
       ltp = tick_data[:ltp] || tick_data["ltp"]
 
-      return unless segment && security_id && ltp && ltp.to_f.positive?
+      unless segment && security_id && ltp && ltp.to_f.positive?
+        Rails.logger.warn(
+          "[MarketHub::WebsocketTickStreamer] ⚠️ Invalid tick data: segment=#{segment}, security_id=#{security_id}, ltp=#{ltp}",
+        )
+        return
+      end
 
       # Find instrument and symbol
       instrument = Instrument.find_by(
         exchange_segment: segment,
         security_id: security_id.to_s,
       )
-      return unless instrument
+
+      unless instrument
+        Rails.logger.warn(
+          "[MarketHub::WebsocketTickStreamer] Instrument not found for segment: #{segment}, security_id: #{security_id}",
+        )
+        return
+      end
 
       # Broadcast immediately via ActionCable
-      ActionCable.server.broadcast(
-        "dashboard_updates",
-        {
-          type: "screener_ltp_update",
-          symbol: instrument.symbol_name,
-          instrument_id: instrument.id,
-          ltp: ltp.to_f,
-          timestamp: Time.current.iso8601,
-          source: "websocket", # Indicate this is real-time, not polled
-          tick_kind: tick_data[:kind] || tick_data["kind"], # :ticker, :quote, :full, etc.
-          volume: tick_data[:vol] || tick_data["vol"],
-          day_open: tick_data[:day_open] || tick_data["day_open"],
-          day_high: tick_data[:day_high] || tick_data["day_high"],
-          day_low: tick_data[:day_low] || tick_data["day_low"],
-        },
+      broadcast_data = {
+        type: "screener_ltp_update",
+        symbol: instrument.symbol_name,
+        instrument_id: instrument.id,
+        ltp: ltp.to_f,
+        timestamp: Time.current.iso8601,
+        source: "websocket", # Indicate this is real-time, not polled
+        tick_kind: tick_data[:kind] || tick_data["kind"], # :ticker, :quote, :full, etc.
+        volume: tick_data[:vol] || tick_data["vol"],
+        day_open: tick_data[:day_open] || tick_data["day_open"],
+        day_high: tick_data[:day_high] || tick_data["day_high"],
+        day_low: tick_data[:day_low] || tick_data["day_low"],
+      }
+
+      ActionCable.server.broadcast("dashboard_updates", broadcast_data)
+
+      # Always log broadcasts (not just in development) to track if messages are being sent
+      Rails.logger.info(
+        "[MarketHub::WebsocketTickStreamer] 📡 Broadcasted LTP update: #{instrument.symbol_name} (#{instrument.id}) = ₹#{ltp.to_f}",
       )
     rescue StandardError => e
       Rails.logger.error("[MarketHub::WebsocketTickStreamer] Error handling tick: #{e.message}")
@@ -171,19 +258,19 @@ module MarketHub
 
     def handle_error(error)
       Rails.logger.error("[MarketHub::WebsocketTickStreamer] WebSocket error: #{error.message}")
-      # Note: dhanhq-client gem handles reconnection automatically with exponential backoff
+      # NOTE: dhanhq-client gem handles reconnection automatically with exponential backoff
       # On reconnect, the client resends the current subscription snapshot (idempotent)
     end
 
     def handle_close
       Rails.logger.warn("[MarketHub::WebsocketTickStreamer] WebSocket connection closed")
-      # Note: dhanhq-client gem handles reconnection automatically
+      # NOTE: dhanhq-client gem handles reconnection automatically
       # Only reconnect manually if needed (e.g., after graceful disconnect)
-      if market_open? && @websocket_client.nil?
-        Rails.logger.info("[MarketHub::WebsocketTickStreamer] Attempting reconnection...")
-        sleep(2) # Wait before reconnecting
-        start_websocket_connection
-      end
+      return unless market_open? && @websocket_client.nil?
+
+      Rails.logger.info("[MarketHub::WebsocketTickStreamer] Attempting reconnection...")
+      sleep(2) # Wait before reconnecting
+      start_websocket_connection
     end
 
     def unsubscribe_all
@@ -221,7 +308,6 @@ module MarketHub
         @websocket_client = nil
       end
     end
-
 
     def market_open?
       now = Time.current.in_time_zone("Asia/Kolkata")
