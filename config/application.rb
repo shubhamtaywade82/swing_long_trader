@@ -38,6 +38,17 @@ module SwingLongTrader
     # Use SolidQueue for background jobs (DB-backed, replaces Sidekiq)
     config.active_job.queue_adapter = :solid_queue
 
+    # Graceful shutdown: Clean up WebSocket threads on application exit
+    at_exit do
+      if defined?(MarketHub::WebsocketTickStreamerJob)
+        MarketHub::WebsocketTickStreamerJob.stop_all_streams
+      end
+      # Also disconnect all DhanHQ WebSocket connections
+      if defined?(DhanHQ::WS)
+        DhanHQ::WS.disconnect_all_local! rescue nil
+      end
+    end
+
     # Time zone for Indian market
     config.time_zone = "Asia/Kolkata"
 

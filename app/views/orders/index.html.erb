@@ -1,0 +1,119 @@
+<% content_for :page_title, "Orders" %>
+
+<div class="orders-page">
+  <p class="text-muted mb-3 small">Monitor order status and execution</p>
+
+  <!-- Filters -->
+  <div class="card mb-3">
+    <div class="card-body p-2">
+      <div class="row g-2">
+        <div class="col-md-4">
+          <label class="form-label">Status</label>
+          <div class="btn-group w-100" role="group">
+            <%= link_to orders_path(status: "all", type: @type),
+                class: "btn btn-outline-secondary #{'active' if @status == 'all'}" do %>
+              All
+            <% end %>
+            <%= link_to orders_path(status: "pending", type: @type),
+                class: "btn btn-outline-warning #{'active' if @status == 'pending'}" do %>
+              Pending
+            <% end %>
+            <%= link_to orders_path(status: "placed", type: @type),
+                class: "btn btn-outline-info #{'active' if @status == 'placed'}" do %>
+              Placed
+            <% end %>
+            <%= link_to orders_path(status: "executed", type: @type),
+                class: "btn btn-outline-success #{'active' if @status == 'executed'}" do %>
+              Executed
+            <% end %>
+            <%= link_to orders_path(status: "rejected", type: @type),
+                class: "btn btn-outline-danger #{'active' if @status == 'rejected'}" do %>
+              Rejected
+            <% end %>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Type</label>
+          <div class="btn-group w-100" role="group">
+            <%= link_to orders_path(status: @status, type: "all"),
+                class: "btn btn-outline-primary #{'active' if @type == 'all'}" do %>
+              All
+            <% end %>
+            <%= link_to orders_path(status: @status, type: "buy"),
+                class: "btn btn-outline-success #{'active' if @type == 'buy'}" do %>
+              Buy
+            <% end %>
+            <%= link_to orders_path(status: @status, type: "sell"),
+                class: "btn btn-outline-danger #{'active' if @type == 'sell'}" do %>
+              Sell
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Orders Table -->
+  <div class="card">
+    <div class="card-body p-2">
+      <% if @orders.any? %>
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Type</th>
+                <th>Transaction</th>
+                <th>Quantity</th>
+                <th>Price</th>
+                <th>Order Type</th>
+                <th>Status</th>
+                <th>Filled Qty</th>
+                <th>Average Price</th>
+                <th>Created At</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% @orders.each do |order| %>
+                <tr data-order-id="<%= order.id %>">
+                  <td><strong><%= order.symbol %></strong></td>
+                  <td>
+                    <span class="badge bg-<%= order.buy? ? 'success' : 'danger' %>">
+                      <%= order.transaction_type %>
+                    </span>
+                  </td>
+                  <td><%= order.product_type %></td>
+                  <td><%= order.quantity %></td>
+                  <td>₹<%= number_with_precision(order.price || 0, precision: 2) %></td>
+                  <td><%= order.order_type %></td>
+                  <td>
+                    <% status_class = case order.status
+                         when "executed" then "success"
+                         when "rejected", "failed" then "danger"
+                         when "pending", "placed" then "warning"
+                         else "secondary"
+                       end %>
+                    <span class="badge bg-<%= status_class %>">
+                      <%= order.status.humanize %>
+                    </span>
+                    <% if order.requires_approval? %>
+                      <span class="badge bg-warning">Needs Approval</span>
+                    <% end %>
+                  </td>
+                  <td><%= order.filled_quantity || 0 %></td>
+                  <td>₹<%= number_with_precision(order.average_price || 0, precision: 2) %></td>
+                  <td><%= order.created_at.strftime("%Y-%m-%d %H:%M:%S") %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <div class="text-center py-5">
+          <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+          <p class="text-muted mt-3">No orders found</p>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>
