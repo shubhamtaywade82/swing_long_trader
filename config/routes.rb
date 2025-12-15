@@ -13,22 +13,37 @@ Rails.application.routes.draw do
 
   # Dashboard routes
   root "dashboard#index"
-
   get "dashboard", to: "dashboard#index", as: :dashboard
-  get "positions", to: "dashboard#positions", as: :positions
-  get "portfolio", to: "dashboard#portfolio", as: :portfolio
-  get "signals", to: "dashboard#signals", as: :signals
-  get "ai-evaluations", to: "dashboard#ai_evaluations", as: :ai_evaluations
-  get "orders", to: "dashboard#orders", as: :orders
-  get "monitoring", to: "dashboard#monitoring", as: :monitoring
+
+  # RESTful resources
+  resources :positions, only: [:index]
+  resource :portfolio, only: [:show], controller: "portfolios"
+  resources :signals, only: [:index]
+  resources :orders, only: [:index]
+  get "monitoring", to: "monitoring#index", as: :monitoring
+  resources :ai_evaluations, only: [:index], path: "ai-evaluations"
+
+  # Screeners resource with custom collection actions
+  resources :screeners, only: [] do
+    collection do
+      get :swing
+      get :longterm
+      post :run
+      get :check_results, path: "check"
+      post :start_ltp_updates, path: "ltp/start"
+      post :stop_ltp_updates, path: "ltp/stop"
+    end
+  end
+
+  # Trading mode resource (singleton)
+  resource :trading_mode, only: [], controller: "trading_mode" do
+    collection do
+      post :toggle
+    end
+  end
+
+  # About page
   get "about", to: "about#index", as: :about
-  get "screeners/swing", to: "dashboard#swing_screener", as: :swing_screener
-  get "screeners/longterm", to: "dashboard#longterm_screener", as: :longterm_screener
-  post "screeners/swing/run", to: "dashboard#run_swing_screener", as: :run_swing_screener
-  post "screeners/longterm/run", to: "dashboard#run_longterm_screener", as: :run_longterm_screener
-  get "screeners/check", to: "dashboard#check_screener_results", as: :check_screener_results
-  get "screeners/refresh_ltps", to: "dashboard#refresh_ltps", as: :refresh_ltps
-  post "dashboard/toggle_mode", to: "dashboard#toggle_trading_mode", as: :toggle_trading_mode
 
   # ActionCable for live updates
   mount ActionCable.server => "/cable"

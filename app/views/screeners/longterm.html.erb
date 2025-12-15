@@ -1,4 +1,4 @@
-<% content_for :page_title, "Swing Screener" %>
+<% content_for :page_title, "Long-Term Screener" %>
 
 <style>
   .screener-page { padding: 0.5rem 0; }
@@ -16,11 +16,47 @@
   .screener-table th[data-sort-type="number"], .screener-table td.text-right { text-align: right !important; }
   .nav-tabs { margin-bottom: 0.75rem !important; }
   .tab-content { margin-top: 0.5rem; }
+  
+  /* Real-time LTP update styles */
+  .screener-table tr.ltp-updated {
+    background-color: rgba(13, 110, 253, 0.05);
+    transition: background-color 0.5s ease;
+  }
+  .screener-table td.price-up {
+    color: #198754;
+    font-weight: 600;
+    animation: priceFlash 0.5s ease;
+  }
+  .screener-table td.price-down {
+    color: #dc3545;
+    font-weight: 600;
+    animation: priceFlash 0.5s ease;
+  }
+  @keyframes priceFlash {
+    0% { background-color: rgba(13, 110, 253, 0.2); }
+    100% { background-color: transparent; }
+  }
+  .ltp-status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 5px;
+    background-color: #6c757d;
+  }
+  .ltp-status-indicator.active {
+    background-color: #198754;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
 </style>
 
 <div class="screener-page">
   <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-    <span class="text-muted small">Find swing trading opportunities based on technical indicators</span>
+    <span class="text-muted small">Find long-term investment opportunities based on multi-timeframe analysis</span>
     <div class="d-flex align-items-center gap-2 flex-wrap">
       <% if @last_run %>
         <span class="text-muted small">
@@ -35,11 +71,12 @@
           <% end %>
         </span>
       <% end %>
-      <%= form_with url: run_swing_screener_path, method: :post, local: false, class: "d-inline", data: { controller: "screener" } do |f| %>
+      <%= form_with url: run_screeners_path, method: :post, local: false, class: "d-inline screener-form" do |f| %>
+        <%= f.hidden_field :type, value: "longterm" %>
         <%= f.select :limit, options_for_select([["ALL", ""], ["10", 10], ["20", 20], ["50", 50], ["100", 100], ["200", 200]], @limit || ""), {}, { class: "form-select form-select-sm d-inline-block", style: "width: 80px;", title: "Limit number of results" } %>
-        <%= f.hidden_field :priority, value: "normal", id: "priority_mode" %>
+        <%= f.hidden_field :priority, value: "normal", id: "priority_mode_lt" %>
         <%= f.submit "Run Screener", class: "btn btn-primary btn-sm", data: { screener_target: "runButton" } %>
-        <button type="button" class="btn btn-outline-secondary btn-sm ms-1" onclick="document.getElementById('priority_mode').value='now'; this.form.requestSubmit();" title="Run with high priority (queued immediately, still runs in background worker)">
+        <button type="button" class="btn btn-outline-secondary btn-sm ms-1" onclick="document.getElementById('priority_mode_lt').value='now'; this.form.requestSubmit();" title="Run with high priority (queued immediately, still runs in background worker)">
           <i class="bi bi-play-fill"></i> Run Now
         </button>
       <% end %>
@@ -47,10 +84,7 @@
   </div>
 
   <!-- Status Card -->
-  <div class="alert alert-info mb-3 d-none"
-       data-screener-target="statusCard"
-       id="screener-status-card"
-       style="position: relative; z-index: 1000; margin-top: 1rem;">
+  <div class="alert alert-info mb-3 d-none" data-screener-target="statusCard" id="screener-status-card">
     <div class="d-flex align-items-center justify-content-between">
       <div class="d-flex align-items-center">
         <div class="spinner-border spinner-border-sm me-2" role="status" data-screener-target="spinner">
@@ -123,21 +157,21 @@
         <div class="mb-3 d-flex justify-content-between align-items-center">
           <h5 class="mb-0">Buy Recommendations</h5>
           <div class="btn-group" role="group">
-            <button type="button" class="btn btn-sm btn-outline-primary active" id="show-buy-recommendations" onclick="toggleRecommendationsView('buy')">
+            <button type="button" class="btn btn-sm btn-outline-primary active" id="show-buy-recommendations-lt" onclick="toggleRecommendationsViewLT('buy')">
               <i class="bi bi-check-circle"></i> Buy Only
             </button>
-            <button type="button" class="btn btn-sm btn-outline-success" id="show-bullish" onclick="toggleRecommendationsView('bullish')">
+            <button type="button" class="btn btn-sm btn-outline-success" id="show-bullish-lt" onclick="toggleRecommendationsViewLT('bullish')">
               <i class="bi bi-arrow-up-circle"></i> All Bullish
             </button>
-            <button type="button" class="btn btn-sm btn-outline-warning" id="show-bearish" onclick="toggleRecommendationsView('bearish')">
+            <button type="button" class="btn btn-sm btn-outline-warning" id="show-bearish-lt" onclick="toggleRecommendationsViewLT('bearish')">
               <i class="bi bi-arrow-down-circle"></i> Bearish/Wait
             </button>
           </div>
         </div>
 
-        <div id="recommendations-content">
+        <div id="recommendations-content-lt">
           <% if @recommendations&.any? %>
-            <%= render partial: "screener_table_compact", locals: { candidates: @recommendations, show_recommendation: true, compact_mode: true } %>
+            <%= render partial: "longterm_screener_table_compact", locals: { candidates: @recommendations, show_recommendation: true, compact_mode: true } %>
           <% else %>
             <div class="card">
               <div class="card-body text-center py-5">
@@ -150,9 +184,9 @@
         </div>
 
         <!-- Hidden templates for toggle views -->
-        <div id="buy-recommendations-html" style="display: none;">
+        <div id="buy-recommendations-html-lt" style="display: none;">
           <% if @recommendations&.any? %>
-            <%= render partial: "screener_table_compact", locals: { candidates: @recommendations, show_recommendation: true, compact_mode: true } %>
+            <%= render partial: "longterm_screener_table_compact", locals: { candidates: @recommendations, show_recommendation: true, compact_mode: true } %>
           <% else %>
             <div class="card">
               <div class="card-body text-center py-5">
@@ -164,9 +198,9 @@
           <% end %>
         </div>
 
-        <div id="bullish-stocks-html" style="display: none;">
+        <div id="bullish-stocks-html-lt" style="display: none;">
           <% if @bullish_stocks&.any? %>
-            <%= render partial: "screener_table", locals: { candidates: @bullish_stocks, show_recommendation: true } %>
+            <%= render partial: "longterm_screener_table", locals: { candidates: @bullish_stocks, show_recommendation: true } %>
           <% else %>
             <div class="card">
               <div class="card-body text-center py-5">
@@ -177,9 +211,9 @@
           <% end %>
         </div>
 
-        <div id="bearish-stocks-html" style="display: none;">
+        <div id="bearish-stocks-html-lt" style="display: none;">
           <% if @bearish_stocks&.any? %>
-            <%= render partial: "screener_table", locals: { candidates: @bearish_stocks, show_recommendation: true } %>
+            <%= render partial: "longterm_screener_table", locals: { candidates: @bearish_stocks, show_recommendation: true } %>
           <% else %>
             <div class="card">
               <div class="card-body text-center py-5">
@@ -194,7 +228,7 @@
       <!-- Bullish Stocks Tab -->
       <div class="tab-pane fade" id="bullish" role="tabpanel">
         <% if @bullish_stocks&.any? %>
-          <%= render partial: "screener_table", locals: { candidates: @bullish_stocks, show_recommendation: true } %>
+          <%= render partial: "longterm_screener_table", locals: { candidates: @bullish_stocks, show_recommendation: true } %>
         <% else %>
           <div class="card">
             <div class="card-body text-center py-5">
@@ -208,7 +242,7 @@
       <!-- Bearish Stocks Tab -->
       <div class="tab-pane fade" id="bearish" role="tabpanel">
         <% if @bearish_stocks&.any? %>
-          <%= render partial: "screener_table", locals: { candidates: @bearish_stocks, show_recommendation: true } %>
+          <%= render partial: "longterm_screener_table", locals: { candidates: @bearish_stocks, show_recommendation: true } %>
         <% else %>
           <div class="card">
             <div class="card-body text-center py-5">
@@ -222,7 +256,7 @@
       <!-- Flag Stocks Tab -->
       <div class="tab-pane fade" id="flags" role="tabpanel">
         <% if @flag_stocks&.any? %>
-          <%= render partial: "screener_table", locals: { candidates: @flag_stocks, show_recommendation: true, show_position: true } %>
+          <%= render partial: "longterm_screener_table", locals: { candidates: @flag_stocks, show_recommendation: true, show_position: true } %>
         <% else %>
           <div class="card">
             <div class="card-body text-center py-5">
@@ -235,7 +269,7 @@
 
       <!-- All Results Tab -->
       <div class="tab-pane fade" id="all" role="tabpanel">
-        <%= render partial: "screener_table", locals: { candidates: @candidates, show_recommendation: false } %>
+        <%= render partial: "longterm_screener_table", locals: { candidates: @candidates, show_recommendation: false } %>
       </div>
     </div>
   <% elsif @last_run.nil? %>
@@ -258,7 +292,11 @@
 <script>
   // Simple screener controller for running screeners
   document.addEventListener('DOMContentLoaded', function() {
-    const forms = document.querySelectorAll('form[data-controller="screener"]');
+    // Auto-start LTP updates for screener stocks
+    setTimeout(() => {
+      startLtpUpdates('longterm');
+    }, 2000); // Wait 2 seconds for page to fully load
+    const forms = document.querySelectorAll('form.screener-form');
 
     forms.forEach(form => {
       form.addEventListener('submit', function(e) {
@@ -272,7 +310,6 @@
 
         // Show status card immediately - use multiple methods to ensure visibility
         if (statusCard) {
-
           // Remove d-none class first (Bootstrap utility)
           statusCard.classList.remove('d-none');
           // Then set display with !important via style
@@ -356,7 +393,7 @@
             }
 
             // Check if results are available via API endpoint
-            fetch('<%= check_screener_results_path %>?type=swing', {
+            fetch('<%= check_results_screeners_path %>?type=longterm', {
               method: 'GET',
               headers: {
                 'Accept': 'application/json',
@@ -425,8 +462,8 @@
       });
     });
 
-    // Function to update progressive results display (make it globally accessible)
-    window.updateProgressiveResults = function(candidates, progress) {
+    // Function to update progressive results display
+    function updateProgressiveResults(candidates, progress) {
       const container = document.getElementById('progressive-results');
       if (!container) return;
 
@@ -441,69 +478,126 @@
         container.appendChild(resultsDiv);
       }
 
-      if (!candidates || candidates.length === 0) {
-        resultsDiv.innerHTML = '<div class="alert alert-info">No candidates found yet. Still processing...</div>';
-        return;
-      }
-
       // Build HTML for candidates table
       let html = '<div class="card"><div class="card-body">';
-      html += '<h5 class="card-title"><i class="bi bi-arrow-repeat"></i> Top Candidates (Live - ' + candidates.length + ' found so far)</h5>';
+      html += '<h5 class="card-title">Top Candidates (Live - ' + candidates.length + ' found so far)</h5>';
       html += '<div class="table-responsive"><table class="table table-sm table-hover">';
-      html += '<thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Base</th><th>MTF</th><th>Price</th><th>RSI</th><th>ADX</th><th>Trend</th></tr></thead><tbody>';
+      html += '<thead><tr><th>Rank</th><th>Symbol</th><th>Score</th><th>Price</th><th>Weekly Trend</th><th>Daily Trend</th></tr></thead><tbody>';
 
       candidates.slice(0, 20).forEach((candidate, index) => {
-        const rsi = candidate.indicators?.rsi || candidate.daily_indicators?.rsi || '-';
-        const adx = candidate.indicators?.adx || candidate.daily_indicators?.adx || '-';
-        const price = candidate.indicators?.latest_close || candidate.daily_indicators?.latest_close || 0;
-        const st = candidate.indicators?.supertrend || candidate.weekly_indicators?.supertrend;
-        const trend = st ? (st.direction === 'bullish' ? 'BULL' : 'BEAR') : '-';
-        const baseScore = candidate.base_score || 0;
-        const mtfScore = candidate.mtf_score || 0;
+        const price = candidate.daily_indicators?.latest_close || candidate.weekly_indicators?.latest_close || 0;
+        const weeklySt = candidate.weekly_indicators?.supertrend;
+        const dailySt = candidate.daily_indicators?.supertrend;
+        const weeklyTrend = weeklySt ? (weeklySt.direction === 'bullish' ? 'BULL' : 'BEAR') : '-';
+        const dailyTrend = dailySt ? (dailySt.direction === 'bullish' ? 'BULL' : 'BEAR') : '-';
 
         html += '<tr>';
         html += '<td><strong>#' + (index + 1) + '</strong></td>';
         html += '<td><strong>' + candidate.symbol + '</strong></td>';
         html += '<td><span class="badge bg-' + (candidate.score >= 70 ? 'success' : candidate.score >= 50 ? 'warning' : 'secondary') + '">' + candidate.score.toFixed(1) + '</span></td>';
-        html += '<td>' + baseScore.toFixed(1) + '</td>';
-        html += '<td>' + mtfScore.toFixed(1) + '</td>';
         html += '<td>₹' + price.toFixed(2) + '</td>';
-        html += '<td>' + (rsi !== '-' ? '<span class="badge bg-' + (rsi > 70 ? 'danger' : rsi < 30 ? 'success' : 'info') + '">' + rsi.toFixed(1) + '</span>' : '-') + '</td>';
-        html += '<td>' + (adx !== '-' ? '<span class="badge bg-' + (adx > 25 ? 'success' : 'secondary') + '">' + adx.toFixed(1) + '</span>' : '-') + '</td>';
-        html += '<td><span class="badge bg-' + (trend === 'BULL' ? 'success' : 'secondary') + '">' + trend + '</span></td>';
+        html += '<td><span class="badge bg-' + (weeklyTrend === 'BULL' ? 'success' : 'secondary') + '">' + weeklyTrend + '</span></td>';
+        html += '<td><span class="badge bg-' + (dailyTrend === 'BULL' ? 'success' : 'secondary') + '">' + dailyTrend + '</span></td>';
         html += '</tr>';
       });
 
       html += '</tbody></table></div>';
       if (progress && progress.status === 'running') {
-        const pct = progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
-        html += '<div class="mt-2">';
-        html += '<div class="progress mb-2" style="height: 20px;">';
-        html += '<div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: ' + pct + '%">' + pct + '%</div>';
-        html += '</div>';
-        html += '<small class="text-muted">Processing: ' + progress.processed + '/' + progress.total + ' (' + progress.analyzed + ' analyzed) - Results update in real-time via WebSocket</small>';
-        html += '</div>';
+        html += '<div class="mt-2"><small class="text-muted">Still processing... Results update every 5 seconds</small></div>';
       }
       html += '</div></div>';
 
       resultsDiv.innerHTML = html;
 
-      // Scroll to results if not visible (only first time)
-      if (!resultsDiv.dataset.scrolled) {
-        container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        resultsDiv.dataset.scrolled = 'true';
+      // Scroll to results if not visible
+      container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Function to start LTP updates for screener stocks
+    function startLtpUpdates(screenerType) {
+      // Check if stream is already active (prevent duplicate requests)
+      if (document.querySelector('.ltp-status-indicator.active')) {
+        console.log('LTP updates already active, skipping...');
+        return;
       }
-    };
-
-    // Function to toggle recommendations view
-    window.toggleRecommendationsView = function(view) {
-      const buyBtn = document.getElementById('show-buy-recommendations');
-      const bullishBtn = document.getElementById('show-bullish');
-      const bearishBtn = document.getElementById('show-bearish');
-      const contentDiv = document.getElementById('recommendations-content');
-
-      // Hide all tab panes first
-      document.querySelectorAll('#recommendations-content > div').forEach(div => div.style.display = 'none');
+      
+      // Only start during market hours (9:15 AM - 3:30 PM IST)
+      const now = new Date();
+      const istTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+      const hour = istTime.getHours();
+      const minute = istTime.getMinutes();
+      const day = istTime.getDay(); // 0 = Sunday, 1-5 = Mon-Fri
+      
+      // Check if market is open (Mon-Fri, 9:15 AM - 3:30 PM IST)
+      const isMarketOpen = day >= 1 && day <= 5 && 
+                          ((hour === 9 && minute >= 15) || (hour > 9 && hour < 15) || (hour === 15 && minute <= 30));
+      
+      if (!isMarketOpen) {
+        console.log('Market is closed. LTP updates will start automatically when market opens.');
+        return;
+      }
+      
+      // Get instrument IDs from current screener results
+      const rows = document.querySelectorAll('tr[data-screener-instrument-id]');
+      const instrumentIds = Array.from(rows)
+        .map(row => row.getAttribute('data-screener-instrument-id'))
+        .filter(id => id && id !== 'null')
+        .slice(0, 200); // Limit to 200 stocks
+      
+      if (instrumentIds.length === 0) {
+        console.log('No screener results found. LTP updates will start when results are available.');
+        return;
+      }
+      
+      // Start LTP polling
+      fetch('<%= start_ltp_updates_screeners_path %>', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+          screener_type: screenerType,
+          instrument_ids: instrumentIds.join(',')
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'already_running' || data.status === 'queued') {
+          console.log('LTP updates:', data.message);
+          // Still show indicator if already running
+          if (!document.querySelector('.ltp-status-indicator.active')) {
+            const indicator = document.createElement('span');
+            indicator.className = 'ltp-status-indicator active';
+            indicator.title = 'Real-time LTP updates active';
+            const header = document.querySelector('.page-title') || document.querySelector('h1');
+            if (header) {
+              header.appendChild(indicator);
+            }
+          }
+        } else {
+          console.log('LTP updates started:', data.message);
+          // Add visual indicator
+          const indicator = document.createElement('span');
+          indicator.className = 'ltp-status-indicator active';
+          indicator.title = 'Real-time LTP updates active';
+          const header = document.querySelector('.page-title') || document.querySelector('h1');
+          if (header && !header.querySelector('.ltp-status-indicator')) {
+            header.appendChild(indicator);
+          }
+        }
+      })
+      .catch(error => {
+        console.error('Failed to start LTP updates:', error);
+      });
+    }
+    
+    // Function to toggle recommendations view for long-term screener
+    window.toggleRecommendationsViewLT = function(view) {
+      const buyBtn = document.getElementById('show-buy-recommendations-lt');
+      const bullishBtn = document.getElementById('show-bullish-lt');
+      const bearishBtn = document.getElementById('show-bearish-lt');
+      const contentDiv = document.getElementById('recommendations-content-lt');
 
       // Update button states
       [buyBtn, bullishBtn, bearishBtn].forEach(btn => {
@@ -513,22 +607,19 @@
         if (btn === bearishBtn) btn.classList.add('btn-outline-warning');
       });
 
-      // Show appropriate content by switching to the corresponding tab
+      // Show appropriate content
       if (view === 'buy') {
         buyBtn.classList.add('active', 'btn-primary');
         buyBtn.classList.remove('btn-outline-primary');
-        // Show buy recommendations (default content)
-        contentDiv.innerHTML = document.getElementById('buy-recommendations-html').innerHTML;
+        contentDiv.innerHTML = document.getElementById('buy-recommendations-html-lt').innerHTML;
       } else if (view === 'bullish') {
         bullishBtn.classList.add('active', 'btn-success');
         bullishBtn.classList.remove('btn-outline-success');
-        // Show bullish stocks
-        contentDiv.innerHTML = document.getElementById('bullish-stocks-html').innerHTML;
+        contentDiv.innerHTML = document.getElementById('bullish-stocks-html-lt').innerHTML;
       } else if (view === 'bearish') {
         bearishBtn.classList.add('active', 'btn-warning');
         bearishBtn.classList.remove('btn-outline-warning');
-        // Show bearish stocks
-        contentDiv.innerHTML = document.getElementById('bearish-stocks-html').innerHTML;
+        contentDiv.innerHTML = document.getElementById('bearish-stocks-html-lt').innerHTML;
       }
     };
   });
