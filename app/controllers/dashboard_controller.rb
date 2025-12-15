@@ -429,6 +429,37 @@ class DashboardController < ApplicationController
     }
   end
 
+  def start_ltp_updates
+    screener_type = params[:screener_type] || "swing"
+    instrument_ids = params[:instrument_ids]&.split(",")&.map(&:to_i)
+    symbols = params[:symbols]&.split(",")
+
+    # Start polling job
+    job = MarketHub::LtpPollerJob.perform_later(
+      screener_type: screener_type,
+      instrument_ids: instrument_ids,
+      symbols: symbols,
+    )
+
+    render json: {
+      status: "started",
+      message: "LTP updates started",
+      job_id: job.job_id,
+    }
+  rescue StandardError => e
+    Rails.logger.error("[DashboardController] Failed to start LTP updates: #{e.message}")
+    render json: { status: "error", message: e.message }, status: :unprocessable_content
+  end
+
+  def stop_ltp_updates
+    # Note: In a production system, you'd want to track active jobs and cancel them
+    # For now, jobs will stop automatically when market closes
+    render json: {
+      status: "stopped",
+      message: "LTP updates will stop when market closes",
+    }
+  end
+
   def check_screener_job_status(screener_type)
     return { running: false } unless solid_queue_installed?
 

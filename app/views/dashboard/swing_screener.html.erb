@@ -16,6 +16,42 @@
   .screener-table th[data-sort-type="number"], .screener-table td.text-right { text-align: right !important; }
   .nav-tabs { margin-bottom: 0.75rem !important; }
   .tab-content { margin-top: 0.5rem; }
+  
+  /* Real-time LTP update styles */
+  .screener-table tr.ltp-updated {
+    background-color: rgba(13, 110, 253, 0.05);
+    transition: background-color 0.5s ease;
+  }
+  .screener-table td.price-up {
+    color: #198754;
+    font-weight: 600;
+    animation: priceFlash 0.5s ease;
+  }
+  .screener-table td.price-down {
+    color: #dc3545;
+    font-weight: 600;
+    animation: priceFlash 0.5s ease;
+  }
+  @keyframes priceFlash {
+    0% { background-color: rgba(13, 110, 253, 0.2); }
+    100% { background-color: transparent; }
+  }
+  .ltp-status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 5px;
+    background-color: #6c757d;
+  }
+  .ltp-status-indicator.active {
+    background-color: #198754;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
 </style>
 
 <div class="screener-page">
@@ -258,6 +294,8 @@
 <script>
   // Simple screener controller for running screeners
   document.addEventListener('DOMContentLoaded', function() {
+    // Auto-start LTP updates for screener stocks
+    startLtpUpdates('swing');
     const forms = document.querySelectorAll('form[data-controller="screener"]');
 
     forms.forEach(form => {
@@ -495,6 +533,70 @@
       }
     };
 
+    // Function to start LTP updates for screener stocks
+    function startLtpUpdates(screenerType) {
+      // Only start during market hours (9:15 AM - 3:30 PM IST)
+      const now = new Date();
+      const istTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+      const hour = istTime.getHours();
+      const minute = istTime.getMinutes();
+      const day = istTime.getDay(); // 0 = Sunday, 1-5 = Mon-Fri
+      
+      // Check if market is open (Mon-Fri, 9:15 AM - 3:30 PM IST)
+      const isMarketOpen = day >= 1 && day <= 5 && 
+                          ((hour === 9 && minute >= 15) || (hour > 9 && hour < 15) || (hour === 15 && minute <= 30));
+      
+      if (!isMarketOpen) {
+        console.log('Market is closed. LTP updates will start automatically when market opens.');
+        return;
+      }
+      
+      // Get instrument IDs from current screener results
+      const rows = document.querySelectorAll('tr[data-screener-instrument-id]');
+      const instrumentIds = Array.from(rows)
+        .map(row => row.getAttribute('data-screener-instrument-id'))
+        .filter(id => id && id !== 'null')
+        .slice(0, 200); // Limit to 200 stocks
+      
+      if (instrumentIds.length === 0) {
+        console.log('No screener results found. LTP updates will start when results are available.');
+        return;
+      }
+      
+      // Start LTP polling
+      fetch('<%= start_ltp_updates_path %>', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+          screener_type: screenerType,
+          instrument_ids: instrumentIds.join(',')
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('LTP updates started:', data.message);
+        // Add visual indicator
+        const indicator = document.createElement('span');
+        indicator.className = 'ltp-status-indicator active';
+        indicator.title = 'Real-time LTP updates active';
+        const header = document.querySelector('.page-title') || document.querySelector('h1');
+        if (header && !header.querySelector('.ltp-status-indicator')) {
+          header.appendChild(indicator);
+        }
+      })
+      .catch(error => {
+        console.error('Failed to start LTP updates:', error);
+      });
+    }
+    
+    // Auto-start LTP updates when page loads (if market is open and results exist)
+    setTimeout(() => {
+      startLtpUpdates('swing');
+    }, 2000); // Wait 2 seconds for page to fully load
+    
     // Function to toggle recommendations view
     window.toggleRecommendationsView = function(view) {
       const buyBtn = document.getElementById('show-buy-recommendations');

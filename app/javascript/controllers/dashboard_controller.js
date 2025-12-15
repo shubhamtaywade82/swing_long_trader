@@ -110,7 +110,17 @@ export default class extends Controller {
 
   handleScreenerStream(data) {
     // Handle real-time screener updates via ActionCable
-    if (data.type === "screener_progress") {
+    if (data.type === "screener_ltp_update") {
+      // Update single LTP
+      this.updateScreenerLtp(data.symbol, data.instrument_id, data.ltp);
+    } else if (data.type === "screener_ltp_batch_update") {
+      // Update multiple LTPs at once
+      if (data.updates && Array.isArray(data.updates)) {
+        data.updates.forEach((update) => {
+          this.updateScreenerLtp(update.symbol, update.instrument_id, update.ltp);
+        });
+      }
+    } else if (data.type === "screener_progress") {
       // Update progress display if on screener page
       const statusMessage = document.querySelector(
         '[data-screener-target="statusMessage"]'
@@ -203,7 +213,9 @@ export default class extends Controller {
             data.type === "screener_record_added" ||
             data.type === "ai_evaluation_added" ||
             data.type === "ai_evaluation_filtered" ||
-            data.type === "ai_evaluation_complete"
+            data.type === "ai_evaluation_complete" ||
+            data.type === "screener_ltp_update" ||
+            data.type === "screener_ltp_batch_update"
           ) {
             this.handleScreenerStream(data);
           }
@@ -741,5 +753,50 @@ export default class extends Controller {
         progress.total || 0
       } evaluated, ${progress.evaluated || 0} approved - ${elapsed.toFixed(1)}s elapsed`;
     }
+  }
+
+  updateScreenerLtp(symbol, instrumentId, ltp) {
+    if (!symbol || !ltp) return;
+
+    // Find all rows with this symbol (could be in multiple tables/tabs)
+    const rows = document.querySelectorAll(
+      `tr[data-screener-symbol="${symbol}"], tr[data-screener-instrument-id="${instrumentId}"]`
+    );
+
+    rows.forEach((row) => {
+      // Find the price cell (usually contains ₹ symbol)
+      const priceCells = row.querySelectorAll("td");
+      priceCells.forEach((cell) => {
+        const cellText = cell.textContent.trim();
+        // Check if this cell contains a price (starts with ₹)
+        if (cellText.startsWith("₹")) {
+          const oldPrice = parseFloat(cellText.replace("₹", "").replace(/,/g, ""));
+          const newPrice = parseFloat(ltp);
+
+          // Update the price
+          cell.textContent = `₹${newPrice.toFixed(2)}`;
+
+          // Add visual indicator for price change
+          if (oldPrice && oldPrice !== newPrice) {
+            const changeClass = newPrice > oldPrice ? "price-up" : "price-down";
+            cell.classList.add(changeClass);
+            setTimeout(() => {
+              cell.classList.remove(changeClass);
+            }, 1000);
+          }
+
+          // Update data attribute if present
+          if (row.hasAttribute("data-price")) {
+            row.setAttribute("data-price", newPrice.toFixed(2));
+          }
+        }
+      });
+
+      // Add flash animation to indicate update
+      row.classList.add("ltp-updated");
+      setTimeout(() => {
+        row.classList.remove("ltp-updated");
+      }, 500);
+    });
   }
 }
