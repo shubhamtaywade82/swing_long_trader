@@ -11,15 +11,14 @@ class ApplicationService
   #
   # @param message [String] The message to send
   # @param tag [String, nil] Optional short label like 'SL_HIT', 'TP', etc.
-  # @param domain [Symbol] Domain (:trading or :system), defaults to :trading
   # @return [void]
-  def notify(message, tag: nil, domain: :trading)
+  def notify(message, tag: nil)
     return unless TelegramNotifier.enabled?
 
     context = "[#{self.class.name}]"
     final_message = tag.present? ? "#{context} [#{tag}]\n\n#{message}" : "#{context} #{message}"
 
-    TelegramNotifier.notify(final_message, domain: domain)
+    TelegramNotifier.send_message(final_message)
   rescue StandardError => e
     Rails.logger.error("[ApplicationService] Telegram Notify Failed: #{e.class} - #{e.message}")
   end

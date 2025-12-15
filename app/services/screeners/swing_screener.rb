@@ -426,12 +426,28 @@ module Screeners
       # Generate trade plan for READY setups only (without portfolio for now)
       # Portfolio-aware quantity calculation will be done in later layers
       if setup_result[:status] == Screeners::SetupDetector::READY
+        # Get current LTP for more accurate entry price calculation
+        # Prefer real-time LTP from Redis cache (via LtpAccessor), fallback to metadata
+        current_ltp = nil
+        if candidate[:instrument_id]
+          instrument = Instrument.find_by(id: candidate[:instrument_id])
+          if instrument
+            # Use current_ltp method from LtpAccessor concern (fetches from Redis cache)
+            current_ltp = instrument.current_ltp
+            # Fallback to metadata LTP if cache miss
+            current_ltp ||= candidate.dig(:metadata, :ltp)
+          end
+        end
+        # Final fallback to metadata
+        current_ltp ||= candidate.dig(:metadata, :ltp)
+
         trade_plan = Screeners::TradePlanBuilder.call(
           candidate: candidate,
           daily_series: daily_series,
           indicators: indicators,
           setup_status: setup_result,
           portfolio: nil, # Will use default calculation, enhanced later with portfolio
+          current_ltp: current_ltp,
         )
 
         if trade_plan

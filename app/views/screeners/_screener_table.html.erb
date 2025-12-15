@@ -58,8 +58,18 @@
             <% ema_trend = (ema20 && ema50) ? (ema20 > ema50 ? "BULL" : "BEAR") : "" %>
             <% macd = indicators[:macd] || indicators["macd"] || candidate.dig(:daily_indicators, :macd) %>
             <% macd_trend = (macd.is_a?(Array) && macd.size >= 2) ? (macd[0] > macd[1] ? "BULL" : "BEAR") : "" %>
+            <% 
+              instrument_key = nil
+              if candidate[:instrument_id]
+                instrument = Instrument.find_by(id: candidate[:instrument_id])
+                instrument_key = instrument ? "#{instrument.exchange_segment}:#{instrument.security_id}" : nil
+              end
+            %>
             <tr data-screener-symbol="<%= candidate[:symbol] %>"
                 data-screener-instrument-id="<%= candidate[:instrument_id] %>"
+                <% if instrument_key %>
+                  data-instrument-key="<%= instrument_key %>"
+                <% end %>
                 data-rank="<%= index + 1 %>"
                 data-symbol="<%= candidate[:symbol] %>"
                 data-score="<%= candidate[:score] || 0 %>"
@@ -104,7 +114,7 @@
                   <%= setup_status.gsub('_', ' ') %>
                 </span>
               </td>
-              <td class="text-right" data-price-cell="true">₹<%= number_with_precision(latest_close, precision: 2) %></td>
+              <td class="text-right js-ltp-cell" data-price-cell="true" data-instrument-key="<%= instrument_key %>">₹<%= number_with_precision(latest_close, precision: 2) %></td>
               <% if has_trade_plan %>
                 <% trade_plan = candidate[:trade_plan] %>
                 <% if trade_plan %>

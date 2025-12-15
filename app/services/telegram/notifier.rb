@@ -79,7 +79,7 @@ module Telegram
       return unless enabled?
 
       message = AlertFormatter.format_error_alert(error_message, context: context)
-      send_message(message, domain: :system)
+      send_message(message)
     rescue StandardError => e
       Rails.logger.error("[Telegram::Notifier] Failed to send error alert: #{e.message}")
     end
@@ -90,10 +90,10 @@ module Telegram
       ::TelegramNotifier.enabled?
     end
 
-    def send_message(text, domain: :trading)
+    def send_message(text)
       return unless enabled? && text.present?
 
-      ::TelegramNotifier.notify(text, domain: domain, parse_mode: "HTML")
+      ::TelegramNotifier.send_message(text, parse_mode: "HTML")
     end
   end
 end

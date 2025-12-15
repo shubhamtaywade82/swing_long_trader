@@ -50,6 +50,15 @@ Rails.application.routes.draw do
   # ActionCable for live updates
   mount ActionCable.server => "/cable"
 
+  # API routes
+  namespace :api do
+    namespace :v1 do
+      post "current_prices", to: "current_prices#index"
+      get "current_prices", to: "current_prices#index" # For small requests
+      get "health/market_stream", to: "health#market_stream"
+    end
+  end
+
   # Admin routes for Solid Queue monitoring
   namespace :admin do
     resources :solid_queue, only: %i[index show] do

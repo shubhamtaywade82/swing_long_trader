@@ -8,22 +8,24 @@ module Screeners
     MIN_RR = 2.0 # Minimum risk-reward ratio
     DEFAULT_TP_MULTIPLE = 2.5 # Target = Entry + (Risk * 2.5)
 
-    def self.call(candidate:, daily_series:, indicators:, setup_status:, portfolio: nil)
+    def self.call(candidate:, daily_series:, indicators:, setup_status:, portfolio: nil, current_ltp: nil)
       new(
         candidate: candidate,
         daily_series: daily_series,
         indicators: indicators,
         setup_status: setup_status,
         portfolio: portfolio,
+        current_ltp: current_ltp,
       ).call
     end
 
-    def initialize(candidate:, daily_series:, indicators:, setup_status:, portfolio: nil) # rubocop:disable Lint/MissingSuper
+    def initialize(candidate:, daily_series:, indicators:, setup_status:, portfolio: nil, current_ltp: nil) # rubocop:disable Lint/MissingSuper
       @candidate = candidate
       @daily_series = daily_series
       @indicators = indicators
       @setup_status = setup_status
       @portfolio = portfolio
+      @current_ltp = current_ltp
       @config = AlgoConfig.fetch[:swing_trading] || {}
     end
 
@@ -38,8 +40,12 @@ module Screeners
 
       return nil unless latest_close && ema20 && atr
 
-      # Calculate entry price
-      entry_price = calculate_entry_price(latest_close, ema20, ema50)
+      # Use current LTP if available and reasonable, otherwise use latest_close
+      # Current LTP is more accurate for entry price calculation
+      current_price = get_current_price(latest_close)
+
+      # Calculate entry price using current price
+      entry_price = calculate_entry_price(current_price, ema20, ema50)
 
       # Calculate stop loss
       stop_loss = calculate_stop_loss(entry_price, ema20, ema50, atr)
@@ -71,11 +77,38 @@ module Screeners
         risk_amount: quantity_result[:risk_amount],
         max_capital_pct: quantity_result[:max_capital_pct],
         entry_zone: "#{entry_price.round(2)} - #{(entry_price * 1.02).round(2)}",
-        setup_type: determine_setup_type(entry_price, ema20, latest_close),
+        setup_type: determine_setup_type(entry_price, ema20, current_price),
       }
     end
 
     private
+
+    # Get current price: prefer current LTP if available and reasonable, otherwise use latest_close
+    def get_current_price(latest_close)
+      return latest_close unless @current_ltp&.positive?
+
+      # Use current LTP if it's within 50% of latest_close (to avoid using obviously incorrect data)
+      # This allows for legitimate market movements while filtering out data errors
+      price_diff_pct = ((@current_ltp - latest_close) / latest_close * 100).abs
+      if price_diff_pct <= 50.0
+        # Log if difference is significant but still reasonable (for monitoring)
+        if price_diff_pct > 10.0
+          Rails.logger.info(
+            "[Screeners::TradePlanBuilder] Using current LTP (#{@current_ltp}) which differs " \
+            "#{price_diff_pct.round(2)}% from latest_close (#{latest_close}) for entry calculation",
+          )
+        end
+        @current_ltp
+      else
+        # If LTP is extremely far from latest_close, it might be stale or incorrect
+        # Log warning and use latest_close
+        Rails.logger.warn(
+          "[Screeners::TradePlanBuilder] Current LTP (#{@current_ltp}) differs too much " \
+          "(#{price_diff_pct.round(2)}%) from latest_close (#{latest_close}), using latest_close for entry calculation",
+        )
+        latest_close
+      end
+    end
 
     def calculate_entry_price(latest_close, ema20, _ema50)
       # If price is near EMA20, use EMA20 as entry

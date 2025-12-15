@@ -45,21 +45,13 @@ class ApplicationJob < ActiveJob::Base
     log_error("Job failed: #{self.class.name} - #{error.class}: #{error.message}")
     log_error("Backtrace: #{error.backtrace.first(5).join("\n")}")
 
-    # Alert to Telegram system channel if enabled
-    begin
-      TelegramNotifier.notify(
-        <<~MSG,
-          🚨 JOB FAILURE
-          Job: #{self.class.name}
-          Error: #{error.class}
-          Message: #{error.message}
-          Retries remaining: #{executions}
-        MSG
-        domain: :system
-      )
-    rescue StandardError => e
-      # Don't let Telegram failures break job retry mechanism
-      Rails.logger.error("[ApplicationJob] Failed to send Telegram alert: #{e.class} - #{e.message}")
+    # Alert to Telegram if enabled
+    if TelegramNotifier.enabled?
+      message = "❌ Job Failed: #{self.class.name}\n\n" \
+                "Error: #{error.class}\n" \
+                "Message: #{error.message}\n\n" \
+                "Retries remaining: #{executions}"
+      TelegramNotifier.send_message(message)
     end
 
     # Re-raise to trigger retry mechanism

@@ -57,6 +57,24 @@ module Dhan
     def validate_order
       return { success: false, error: "Invalid instrument" } if @instrument.blank?
       return { success: false, error: "Invalid quantity" } if @quantity <= 0
+      
+      # POLICY: MARKET orders are not allowed - always use LIMIT orders
+      if @order_type == "MARKET"
+        Rails.logger.warn("[Dhan::Orders] MARKET order requested, converting to LIMIT order")
+        @order_type = "LIMIT"
+        
+        # For MARKET orders, use current LTP as limit price
+        if @price.nil?
+          instrument_ltp = @instrument.current_ltp
+          if instrument_ltp&.positive?
+            @price = instrument_ltp
+            Rails.logger.info("[Dhan::Orders] Using current LTP #{@price} as LIMIT price")
+          else
+            return { success: false, error: "Cannot convert MARKET to LIMIT: LTP not available and no price provided" }
+          end
+        end
+      end
+      
       return { success: false, error: "Price required for LIMIT orders" } if @order_type == "LIMIT" && @price.nil?
       return { success: false, error: "Trigger price required for SL orders" } if %w[SL
                                                                                      SL-M].include?(@order_type) && @trigger_price.nil?

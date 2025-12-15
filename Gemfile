@@ -32,6 +32,9 @@ gem "solid_cable"
 gem "solid_cache"
 gem "solid_queue"
 
+# Redis for high-performance LTP caching (optional - falls back to Rails.cache if not available)
+gem "redis", "~> 5.0", require: false
+
 # Core dependencies for trading system
 gem "concurrent-ruby"
 gem "ruby-technical-analysis"
