@@ -98,6 +98,8 @@ module MarketHub
               # Refresh cache every 30 seconds to indicate stream is alive
               if Time.current - last_refresh >= 30
                 refresh_stream_heartbeat(cache_key)
+                # Also update market stream heartbeat for health check
+                redis_client.setex("market_stream:heartbeat", 60, Time.current.to_i)
                 last_refresh = Time.current
               end
             end
@@ -351,6 +353,18 @@ module MarketHub
     # Mark stream as stopped
     def mark_stream_stopped(stream_key, cache_key)
       Rails.cache.delete(cache_key)
+    end
+
+    def redis_client
+      @redis_client ||= begin
+        if defined?(Redis) && ENV["REDIS_URL"].present?
+          Redis.new(url: ENV["REDIS_URL"])
+        elsif Rails.cache.respond_to?(:redis)
+          Rails.cache.redis
+        else
+          Rails.cache
+        end
+      end
     end
   end
 end

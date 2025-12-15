@@ -6,11 +6,12 @@ This document describes the implementation of the real-time Last Traded Price (L
 
 The system consists of three main components:
 
-1. **WebSocket Streaming Service** (`MarketData::StreamingService`)
-   - Runs as a standalone process (separate from Puma)
+1. **WebSocket Streaming Service** (Existing `MarketHub::WebsocketTickStreamerJob` + `MarketHub::WebsocketTickStreamer`)
+   - Runs as a SolidQueue job (in worker process)
    - Connects to DhanHQ WebSocket API
    - Subscribes to instruments from active screener
-   - Streams LTPs into Redis cache
+   - **NEW:** Caches LTPs to Redis in addition to ActionCable broadcasts
+   - Streams LTPs into Redis cache for fast API reads
 
 2. **High-Performance Read API** (`Api::V1::CurrentPricesController`)
    - Fast endpoint: `GET /api/v1/current_prices?keys=NSE_EQ:1333,NSE_EQ:11536`
@@ -26,18 +27,24 @@ The system consists of three main components:
 
 ### 1. Streaming Service
 
-**File:** `app/services/market_data/streaming_service.rb`
+**Files:** 
+- `app/jobs/market_hub/websocket_tick_streamer_job.rb` - SolidQueue job
+- `app/services/market_hub/websocket_tick_streamer.rb` - WebSocket service (modified)
 
 - Connects to DhanHQ WebSocket using `DhanHQ::WS::Client`
 - Subscribes to instruments from latest screener results
-- Caches LTPs in Redis with key format: `ltp:SEGMENT:SECURITY_ID`
-- Refreshes subscription list every 5 minutes
-- Sends heartbeat every 30 seconds
+- **NEW:** Caches LTPs in Redis with key format: `ltp:SEGMENT:SECURITY_ID`
+- Also broadcasts to ActionCable for real-time UI updates
+- Runs in SolidQueue worker process (not standalone)
 
 **Usage:**
+The service is automatically started via the screener controller when LTP updates are requested:
 ```ruby
-service = MarketData::StreamingService.new
-service.start  # Blocks until market closes or stopped
+MarketHub::WebsocketTickStreamerJob.perform_later(
+  screener_type: "swing",
+  instrument_ids: [1, 2, 3],
+  symbols: ["RELIANCE", "TCS"]
+)
 ```
 
 ### 2. API Endpoint
@@ -106,26 +113,28 @@ export DHANHQ_WS_ENABLED=true
 
 ### 4. Start the Streaming Service
 
-**Development (Foreman):**
-The `Procfile` includes:
-```
-market_stream: bundle exec rake market:start_stream
-```
+The WebSocket service runs automatically via SolidQueue when LTP updates are requested through the screener UI.
 
-Start with:
+**Ensure SolidQueue Worker is Running:**
 ```bash
+# Development
+bundle exec rails solid_queue:start
+
+# Or via Foreman (Procfile includes worker process)
 foreman start
 ```
 
-**Production (Systemd/Supervisor):**
-Create a systemd service or supervisor config to run:
-```bash
-bundle exec rake market:start_stream
-```
+**Start LTP Updates via UI:**
+- Navigate to screener page (`/screeners/swing` or `/screeners/longterm`)
+- The page automatically starts LTP updates when loaded (if market is open)
 
-**Manual Start:**
-```bash
-bundle exec rake market:start_stream
+**Or Start Programmatically:**
+```ruby
+MarketHub::WebsocketTickStreamerJob.perform_later(
+  screener_type: "swing",
+  instrument_ids: instrument_ids,
+  symbols: symbols
+)
 ```
 
 ### 5. Verify Service is Running
@@ -149,12 +158,13 @@ Expected response:
 
 ### Starting the Service
 
-The service automatically:
-1. Loads instruments from latest screener results
+The service is started via SolidQueue job and automatically:
+1. Loads instruments from latest screener results (or provided IDs/symbols)
 2. Connects to DhanHQ WebSocket
 3. Subscribes to all instruments
-4. Caches LTPs in Redis as they arrive
-5. Refreshes subscription list every 5 minutes
+4. **NEW:** Caches LTPs in Redis as they arrive (for API reads)
+5. Broadcasts to ActionCable (for real-time UI updates)
+6. Maintains connection until market closes
 
 ### Frontend
 
@@ -192,11 +202,11 @@ curl "http://localhost:3000/api/v1/current_prices?keys=NSE_EQ:1333,NSE_EQ:11536"
 
 ### Service Configuration
 
-**File:** `app/services/market_data/streaming_service.rb`
+**File:** `app/services/market_hub/websocket_tick_streamer.rb`
 
-- `LTP_CACHE_TTL = 30.seconds` - LTP cache expiration
-- `SUBSCRIPTION_REFRESH_INTERVAL = 5.minutes` - How often to refresh instrument list
-- `HEARTBEAT_INTERVAL = 30.seconds` - Heartbeat frequency
+- LTP cache TTL: 30 seconds (set in `handle_tick` method)
+- Redis key format: `ltp:SEGMENT:SECURITY_ID`
+- Heartbeat: Updated every 30 seconds via `WebsocketTickStreamerJob`
 
 ### Frontend Configuration
 
