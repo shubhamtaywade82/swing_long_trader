@@ -29,7 +29,8 @@ class ApplicationController < ActionController::Base
 
   def determine_layout
     # Use dashboard layout for dashboard-related controllers
-    if %w[dashboard positions portfolios signals orders monitoring screeners ai_evaluations].include?(controller_name)
+    if %w[dashboard positions portfolios signals orders monitoring screeners ai_evaluations
+          about].include?(controller_name)
       "dashboard"
     else
       "application"
@@ -54,4 +55,3 @@ class ApplicationController < ActionController::Base
   #   # For now, allow all requests
   # end
 end
-

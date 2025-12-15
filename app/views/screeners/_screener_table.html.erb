@@ -104,7 +104,7 @@
                   <%= setup_status.gsub('_', ' ') %>
                 </span>
               </td>
-              <td class="text-right">₹<%= number_with_precision(latest_close, precision: 2) %></td>
+              <td class="text-right" data-price-cell="true">₹<%= number_with_precision(latest_close, precision: 2) %></td>
               <% if has_trade_plan %>
                 <% trade_plan = candidate[:trade_plan] %>
                 <% if trade_plan %>

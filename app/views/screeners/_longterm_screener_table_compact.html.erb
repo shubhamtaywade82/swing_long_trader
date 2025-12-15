@@ -14,7 +14,8 @@
               <th class="sortable" data-sort="symbol" data-sort-type="string">Symbol</th>
               <th class="sortable text-right" data-sort="score" data-sort-type="number">Score</th>
               <th class="sortable" data-sort="setup_status" data-sort-type="string">Status</th>
-              <th class="sortable text-right" data-sort="price" data-sort-type="number">Accumulation Plan</th>
+              <th class="sortable text-right" data-sort="price" data-sort-type="number">Price</th>
+              <th class="sortable text-right" data-sort="buy_zone" data-sort-type="number">Accumulation Plan</th>
               <th class="sortable text-right" data-sort="allocation" data-sort-type="number">Allocation</th>
               <th class="sortable text-right" data-sort="horizon" data-sort-type="number">Horizon</th>
               <th>
@@ -39,6 +40,7 @@
                   data-setup-status="<%= setup_status %>"
                   data-price="<%= price %>"
                   <% if accumulation_plan %>
+                    data-buy-zone="<%= accumulation_plan[:buy_zone] || 0 %>"
                     data-allocation="<%= accumulation_plan[:allocation_pct] || 0 %>"
                     data-horizon="<%= accumulation_plan[:time_horizon] || 0 %>"
                   <% end %>>
@@ -59,6 +61,9 @@
                   <span class="badge bg-<%= setup_class %>" title="<%= candidate[:setup_reason] || '' %>">
                     <%= setup_status.gsub('_', ' ') %>
                   </span>
+                </td>
+                <td class="text-right" data-price-cell="true">
+                  <strong>₹<%= number_with_precision(price, precision: 2) %></strong>
                 </td>
                 <td class="text-right">
                   <% if accumulation_plan %>

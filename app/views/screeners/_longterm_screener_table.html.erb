@@ -85,7 +85,7 @@
               </td>
               <td class="text-right tech-col" style="display: none;"><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
               <td class="text-right tech-col" style="display: none;"><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
-              <td class="text-right">₹<%= number_with_precision(price, precision: 2) %></td>
+              <td class="text-right" data-price-cell="true">₹<%= number_with_precision(price, precision: 2) %></td>
               <% if has_accumulation_plan %>
                 <% accumulation_plan = candidate[:accumulation_plan] %>
                 <% if accumulation_plan %>
