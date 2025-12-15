@@ -12,7 +12,7 @@ class ScreenersController < ApplicationController
   CACHE_FALLBACK_DAYS = 7
   WEBSOCKET_JOB_LOOKBACK_MINUTES = 10
 
-  before_action :set_screener_type, only: [:run, :check_results]
+  before_action :set_screener_type, only: %i[run check_results]
 
   # @api public
   # Fetches and displays swing screener results
@@ -133,6 +133,84 @@ class ScreenersController < ApplicationController
   end
 
   # @api public
+  # Checks the status of WebSocket LTP updates
+  # @return [JSON] WebSocket stream status
+  def websocket_status
+    screener_type = params[:screener_type] || "swing"
+    instrument_ids = parse_instrument_ids(params[:instrument_ids])
+    symbols = parse_symbols(params[:symbols])
+
+    stream_key = build_stream_key(screener_type, instrument_ids, symbols)
+    cache_key = "websocket_stream:#{stream_key}"
+
+    # Check cache for stream status
+    cache_data = Rails.cache.read(cache_key)
+    stream_running = websocket_stream_running?(stream_key)
+
+    # Check for existing job
+    existing_job = find_existing_websocket_job(screener_type, instrument_ids, symbols)
+
+    # Check if WebSocket is enabled
+    ws_enabled = websocket_available?
+
+    render json: {
+      websocket_enabled: ws_enabled,
+      stream_key: stream_key,
+      stream_running: stream_running,
+      cache_data: cache_data,
+      existing_job: if existing_job
+                      {
+                        id: existing_job.id,
+                        class_name: existing_job.class_name,
+                        created_at: existing_job.created_at&.iso8601,
+                        finished_at: existing_job.finished_at&.iso8601,
+                        scheduled_at: existing_job.scheduled_at&.iso8601,
+                      }
+                    else
+                      nil
+                    end,
+      market_open: MarketHours::Checker.market_open?,
+      timestamp: Time.current.iso8601,
+    }
+  end
+
+  # @api public
+  # Test ActionCable broadcast (for debugging)
+  # @return [JSON] Test result
+  def test_broadcast
+    symbol = params[:symbol] || "TEST"
+    instrument_id = params[:instrument_id] || 999
+    ltp = params[:ltp] || 1000.0
+
+    # Broadcast test message
+    ActionCable.server.broadcast(
+      "dashboard_updates",
+      {
+        type: "screener_ltp_update",
+        symbol: symbol,
+        instrument_id: instrument_id,
+        ltp: ltp.to_f,
+        timestamp: Time.current.iso8601,
+        source: "test",
+      },
+    )
+
+    Rails.logger.info(
+      "[ScreenersController] Test broadcast sent: #{symbol} (#{instrument_id}) = ₹#{ltp}",
+    )
+
+    render json: {
+      status: "sent",
+      message: "Test broadcast sent",
+      data: {
+        symbol: symbol,
+        instrument_id: instrument_id,
+        ltp: ltp,
+      },
+    }
+  end
+
+  # @api public
   # Starts real-time LTP (Last Traded Price) updates for screener stocks
   # @param [String] screener_type Type of screener: "swing" or "longterm"
   # @param [String] instrument_ids Comma-separated list of instrument IDs
@@ -140,19 +218,24 @@ class ScreenersController < ApplicationController
   # @param [String] websocket Whether to use WebSocket (true) or polling (false)
   # @return [JSON] Status of LTP update stream
   def start_ltp_updates
-    ltp_params = params.permit(:screener_type, :instrument_ids, :symbols, :websocket)
-    screener_type = validate_screener_type(ltp_params[:screener_type])
-    instrument_ids = parse_instrument_ids(ltp_params[:instrument_ids])
-    symbols = parse_symbols(ltp_params[:symbols])
+    # Permit both top-level params and nested screener params (Rails may wrap them)
+    ltp_params = params.permit(:screener_type, :instrument_ids, :symbols, :websocket,
+                               screener: %i[screener_type instrument_ids symbols websocket])
+
+    # Use top-level params first, fallback to nested screener params
+    screener_type = validate_screener_type(ltp_params[:screener_type] || ltp_params.dig(:screener, :screener_type))
+    instrument_ids = parse_instrument_ids(ltp_params[:instrument_ids] || ltp_params.dig(:screener, :instrument_ids))
+    symbols = parse_symbols(ltp_params[:symbols] || ltp_params.dig(:screener, :symbols))
+    websocket_param = ltp_params[:websocket] || ltp_params.dig(:screener, :websocket)
 
     # Validate at least one identifier provided
     unless instrument_ids.any? || symbols.any?
       return render json: {
         error: "Must provide instrument_ids or symbols",
-      }, status: :unprocessable_entity
+      }, status: :unprocessable_content
     end
 
-    use_websocket = ltp_params[:websocket] == "true" || ENV["DHANHQ_WS_ENABLED"] == "true"
+    use_websocket = websocket_param == "true" || ENV["DHANHQ_WS_ENABLED"] == "true"
 
     if use_websocket && websocket_available?
       stream_key = build_stream_key(screener_type, instrument_ids, symbols)
@@ -162,7 +245,7 @@ class ScreenersController < ApplicationController
 
       # Try to acquire advisory lock (non-blocking)
       lock_result = ActiveRecord::Base.connection.execute(
-        "SELECT pg_try_advisory_lock(#{lock_key}) AS acquired"
+        "SELECT pg_try_advisory_lock(#{lock_key}) AS acquired",
       )
       lock_acquired = lock_result.first["acquired"]
 
@@ -359,12 +442,12 @@ class ScreenersController < ApplicationController
 
     # Check running jobs (claimed executions)
     running_execution = SolidQueue::ClaimedExecution
-                       .joins(:job)
-                       .where("solid_queue_jobs.class_name LIKE ?", "%WebsocketTickStreamerJob%")
-                       .where("solid_queue_jobs.finished_at IS NULL")
-                       .where("solid_queue_jobs.created_at > ?", WEBSOCKET_JOB_LOOKBACK_MINUTES.minutes.ago)
-                       .order("solid_queue_jobs.created_at DESC")
-                       .first
+                        .joins(:job)
+                        .where("solid_queue_jobs.class_name LIKE ?", "%WebsocketTickStreamerJob%")
+                        .where("solid_queue_jobs.finished_at IS NULL")
+                        .where("solid_queue_jobs.created_at > ?", WEBSOCKET_JOB_LOOKBACK_MINUTES.minutes.ago)
+                        .order("solid_queue_jobs.created_at DESC")
+                        .first
 
     running_execution&.job
   end
@@ -476,9 +559,7 @@ class ScreenersController < ApplicationController
       end
 
       # Add to recommendations if actionable
-      if actionable_candidate?(candidate, recommendation)
-        @recommendations << candidate_with_rec
-      end
+      @recommendations << candidate_with_rec if actionable_candidate?(candidate, recommendation)
     end
   end
 

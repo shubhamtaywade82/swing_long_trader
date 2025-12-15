@@ -32,6 +32,8 @@ Rails.application.routes.draw do
       get :check_results, path: "check"
       post :start_ltp_updates, path: "ltp/start"
       post :stop_ltp_updates, path: "ltp/stop"
+      get :websocket_status, path: "websocket/status"
+      post :test_broadcast, path: "websocket/test"
     end
   end
 
