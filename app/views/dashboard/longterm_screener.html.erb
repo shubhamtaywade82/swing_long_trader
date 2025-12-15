@@ -514,6 +514,12 @@
 
     // Function to start LTP updates for screener stocks
     function startLtpUpdates(screenerType) {
+      // Check if stream is already active (prevent duplicate requests)
+      if (document.querySelector('.ltp-status-indicator.active')) {
+        console.log('LTP updates already active, skipping...');
+        return;
+      }
+      
       // Only start during market hours (9:15 AM - 3:30 PM IST)
       const now = new Date();
       const istTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
@@ -556,14 +562,28 @@
       })
       .then(response => response.json())
       .then(data => {
-        console.log('LTP updates started:', data.message);
-        // Add visual indicator
-        const indicator = document.createElement('span');
-        indicator.className = 'ltp-status-indicator active';
-        indicator.title = 'Real-time LTP updates active';
-        const header = document.querySelector('.page-title') || document.querySelector('h1');
-        if (header && !header.querySelector('.ltp-status-indicator')) {
-          header.appendChild(indicator);
+        if (data.status === 'already_running' || data.status === 'queued') {
+          console.log('LTP updates:', data.message);
+          // Still show indicator if already running
+          if (!document.querySelector('.ltp-status-indicator.active')) {
+            const indicator = document.createElement('span');
+            indicator.className = 'ltp-status-indicator active';
+            indicator.title = 'Real-time LTP updates active';
+            const header = document.querySelector('.page-title') || document.querySelector('h1');
+            if (header) {
+              header.appendChild(indicator);
+            }
+          }
+        } else {
+          console.log('LTP updates started:', data.message);
+          // Add visual indicator
+          const indicator = document.createElement('span');
+          indicator.className = 'ltp-status-indicator active';
+          indicator.title = 'Real-time LTP updates active';
+          const header = document.querySelector('.page-title') || document.querySelector('h1');
+          if (header && !header.querySelector('.ltp-status-indicator')) {
+            header.appendChild(indicator);
+          }
         }
       })
       .catch(error => {

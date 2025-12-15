@@ -225,14 +225,42 @@ Default: 50 instruments per batch (configurable in `LtpBroadcaster::BATCH_SIZE`)
 | **Setup** | Simple (default) | Requires WebSocket config |
 | **Reliability** | High (stateless) | Medium (requires reconnection logic) |
 
+## Improvements Made
+
+### ✅ Cross-Process Thread Tracking
+- Uses Rails.cache (SolidCache) for cross-process stream tracking
+- Heartbeat mechanism (refreshed every 30 seconds)
+- TTL-based expiration for stale streams
+- Works across multiple worker processes
+
+### ✅ Job Deduplication
+- Frontend checks prevent duplicate API calls
+- Controller checks for existing jobs/streams before enqueueing
+- Returns appropriate status (`already_running`, `queued`)
+- Prevents duplicate threads within same process
+
+### ✅ Health Monitoring
+- `WebsocketHealthCheckJob` runs every 5 minutes during market hours
+- Automatically cleans up stale streams
+- Monitors active stream count
+- Logs health status
+
+### ✅ Improved Error Handling
+- Graceful thread shutdown
+- Automatic retry on failure
+- Proper cleanup in ensure blocks
+- Cross-process status checking
+
 ## Future Enhancements
 
 1. ✅ **WebSocket Support**: Implemented - can be enabled via config
-2. **Caching**: Cache LTPs to reduce API calls (polling mode)
-3. **Selective Updates**: Only update visible rows
-4. **Price Alerts**: Add alerts for significant price movements
-5. **Historical Tracking**: Track price changes over time
-6. **Hybrid Mode**: Use WebSocket when available, fallback to polling
+2. ✅ **Cross-Process Tracking**: Implemented using Rails.cache
+3. ✅ **Job Deduplication**: Implemented with multi-layer checks
+4. ✅ **Health Monitoring**: Implemented with periodic cleanup
+5. **Selective Updates**: Only update visible rows (performance optimization)
+6. **Price Alerts**: Add alerts for significant price movements
+7. **Historical Tracking**: Track price changes over time
+8. **Hybrid Mode**: Use WebSocket when available, fallback to polling
 
 ## Testing
 

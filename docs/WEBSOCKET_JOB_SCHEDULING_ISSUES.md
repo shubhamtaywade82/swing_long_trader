@@ -140,11 +140,71 @@ def mark_thread_stopped(stream_key)
 end
 ```
 
-## Recommended Fix
+## ✅ Implemented Solutions
 
-Combine multiple solutions:
+### 1. Frontend Deduplication ✅
+- Checks if indicator exists before calling API
+- Prevents duplicate requests on page refresh
 
-1. **Frontend**: Check if indicator exists before calling API
-2. **Controller**: Check if job already queued/running
-3. **Job**: Use database lock + Redis for thread tracking
-4. **Thread**: Proper cleanup on stop
+### 2. Controller-Level Checks ✅
+- Checks if stream is running (cross-process via cache)
+- Checks if job is already queued/running in SolidQueue
+- Returns appropriate status (`already_running`, `queued`)
+
+### 3. Cross-Process Thread Tracking ✅
+- Uses Rails.cache (SolidCache) for cross-process tracking
+- Stores stream status with heartbeat mechanism
+- TTL-based expiration for stale streams
+
+### 4. Health Check Job ✅
+- Periodic cleanup of stale streams
+- Monitoring and logging
+- Runs every 5 minutes during market hours
+
+### 5. Improved Thread Management ✅
+- Better cleanup on stop
+- Graceful shutdown support
+- Thread status monitoring
+
+## Implementation Details
+
+### Cross-Process Tracking
+
+```ruby
+# Stream status stored in cache
+cache_key = "websocket_stream:#{stream_key}"
+Rails.cache.write(cache_key, {
+  status: "running",
+  process_id: Process.pid,
+  started_at: Time.current.iso8601,
+  heartbeat: Time.current.iso8601,  # Refreshed every 30 seconds
+}, expires_in: 1.hour)
+```
+
+### Health Check
+
+```ruby
+# Runs every 5 minutes during market hours
+MarketHub::WebsocketHealthCheckJob
+- Cleans up stale threads
+- Monitors active streams
+- Logs health status
+```
+
+### Stream Status Check
+
+```ruby
+# Checks both in-process threads and cache
+def stream_running?(stream_key, cache_key)
+  # 1. Check in-process thread (fast)
+  return true if @@active_threads[key]&.alive?
+  
+  # 2. Check cache (cross-process)
+  cache_data = Rails.cache.read(cache_key)
+  return false unless cache_data&.dig(:status) == "running"
+  
+  # 3. Check heartbeat is recent (< 2 minutes)
+  heartbeat_time = Time.parse(cache_data[:heartbeat])
+  Time.current - heartbeat_time < 2.minutes
+end
+```

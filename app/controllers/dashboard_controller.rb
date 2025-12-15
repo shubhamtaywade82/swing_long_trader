@@ -506,24 +506,43 @@ class DashboardController < ApplicationController
   end
 
   def websocket_stream_running?(stream_key)
-    # Check if thread is running (works within same process)
-    # For multi-process, would need Redis or shared state
+    # Check if stream is running using cross-process cache check
     return false unless defined?(MarketHub::WebsocketTickStreamerJob)
 
-    MarketHub::WebsocketTickStreamerJob.active_stream_count > 0
+    cache_key = "websocket_stream:#{stream_key}"
+    cache_data = Rails.cache.read(cache_key)
+    return false unless cache_data
+
+    # Check if stream is running and heartbeat is recent
+    status = cache_data[:status] rescue nil
+    return false unless status == "running"
+
+    heartbeat = cache_data[:heartbeat] rescue nil
+    return false unless heartbeat
+
+    heartbeat_time = Time.parse(heartbeat) rescue nil
+    return false unless heartbeat_time
+
+    # Stream is running if heartbeat is within last 2 minutes
+    Time.current - heartbeat_time < 2.minutes
   end
 
   def find_existing_websocket_job(screener_type, instrument_ids, symbols)
     return nil unless solid_queue_installed?
 
-    # Find jobs for WebsocketTickStreamerJob that are pending or running
-    job_class_name = "MarketHub::WebsocketTickStreamerJob"
+    # Build stream key to match job arguments
+    stream_key = build_stream_key(screener_type, instrument_ids, symbols)
 
-    # Check pending jobs
+    # Find jobs for WebsocketTickStreamerJob that match this stream
+    # We need to match by arguments since we can't easily query job arguments
+    # So we check for recent jobs of this type
+
+    # Check pending jobs (created in last 10 minutes)
     pending_job = SolidQueue::Job
                   .where("class_name LIKE ?", "%WebsocketTickStreamerJob%")
                   .where(finished_at: nil)
                   .where("scheduled_at IS NULL OR scheduled_at <= ?", Time.current)
+                  .where("created_at > ?", 10.minutes.ago)
                   .order(created_at: :desc)
                   .first
 
@@ -534,6 +553,7 @@ class DashboardController < ApplicationController
                        .joins(:job)
                        .where("solid_queue_jobs.class_name LIKE ?", "%WebsocketTickStreamerJob%")
                        .where("solid_queue_jobs.finished_at IS NULL")
+                       .where("solid_queue_jobs.created_at > ?", 10.minutes.ago)
                        .order("solid_queue_jobs.created_at DESC")
                        .first
 
