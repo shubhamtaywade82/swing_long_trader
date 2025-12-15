@@ -3,6 +3,13 @@
 class MonitoringController < ApplicationController
   include SolidQueueHelper
 
+  # Constants for queue health thresholds
+  MAX_PENDING_JOBS_WARNING = 100
+  MAX_FAILED_JOBS_WARNING = 50
+
+  # @api public
+  # Displays system monitoring information
+  # @return [void] Renders monitoring/index view
   def index
     @jobs_status = get_jobs_status
     @system_health = get_system_health
@@ -22,10 +29,21 @@ class MonitoringController < ApplicationController
     }
   end
 
-  def get_last_job_run(_job_class)
-    # This would query SolidQueue or your job tracking system
-    # For now, return a placeholder
-    "Not tracked"
+  # @api private
+  # Gets the last run time for a job class
+  # @param [String] job_class Name of the job class
+  # @return [Time, nil] Last run time or nil if not found
+  def get_last_job_run(job_class)
+    return nil unless solid_queue_installed?
+
+    SolidQueue::Job
+      .where("class_name LIKE ?", "%#{job_class.split('::').last}%")
+      .order(created_at: :desc)
+      .first
+      &.finished_at
+  rescue StandardError => e
+    Rails.logger.error("[MonitoringController] Error fetching last job run: #{e.message}")
+    nil
   end
 
   def get_system_health
@@ -94,7 +112,8 @@ class MonitoringController < ApplicationController
     return "Not installed" unless solid_queue_installed?
 
     stats = get_solid_queue_stats
-    if stats[:pending] > 100 || stats[:failed] > 50
+    if stats[:pending] > MAX_PENDING_JOBS_WARNING || 
+       stats[:failed] > MAX_FAILED_JOBS_WARNING
       "Warning: #{stats[:pending]} pending, #{stats[:failed]} failed"
     elsif !check_solid_queue_status[:worker_running]
       "Worker not running"

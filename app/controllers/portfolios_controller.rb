@@ -1,25 +1,27 @@
 # frozen_string_literal: true
 
 class PortfoliosController < ApplicationController
+  include PortfolioInitializer
+
+  # @api public
+  # Displays portfolio information and performance metrics
+  # @param [String] mode Trading mode: "live" or "paper"
+  # @return [void] Renders portfolios/show view
   def show
-    # Use session mode if no explicit mode param
-    @mode = params[:mode] || current_trading_mode
+    portfolio_params = params.permit(:mode)
+    @mode = validate_trading_mode(portfolio_params[:mode])
 
     if @mode == "paper"
       # Use CapitalAllocationPortfolio for paper trading (consistent with dashboard)
       @portfolio = CapitalAllocationPortfolio.paper.active.first
-      # Ensure portfolio is initialized
-      if @portfolio.nil? || @portfolio.total_equity.zero?
-        initializer_result = Portfolios::PaperPortfolioInitializer.call
-        @portfolio = initializer_result[:portfolio] if initializer_result[:success]
-      end
+      ensure_paper_portfolio_initialized
       # Use unified Position model for paper positions
-      @positions = Position.paper.open.includes(:instrument).order(opened_at: :desc)
-      @ledger_entries = @portfolio&.ledger_entries&.order(created_at: :desc)&.limit(50) || []
+      @positions = Position.paper.open.includes(:instrument).order(opened_at: :desc).limit(100)
+      @ledger_entries = @portfolio ? @portfolio.ledger_entries.order(created_at: :desc).limit(50) : []
     else
       @portfolios = Portfolio.live.recent.limit(30)
       @current_portfolio = @portfolios.first
-      @positions = @current_portfolio&.positions&.includes(:instrument)&.order(opened_at: :desc) || []
+      @positions = @current_portfolio ? @current_portfolio.positions.includes(:instrument).order(opened_at: :desc).limit(100) : []
     end
 
     @performance_metrics = calculate_performance_metrics(@mode)
@@ -27,6 +29,14 @@ class PortfoliosController < ApplicationController
 
   private
 
+  def validate_trading_mode(mode_param)
+    %w[live paper].include?(mode_param.to_s) ? mode_param.to_s : current_trading_mode
+  end
+
+  # @api private
+  # Calculates performance metrics for the portfolio
+  # @param [String] mode Trading mode: "live" or "paper"
+  # @return [Hash] Performance metrics hash
   def calculate_performance_metrics(mode)
     if mode == "paper"
       portfolio = CapitalAllocationPortfolio.paper.active.first

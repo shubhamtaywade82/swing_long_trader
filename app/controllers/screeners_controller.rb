@@ -1,82 +1,46 @@
 # frozen_string_literal: true
 
+require "digest"
+
 class ScreenersController < ApplicationController
   include SolidQueueHelper
 
+  # Constants
+  WEBSOCKET_HEARTBEAT_TIMEOUT = 2.minutes
+  MAX_PENDING_JOBS_WARNING = 100
+  MAX_FAILED_JOBS_WARNING = 50
+  CACHE_FALLBACK_DAYS = 7
+  WEBSOCKET_JOB_LOOKBACK_MINUTES = 10
+
   before_action :set_screener_type, only: [:run, :check_results]
 
+  # @api public
+  # Fetches and displays swing screener results
+  # @param [Integer] limit Optional limit on number of results
+  # @return [void] Renders swing_screener view
   def swing
-    @limit = params[:limit]&.to_i # No default - show all if not specified
-    @candidates = []
-    @running = false
-
-    # Read from database (persisted results)
-    latest_results = ScreenerResult.latest_for(screener_type: "swing", limit: @limit)
-    @candidates = latest_results.map(&:to_candidate_hash)
-    @last_run = latest_results.first&.analyzed_at
-
-    # Fallback to cache if no database results (backward compatibility)
-    if @candidates.empty?
-      cache_key = "swing_screener_results_#{Date.current}"
-      @candidates = Rails.cache.read(cache_key) || []
-      @last_run = Rails.cache.read("#{cache_key}_timestamp")
-
-      # Also check previous days for last run
-      if @candidates.empty? && @last_run.nil?
-        (1..7).each do |days_ago|
-          prev_key = "swing_screener_results_#{Date.current - days_ago.days}"
-          prev_candidates = Rails.cache.read(prev_key)
-          next unless prev_candidates&.any?
-
-          @candidates = prev_candidates
-          @last_run = Rails.cache.read("#{prev_key}_timestamp")
-          break
-        end
-      end
-    end
-
-    # Categorize candidates
-    categorize_candidates(@candidates, "swing")
+    load_screener_results("swing")
   end
 
+  # @api public
+  # Fetches and displays longterm screener results
+  # @param [Integer] limit Optional limit on number of results
+  # @return [void] Renders longterm_screener view
   def longterm
-    @limit = params[:limit].presence&.to_i # nil = show all
-    @candidates = []
-    @running = false
-
-    # Read from database (persisted results)
-    latest_results = ScreenerResult.latest_for(screener_type: "longterm", limit: @limit)
-    @candidates = latest_results.map(&:to_candidate_hash)
-    @last_run = latest_results.first&.analyzed_at
-
-    # Fallback to cache if no database results (backward compatibility)
-    if @candidates.empty?
-      cache_key = "longterm_screener_results_#{Date.current}"
-      @candidates = Rails.cache.read(cache_key) || []
-      @last_run = Rails.cache.read("#{cache_key}_timestamp")
-
-      # Also check previous days for last run
-      if @candidates.empty? && @last_run.nil?
-        (1..7).each do |days_ago|
-          prev_key = "longterm_screener_results_#{Date.current - days_ago.days}"
-          prev_candidates = Rails.cache.read(prev_key)
-          next unless prev_candidates&.any?
-
-          @candidates = prev_candidates
-          @last_run = Rails.cache.read("#{prev_key}_timestamp")
-          break
-        end
-      end
-    end
-
-    # Categorize candidates
-    categorize_candidates(@candidates, "longterm")
+    load_screener_results("longterm")
   end
 
+  # @api public
+  # Enqueues a screener job to run in the background
+  # @param [String] type Screener type: "swing" or "longterm"
+  # @param [Integer] limit Optional limit on number of instruments to screen
+  # @param [String] priority Job priority: "now" (high) or "normal" (default)
+  # @return [JSON] Job status and ID
   def run
-    screener_type = @screener_type
-    limit = params[:limit].presence&.to_i # nil = full universe
-    priority = params[:priority] || "normal" # "now" for high priority, "normal" for default
+    screener_params = params.permit(:type, :limit, :priority)
+    screener_type = validate_screener_type(screener_params[:type] || @screener_type)
+    limit = parse_limit(screener_params[:limit])
+    priority = validate_priority(screener_params[:priority])
 
     # CRITICAL: Always use perform_later - NEVER use perform_now or sync execution
     # Jobs MUST run in worker process, not web process
@@ -112,11 +76,12 @@ class ScreenersController < ApplicationController
       queue_status: queue_status,
       queue: queue_name.to_s,
     }
-  rescue StandardError => e
-    Rails.logger.error("[ScreenersController] Failed to enqueue screener job: #{e.message}")
-    render json: { status: "error", message: e.message }, status: :unprocessable_content
   end
 
+  # @api public
+  # Checks the status of screener job results
+  # @param [String] type Screener type: "swing" or "longterm"
+  # @return [JSON] Status of screener results
   def check_results
     screener_type = @screener_type
 
@@ -147,13 +112,7 @@ class ScreenersController < ApplicationController
       ready: candidates.any?,
       candidate_count: candidates.size,
       last_run: last_run&.iso8601,
-      message: if is_complete
-                 "Results ready (#{candidates.size} candidates)"
-               elsif has_partial
-                 "Partial results available (#{candidates.size} candidates so far, still processing...)"
-               else
-                 "Still processing..."
-               end,
+      message: build_status_message(is_complete, has_partial, candidates.size),
       job_status: job_status,
       progress: progress,
       is_complete: is_complete,
@@ -163,49 +122,95 @@ class ScreenersController < ApplicationController
     }
   end
 
+  # @api public
+  # Stops LTP updates (jobs will stop automatically when market closes)
+  # @return [JSON] Status message
+  def stop_ltp_updates
+    render json: {
+      status: "stopped",
+      message: "LTP updates will stop when market closes",
+    }
+  end
+
+  # @api public
+  # Starts real-time LTP (Last Traded Price) updates for screener stocks
+  # @param [String] screener_type Type of screener: "swing" or "longterm"
+  # @param [String] instrument_ids Comma-separated list of instrument IDs
+  # @param [String] symbols Comma-separated list of stock symbols
+  # @param [String] websocket Whether to use WebSocket (true) or polling (false)
+  # @return [JSON] Status of LTP update stream
   def start_ltp_updates
-    screener_type = params[:screener_type] || "swing"
-    instrument_ids = params[:instrument_ids]&.split(",")&.map(&:to_i)
-    symbols = params[:symbols]&.split(",")
-    use_websocket = params[:websocket] == "true" || ENV["DHANHQ_WS_ENABLED"] == "true"
+    ltp_params = params.permit(:screener_type, :instrument_ids, :symbols, :websocket)
+    screener_type = validate_screener_type(ltp_params[:screener_type])
+    instrument_ids = parse_instrument_ids(ltp_params[:instrument_ids])
+    symbols = parse_symbols(ltp_params[:symbols])
+
+    # Validate at least one identifier provided
+    unless instrument_ids.any? || symbols.any?
+      return render json: {
+        error: "Must provide instrument_ids or symbols",
+      }, status: :unprocessable_entity
+    end
+
+    use_websocket = ltp_params[:websocket] == "true" || ENV["DHANHQ_WS_ENABLED"] == "true"
 
     if use_websocket && websocket_available?
-      # Check if WebSocket stream is already running
       stream_key = build_stream_key(screener_type, instrument_ids, symbols)
-      if websocket_stream_running?(stream_key)
-        render json: {
-          status: "already_running",
-          message: "WebSocket stream already active",
-          mode: "websocket",
-        }
-        return
-      end
 
-      # Check if job is already queued/running
-      existing_job = find_existing_websocket_job(screener_type, instrument_ids, symbols)
-      if existing_job
-        render json: {
-          status: "queued",
-          message: "WebSocket job already queued",
-          job_id: existing_job.id,
-          mode: "websocket",
-        }
-        return
-      end
+      # Use PostgreSQL advisory lock to prevent race condition
+      lock_key = Digest::MD5.hexdigest("websocket_stream_#{stream_key}").to_i(16) % (2**31)
 
-      # Use WebSocket for real-time tick streaming
-      job = MarketHub::WebsocketTickStreamerJob.perform_later(
-        screener_type: screener_type,
-        instrument_ids: instrument_ids&.join(","),
-        symbols: symbols&.join(","),
+      # Try to acquire advisory lock (non-blocking)
+      lock_result = ActiveRecord::Base.connection.execute(
+        "SELECT pg_try_advisory_lock(#{lock_key}) AS acquired"
       )
+      lock_acquired = lock_result.first["acquired"]
 
-      render json: {
-        status: "started",
-        message: "Real-time LTP updates started (WebSocket)",
-        job_id: job.job_id,
-        mode: "websocket",
-      }
+      unless lock_acquired
+        return render json: {
+          status: "already_running",
+          message: "WebSocket stream is being started by another request",
+          mode: "websocket",
+        }
+      end
+
+      begin
+        if websocket_stream_running?(stream_key)
+          return render json: {
+            status: "already_running",
+            message: "WebSocket stream already active",
+            mode: "websocket",
+          }
+        end
+
+        # Check if job is already queued/running
+        existing_job = find_existing_websocket_job(screener_type, instrument_ids, symbols)
+        if existing_job
+          return render json: {
+            status: "queued",
+            message: "WebSocket job already queued",
+            job_id: existing_job.id,
+            mode: "websocket",
+          }
+        end
+
+        # Use WebSocket for real-time tick streaming
+        job = MarketHub::WebsocketTickStreamerJob.perform_later(
+          screener_type: screener_type,
+          instrument_ids: instrument_ids&.join(","),
+          symbols: symbols&.join(","),
+        )
+
+        render json: {
+          status: "started",
+          message: "Real-time LTP updates started (WebSocket)",
+          job_id: job.job_id,
+          mode: "websocket",
+        }
+      ensure
+        # Always release the lock
+        ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(#{lock_key})")
+      end
     else
       # Fallback to polling (5-second interval)
       job = MarketHub::LtpPollerJob.perform_later(
@@ -221,24 +226,82 @@ class ScreenersController < ApplicationController
         mode: "polling",
       }
     end
-  rescue StandardError => e
-    Rails.logger.error("[ScreenersController] Failed to start LTP updates: #{e.message}")
-    render json: { status: "error", message: e.message }, status: :unprocessable_content
-  end
-
-  def stop_ltp_updates
-    # Note: In a production system, you'd want to track active jobs and cancel them
-    # For now, jobs will stop automatically when market closes
-    render json: {
-      status: "stopped",
-      message: "LTP updates will stop when market closes",
-    }
   end
 
   private
 
+  def build_status_message(is_complete, has_partial, candidate_count)
+    if is_complete
+      "Results ready (#{candidate_count} candidates)"
+    elsif has_partial
+      "Partial results available (#{candidate_count} candidates so far, still processing...)"
+    else
+      "Still processing..."
+    end
+  end
+
+  # Loads screener results from database or cache
+  # @param [String] screener_type Type of screener: "swing" or "longterm"
+  def load_screener_results(screener_type)
+    @limit = params[:limit].presence&.to_i
+    @candidates = []
+    @running = false
+
+    # Read from database (persisted results)
+    latest_results = ScreenerResult.latest_for(screener_type: screener_type, limit: @limit)
+    @candidates = latest_results.map(&:to_candidate_hash)
+    @last_run = latest_results.first&.analyzed_at
+
+    # Fallback to cache if no database results (backward compatibility)
+    if @candidates.empty?
+      cache_key = "#{screener_type}_screener_results_#{Date.current}"
+      @candidates = Rails.cache.read(cache_key) || []
+      @last_run = Rails.cache.read("#{cache_key}_timestamp")
+
+      # Also check previous days for last run
+      if @candidates.empty? && @last_run.nil?
+        (1..CACHE_FALLBACK_DAYS).each do |days_ago|
+          prev_key = "#{screener_type}_screener_results_#{Date.current - days_ago.days}"
+          prev_candidates = Rails.cache.read(prev_key)
+          next unless prev_candidates&.any?
+
+          @candidates = prev_candidates
+          @last_run = Rails.cache.read("#{prev_key}_timestamp")
+          break
+        end
+      end
+    end
+
+    # Categorize candidates
+    categorize_candidates(@candidates, screener_type)
+  end
+
   def set_screener_type
-    @screener_type = params[:type] || params[:screener_type] || "swing"
+    @screener_type = validate_screener_type(params[:type] || params[:screener_type])
+  end
+
+  def validate_screener_type(type)
+    %w[swing longterm].include?(type.to_s) ? type.to_s : "swing"
+  end
+
+  def parse_limit(limit_param)
+    limit_param.presence&.to_i
+  end
+
+  def validate_priority(priority_param)
+    %w[now normal].include?(priority_param.to_s) ? priority_param.to_s : "normal"
+  end
+
+  def parse_instrument_ids(ids_param)
+    return [] unless ids_param.present?
+
+    ids_param.to_s.split(",").map(&:to_i).reject(&:zero?)
+  end
+
+  def parse_symbols(symbols_param)
+    return [] unless symbols_param.present?
+
+    symbols_param.to_s.split(",").map(&:strip).reject(&:blank?)
   end
 
   def websocket_available?
@@ -260,35 +323,35 @@ class ScreenersController < ApplicationController
 
     cache_key = "websocket_stream:#{stream_key}"
     cache_data = Rails.cache.read(cache_key)
-    return false unless cache_data
+    return false unless cache_data.is_a?(Hash)
 
-    # Check if stream is running and heartbeat is recent
-    status = cache_data[:status] rescue nil
-    return false unless status == "running"
+    return false unless cache_data[:status] == "running"
 
-    heartbeat = cache_data[:heartbeat] rescue nil
-    return false unless heartbeat
+    heartbeat = cache_data[:heartbeat]
+    return false unless heartbeat.present?
 
-    heartbeat_time = Time.parse(heartbeat) rescue nil
+    heartbeat_time = Time.zone.parse(heartbeat.to_s)
     return false unless heartbeat_time
 
-    # Stream is running if heartbeat is within last 2 minutes
-    Time.current - heartbeat_time < 2.minutes
+    # Stream is running if heartbeat is within timeout window
+    Time.current - heartbeat_time < WEBSOCKET_HEARTBEAT_TIMEOUT
+  rescue ArgumentError, TypeError => e
+    Rails.logger.warn("[ScreenersController] Invalid heartbeat format: #{e.message}")
+    false
   end
 
   def find_existing_websocket_job(screener_type, instrument_ids, symbols)
     return nil unless solid_queue_installed?
 
     # Find jobs for WebsocketTickStreamerJob that match this stream
-    # We need to match by arguments since we can't easily query job arguments
-    # So we check for recent jobs of this type
+    # Check for recent jobs of this type (within lookback window)
 
-    # Check pending jobs (created in last 10 minutes)
+    # Check pending jobs (created in last N minutes)
     pending_job = SolidQueue::Job
                   .where("class_name LIKE ?", "%WebsocketTickStreamerJob%")
                   .where(finished_at: nil)
                   .where("scheduled_at IS NULL OR scheduled_at <= ?", Time.current)
-                  .where("created_at > ?", 10.minutes.ago)
+                  .where("created_at > ?", WEBSOCKET_JOB_LOOKBACK_MINUTES.minutes.ago)
                   .order(created_at: :desc)
                   .first
 
@@ -299,7 +362,7 @@ class ScreenersController < ApplicationController
                        .joins(:job)
                        .where("solid_queue_jobs.class_name LIKE ?", "%WebsocketTickStreamerJob%")
                        .where("solid_queue_jobs.finished_at IS NULL")
-                       .where("solid_queue_jobs.created_at > ?", 10.minutes.ago)
+                       .where("solid_queue_jobs.created_at > ?", WEBSOCKET_JOB_LOOKBACK_MINUTES.minutes.ago)
                        .order("solid_queue_jobs.created_at DESC")
                        .first
 
@@ -326,29 +389,55 @@ class ScreenersController < ApplicationController
       job_id: recent_job.id,
     }
   rescue StandardError => e
-    Rails.logger.error("Error checking job status: #{e.message}")
+    Rails.logger.error("[ScreenersController] Error checking job status: #{e.message}")
     { running: false, error: e.message }
   end
 
+  # Categorizes screener candidates into bullish, bearish, flag stocks, and recommendations
+  # @param [Array] candidates Array of candidate hashes
+  # @param [String] screener_type Type of screener: "swing" or "longterm"
   def categorize_candidates(candidates, screener_type)
     return if candidates.empty?
 
-    # Get symbols that have open positions
-    candidate_symbols = candidates.map { |c| c[:symbol] }
-    open_positions = Position.open.where(symbol: candidate_symbols)
-    paper_positions = PaperPosition.open.where(instrument_id: Instrument.where(symbol_name: candidate_symbols).pluck(:id))
+    build_position_lookup(candidates)
+    categorize_by_sentiment(candidates, screener_type)
+    sort_categories
+  end
+
+  # Builds a lookup hash of symbols that have open positions
+  # @param [Array] candidates Array of candidate hashes
+  def build_position_lookup(candidates)
+    candidate_symbols = candidates.map { |c| c[:symbol] }.compact
+    return if candidate_symbols.empty?
+
+    # Optimize queries with includes and index_by
+    instrument_ids = Instrument.where(symbol_name: candidate_symbols).pluck(:id)
+
+    open_positions = Position.open
+                             .where(symbol: candidate_symbols)
+                             .includes(:instrument)
+                             .index_by(&:symbol)
+
+    paper_positions = PaperPosition.open
+                                   .where(instrument_id: instrument_ids)
+                                   .includes(:instrument)
+                                   .index_by { |pos| pos.instrument&.symbol_name }
 
     # Create position lookup
     @position_lookup = {}
-    open_positions.each { |pos| @position_lookup[pos.symbol] = { mode: pos.live? ? "live" : "paper", position: pos } }
-    paper_positions.each do |pos|
-      symbol = pos.instrument&.symbol_name
-      next unless symbol
-
-      @position_lookup[symbol] ||= { mode: "paper", position: pos }
+    open_positions.each do |symbol, pos|
+      @position_lookup[symbol] = { mode: pos.live? ? "live" : "paper", position: pos }
     end
 
-    # Categorize candidates
+    paper_positions.each do |symbol, pos|
+      @position_lookup[symbol] ||= { mode: "paper", position: pos }
+    end
+  end
+
+  # Categorizes candidates by sentiment (bullish/bearish) and actionable status
+  # @param [Array] candidates Array of candidate hashes
+  # @param [String] screener_type Type of screener
+  def categorize_by_sentiment(candidates, screener_type)
     @bullish_stocks = []
     @bearish_stocks = []
     @flag_stocks = []
@@ -374,8 +463,9 @@ class ScreenersController < ApplicationController
       is_bullish = determine_bullish(candidate, indicators, screener_type)
 
       # Use actionable recommendation from screener if available, otherwise generate generic one
-      recommendation = candidate[:recommendation].presence || generate_recommendation(candidate, indicators, score,
-                                                                                      is_bullish, screener_type)
+      recommendation = candidate[:recommendation].presence || generate_recommendation(
+        candidate, indicators, score, is_bullish, screener_type
+      )
 
       candidate_with_rec = candidate.merge(recommendation: recommendation)
 
@@ -385,22 +475,33 @@ class ScreenersController < ApplicationController
         @bearish_stocks << candidate_with_rec
       end
 
-      # Add to recommendations if:
-      # 1. Has actionable BUY/ACCUMULATE recommendation (from trade plan/accumulation plan), OR
-      # 2. Setup status is READY or ACCUMULATE (tradeable), OR
-      # 3. Generic "Buy" or "Strong Buy" recommendation
-      is_actionable = candidate[:setup_status] == "READY" ||
-                      candidate[:setup_status] == "ACCUMULATE" ||
-                      candidate[:trade_plan].present? ||
-                      candidate[:accumulation_plan].present? ||
-                      /(BUY|ACCUMULATE|Strong Buy|Buy)/i.match?(recommendation)
-      @recommendations << candidate_with_rec if is_actionable
+      # Add to recommendations if actionable
+      if actionable_candidate?(candidate, recommendation)
+        @recommendations << candidate_with_rec
+      end
     end
+  end
 
-    # Sort recommendations by setup status (READY/ACCUMULATE first), then by score
-    # Sort others by score
+  # Checks if a candidate is actionable (ready to trade)
+  # @param [Hash] candidate Candidate hash
+  # @param [String] recommendation Recommendation string
+  # @return [Boolean] True if candidate is actionable
+  def actionable_candidate?(candidate, recommendation)
+    candidate[:setup_status] == "READY" ||
+      candidate[:setup_status] == "ACCUMULATE" ||
+      candidate[:trade_plan].present? ||
+      candidate[:accumulation_plan].present? ||
+      /(BUY|ACCUMULATE|Strong Buy|Buy)/i.match?(recommendation)
+  end
+
+  # Sorts all candidate categories by priority and score
+  def sort_categories
+    # Sort by score (descending)
     @bullish_stocks.sort_by! { |c| [-(c[:score] || 0)] }
     @bearish_stocks.sort_by! { |c| [-(c[:score] || 0)] }
+    @flag_stocks.sort_by! { |c| -(c[:score] || 0) }
+
+    # Sort recommendations by setup status priority, then by score
     @recommendations.sort_by! do |c|
       setup_priority = case c[:setup_status]
                        when "READY", "ACCUMULATE" then 0
@@ -410,9 +511,13 @@ class ScreenersController < ApplicationController
                        end
       [setup_priority, -(c[:score] || 0)]
     end
-    @flag_stocks.sort_by! { |c| -(c[:score] || 0) }
   end
 
+  # Determines if a candidate is bullish based on technical indicators
+  # @param [Hash] candidate Candidate hash
+  # @param [Hash] indicators Technical indicators hash
+  # @param [String] screener_type Type of screener
+  # @return [Boolean] True if candidate is bullish
   def determine_bullish(candidate, indicators, screener_type)
     # Check supertrend
     st = indicators[:supertrend] || candidate.dig(:weekly_indicators, :supertrend)
@@ -438,14 +543,22 @@ class ScreenersController < ApplicationController
     score >= 50
   end
 
+  # Generates a trading recommendation based on score and sentiment
+  # @param [Hash] _candidate Candidate hash (unused)
+  # @param [Hash] _indicators Indicators hash (unused)
+  # @param [Integer] score Candidate score
+  # @param [Boolean] is_bullish Whether candidate is bullish
+  # @param [String] _screener_type Type of screener (unused)
+  # @return [String] Recommendation string
   def generate_recommendation(_candidate, _indicators, score, is_bullish, _screener_type)
     return "Avoid - Bearish signals" unless is_bullish
 
-    if score >= 75
+    case score
+    when 75..Float::INFINITY
       "Strong Buy - High score with bullish indicators"
-    elsif score >= 60
+    when 60..74
       "Buy - Good opportunity with strong signals"
-    elsif score >= 50
+    when 50..59
       "Watch - Moderate signals, wait for confirmation"
     else
       "Wait - Weak signals, monitor for improvement"

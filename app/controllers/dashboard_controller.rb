@@ -413,7 +413,8 @@ class DashboardController < ApplicationController
     return "Not installed" unless solid_queue_installed?
 
     stats = get_solid_queue_stats
-    if stats[:pending] > 100 || stats[:failed] > 50
+    if stats[:pending] > MonitoringController::MAX_PENDING_JOBS_WARNING || 
+       stats[:failed] > MonitoringController::MAX_FAILED_JOBS_WARNING
       "Warning: #{stats[:pending]} pending, #{stats[:failed]} failed"
     elsif !stats[:worker_running]
       "Worker not running"
