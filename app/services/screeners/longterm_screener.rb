@@ -35,7 +35,28 @@ module Screeners
         @instruments = load_universe
       end
 
-      total_count = @instruments.count.to_i
+      # Safely get count, ensuring it's an integer
+      # Handle case where count might return unexpected types
+      begin
+        count_result = @instruments.count
+        total_count = if count_result.is_a?(Integer)
+                        count_result
+                      elsif count_result.is_a?(Numeric)
+                        count_result.to_i
+                      elsif count_result.is_a?(Hash)
+                        Rails.logger.error("[Screeners::LongtermScreener] count returned Hash: #{count_result.inspect}, using load_universe")
+                        @instruments = load_universe
+                        @instruments.count.to_i
+                      else
+                        Rails.logger.error("[Screeners::LongtermScreener] Unexpected count type: #{count_result.class} (#{count_result.inspect}), using load_universe")
+                        @instruments = load_universe
+                        @instruments.count.to_i
+                      end
+      rescue StandardError => e
+        Rails.logger.error("[Screeners::LongtermScreener] Error getting count: #{e.message}, using load_universe")
+        @instruments = load_universe
+        total_count = @instruments.count.to_i
+      end
       processed_count = 0
       analyzed_count = 0
 
