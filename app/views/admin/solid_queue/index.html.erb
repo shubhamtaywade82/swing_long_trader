@@ -600,7 +600,21 @@
                       <% end %>
                     </td>
                     <td>
-                      <span class="text-muted">Auto-scheduled</span>
+                      <% next_run_time = calculate_next_run_time(task.schedule) %>
+                      <% if next_run_time %>
+                        <div>
+                          <strong class="text-success" title="<%= next_run_time.iso8601 %>">
+                            <%= next_run_time.strftime("%b %d, %Y") %><br>
+                            <%= next_run_time.strftime("%I:%M %p") %>
+                          </strong>
+                          <br>
+                          <small class="text-muted">
+                            in <%= distance_of_time_in_words(Time.current, next_run_time) %>
+                          </small>
+                        </div>
+                      <% else %>
+                        <span class="text-muted">Auto-scheduled</span>
+                      <% end %>
                       <% if task.description.present? %>
                         <br>
                         <small class="text-muted" title="<%= task.description %>">

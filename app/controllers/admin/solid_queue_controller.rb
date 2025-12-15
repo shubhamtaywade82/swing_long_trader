@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "fugit" unless defined?(Fugit)
+
 module Admin
   class SolidQueueController < ApplicationController
     # No authentication required - public admin interface
@@ -626,6 +628,65 @@ module Admin
       months[month_num - 1]
     end
 
-    helper_method :human_readable_schedule
+    def calculate_next_run_time(cron_expression, from_time: nil)
+      return nil unless cron_expression.present?
+
+      from_time ||= Time.current
+
+      # Handle non-cron formats (e.g., "every hour", "at 5am every day")
+      # Try to convert common patterns to cron format
+      normalized_schedule = normalize_schedule_to_cron(cron_expression)
+      return nil unless normalized_schedule
+
+      begin
+        # Parse cron expression using fugit (available via solid_queue)
+        cron = Fugit::Cron.parse(normalized_schedule)
+        return nil unless cron
+
+        # Calculate next run time (returns EtOrbi::EoTime, convert to Time)
+        next_time_eo = cron.next_time(from_time)
+        return nil unless next_time_eo
+
+        # Convert EtOrbi::EoTime to Time using Time.zone.at to preserve timezone
+        Time.zone.at(next_time_eo.to_f)
+      rescue StandardError => e
+        Rails.logger.warn("Failed to parse cron expression '#{cron_expression}': #{e.message}")
+        nil
+      end
+    end
+
+    def normalize_schedule_to_cron(schedule)
+      return schedule if schedule.blank?
+
+      # If it already looks like a cron expression (5 space-separated parts), return as-is
+      parts = schedule.split
+      return schedule if parts.size == 5 && parts.all? { |p| p.match?(%r{^[\d*,\-/]+$}) }
+
+      # Try to parse common patterns
+      schedule_lower = schedule.downcase.strip
+
+      # "every hour at minute 12" -> "12 * * * *"
+      if schedule_lower.match?(/every hour at minute (\d+)/)
+        minute = schedule_lower.match(/every hour at minute (\d+)/)[1]
+        return "#{minute} * * * *"
+      end
+
+      # "every hour" -> "0 * * * *" (at minute 0 of every hour)
+      return "0 * * * *" if schedule_lower == "every hour"
+
+      # "at 5am every day" -> "0 5 * * *"
+      if schedule_lower.match?(/at (\d+)am every day/)
+        hour = schedule_lower.match(/at (\d+)am every day/)[1]
+        return "0 #{hour} * * *"
+      end
+
+      # If it contains "every" or "at" but we can't parse it, return nil
+      return nil if schedule_lower.include?("every") || schedule_lower.include?("at")
+
+      # Otherwise, assume it's already a cron expression
+      schedule
+    end
+
+    helper_method :human_readable_schedule, :calculate_next_run_time
   end
 end

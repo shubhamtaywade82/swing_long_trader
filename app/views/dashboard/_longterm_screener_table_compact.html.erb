@@ -14,6 +14,7 @@
               <th class="sortable" data-sort="symbol" data-sort-type="string">Symbol</th>
               <th class="sortable text-right" data-sort="score" data-sort-type="number">Score</th>
               <th class="sortable" data-sort="setup_status" data-sort-type="string">Status</th>
+              <th class="sortable text-right" data-sort="price" data-sort-type="number">LTP</th>
               <th class="sortable text-right" data-sort="price" data-sort-type="number">Accumulation Plan</th>
               <th class="sortable text-right" data-sort="allocation" data-sort-type="number">Allocation</th>
               <th class="sortable text-right" data-sort="horizon" data-sort-type="number">Horizon</th>
@@ -59,6 +60,11 @@
                   <span class="badge bg-<%= setup_class %>" title="<%= candidate[:setup_reason] || '' %>">
                     <%= setup_status.gsub('_', ' ') %>
                   </span>
+                </td>
+                <td class="text-right">
+                  <strong class="<%= price > 0 ? 'text-primary' : 'text-muted' %>">
+                    ₹<%= number_with_precision(price, precision: 2) %>
+                  </strong>
                 </td>
                 <td class="text-right">
                   <% if accumulation_plan %>
@@ -188,5 +194,115 @@
         rows.forEach(row => tbody.appendChild(row));
       });
     });
+
+    // Auto-refresh LTPs every 30 seconds
+    (function() {
+      const table = document.getElementById('longterm-screener-results-table');
+      if (!table) return;
+
+      const tbody = table.querySelector('tbody');
+      if (!tbody) return;
+
+      function updateLTPs() {
+        // Collect all instrument IDs from the table
+        const rows = tbody.querySelectorAll('tr[data-screener-instrument-id]');
+        const instrumentIds = Array.from(rows).map(row =>
+          row.getAttribute('data-screener-instrument-id')
+        ).filter(id => id).join(',');
+
+        if (!instrumentIds) {
+          console.log('[LTP Refresh] No instrument IDs found');
+          return;
+        }
+
+        console.log('[LTP Refresh] Fetching LTPs for instruments:', instrumentIds);
+
+        // Fetch updated LTPs
+        const refreshUrl = '/screeners/refresh_ltps';
+        fetch(`${refreshUrl}?type=longterm&instrument_ids=${instrumentIds}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          console.log('[LTP Refresh] Received data:', data);
+          if (data.error) {
+            console.error('[LTP Refresh] Error:', data.error);
+            return;
+          }
+
+          if (data.ltps && Object.keys(data.ltps).length > 0) {
+            let updatedCount = 0;
+            // Update each row with new LTP
+            rows.forEach(row => {
+              const instrumentId = row.getAttribute('data-screener-instrument-id');
+              // Response has string keys, so use string lookup
+              const newLtp = data.ltps[instrumentId];
+
+              if (newLtp && !isNaN(newLtp)) {
+                // Find the LTP cell (5th column after #, Symbol, Score, Status)
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 5) {
+                  const ltpCell = cells[4]; // 0-indexed: #=0, Symbol=1, Score=2, Status=3, LTP=4
+
+                  // Update cell content
+                  const formattedPrice = new Intl.NumberFormat('en-IN', {
+                    style: 'currency',
+                    currency: 'INR',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  }).format(newLtp).replace('₹', '₹');
+
+                  ltpCell.innerHTML = `<strong class="text-primary">${formattedPrice}</strong>`;
+
+                  // Update data attribute for sorting
+                  row.setAttribute('data-price', newLtp);
+
+                  // Add visual indicator that price was updated
+                  ltpCell.classList.add('price-updated');
+                  setTimeout(() => {
+                    ltpCell.classList.remove('price-updated');
+                  }, 1000);
+
+                  updatedCount++;
+                }
+              }
+            });
+            console.log(`[LTP Refresh] Updated ${updatedCount} prices`);
+          } else {
+            console.warn('[LTP Refresh] No LTPs in response');
+          }
+        })
+        .catch(error => {
+          console.error('[LTP Refresh] Failed to refresh LTPs:', error);
+        });
+      }
+
+      // Start auto-refresh (every 30 seconds)
+      const refreshInterval = setInterval(updateLTPs, 30000);
+
+      // Also refresh immediately after 2 seconds (to get initial update)
+      setTimeout(updateLTPs, 2000);
+
+      // Clean up on page unload
+      window.addEventListener('beforeunload', () => {
+        clearInterval(refreshInterval);
+      });
+    })();
   })();
 </script>
+
+<style>
+  .price-updated {
+    background-color: #d1ecf1 !important;
+    transition: background-color 0.5s ease;
+  }
+</style>

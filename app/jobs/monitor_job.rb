@@ -68,11 +68,37 @@ class MonitorJob < ApplicationJob
     return { healthy: false, message: "No candles" } unless latest
 
     days_old = (Time.zone.today - latest.timestamp.to_date).to_i
-    healthy = days_old <= 2
 
-    { healthy: healthy, message: healthy ? "OK" : "Candles #{days_old} days old" }
+    # Account for weekends and holidays - markets are closed on weekends
+    # Allow up to 4 days (which could be Thu -> Mon = 4 days including weekend)
+    # But flag if > 5 days (likely a real issue)
+    trading_days_old = count_trading_days_since(latest.timestamp.to_date)
+    healthy = days_old <= 4 && trading_days_old <= 2
+
+    message = if healthy
+                "OK (#{days_old} calendar days, #{trading_days_old} trading days)"
+              else
+                "Candles #{days_old} days old (#{trading_days_old} trading days)"
+              end
+
+    { healthy: healthy, message: message }
   rescue StandardError => e
     { healthy: false, message: e.message }
+  end
+
+  def count_trading_days_since(date)
+    # Count weekdays (Mon-Fri) since the given date, excluding today
+    today = Time.zone.today
+    return 0 if date >= today
+
+    count = 0
+    current_date = date + 1.day
+    while current_date < today
+      # Monday = 1, Friday = 5
+      count += 1 if (1..5).include?(current_date.wday)
+      current_date += 1.day
+    end
+    count
   end
 
   def check_job_queue

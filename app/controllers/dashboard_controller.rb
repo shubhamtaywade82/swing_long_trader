@@ -261,6 +261,9 @@ class DashboardController < ApplicationController
       end
     end
 
+    # Fetch real-time LTPs for all candidates (bulk API call)
+    enrich_candidates_with_ltps(@candidates)
+
     # Categorize candidates
     categorize_candidates(@candidates, "swing")
   end
@@ -294,6 +297,9 @@ class DashboardController < ApplicationController
         end
       end
     end
+
+    # Fetch real-time LTPs for all candidates (bulk API call)
+    enrich_candidates_with_ltps(@candidates)
 
     # Categorize candidates
     categorize_candidates(@candidates, "longterm")
@@ -427,6 +433,34 @@ class DashboardController < ApplicationController
       candidates: candidates.first(20), # Include top 20 candidates for progressive display
       source: latest_results.any? ? "database" : "cache", # Indicate data source
     }
+  end
+
+  def refresh_ltps
+    screener_type = params[:type] || "swing"
+    instrument_ids = params[:instrument_ids]&.split(",")&.map(&:to_i) || []
+
+    return render json: { error: "No instrument IDs provided" }, status: :bad_request if instrument_ids.empty?
+
+    # Load instrument records directly (more efficient than loading candidates)
+    instruments = Instrument.where(id: instrument_ids).includes(:exchange)
+    return render json: { error: "No instruments found" }, status: :not_found if instruments.empty?
+
+    # Create candidate-like hashes for bulk fetcher
+    candidates = instruments.map do |instrument|
+      { instrument_id: instrument.id, symbol: instrument.symbol_name }
+    end
+
+    # Fetch real-time LTPs using bulk fetcher
+    ltp_map = MarketData::BulkLtpFetcher.call(instruments: candidates)
+
+    # Convert instrument IDs to strings for JavaScript compatibility
+    ltp_map_string_keys = ltp_map.transform_keys(&:to_s)
+
+    render json: { ltps: ltp_map_string_keys, updated_at: Time.current.iso8601 }
+  rescue StandardError => e
+    Rails.logger.error("[DashboardController] Failed to refresh LTPs: #{e.message}")
+    Rails.logger.error("[DashboardController] Backtrace: #{e.backtrace.first(5).join("\n")}")
+    render json: { error: e.message }, status: :internal_server_error
   end
 
   def check_screener_job_status(screener_type)
@@ -1003,5 +1037,49 @@ class DashboardController < ApplicationController
     else
       "Wait - Weak signals, monitor for improvement"
     end
+  end
+
+  # Enriches candidates with real-time LTPs using bulk API call
+  def enrich_candidates_with_ltps(candidates)
+    return if candidates.empty?
+
+    # Fetch LTPs for all candidates in bulk
+    ltp_map = MarketData::BulkLtpFetcher.call(instruments: candidates)
+
+    # Update candidates with real-time LTPs
+    candidates.each do |candidate|
+      instrument_id = candidate[:instrument_id]
+      next unless instrument_id
+
+      ltp = ltp_map[instrument_id]
+      next unless ltp
+
+      # Update indicators with real-time LTP
+      # For swing screener: update daily_indicators
+      # For longterm screener: update both daily and weekly indicators
+      if candidate[:daily_indicators]
+        candidate[:daily_indicators][:latest_close] = ltp
+        candidate[:daily_indicators][:ltp] = ltp
+      else
+        candidate[:daily_indicators] = { latest_close: ltp, ltp: ltp }
+      end
+
+      # Also update top-level indicators for backward compatibility
+      if candidate[:indicators]
+        candidate[:indicators][:latest_close] = ltp
+        candidate[:indicators][:ltp] = ltp
+      else
+        candidate[:indicators] = { latest_close: ltp, ltp: ltp }
+      end
+
+      # For longterm, also update weekly indicators
+      if candidate[:weekly_indicators]
+        candidate[:weekly_indicators][:latest_close] = ltp
+        candidate[:weekly_indicators][:ltp] = ltp
+      end
+    end
+  rescue StandardError => e
+    Rails.logger.warn("[DashboardController] Failed to enrich candidates with LTPs: #{e.message}")
+    # Continue without LTP enrichment - fallback to cached prices
   end
 end

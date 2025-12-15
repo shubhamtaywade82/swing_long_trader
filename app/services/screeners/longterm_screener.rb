@@ -21,7 +21,21 @@ module Screeners
     def call
       candidates = []
       start_time = Time.current
-      total_count = @instruments.count
+
+      # Ensure @instruments is a valid ActiveRecord relation or array
+      # If it's a Hash (from incorrect job arguments), convert to nil to use load_universe
+      if @instruments.is_a?(Hash)
+        Rails.logger.warn("[Screeners::LongtermScreener] Received Hash for instruments, using load_universe instead")
+        @instruments = load_universe
+      end
+
+      # Ensure we have a valid collection
+      unless @instruments.respond_to?(:count) && @instruments.respond_to?(:find_each)
+        Rails.logger.error("[Screeners::LongtermScreener] Invalid instruments type: #{@instruments.class}")
+        @instruments = load_universe
+      end
+
+      total_count = @instruments.count.to_i
       processed_count = 0
       analyzed_count = 0
 
@@ -58,11 +72,14 @@ module Screeners
         if processed_count % 10 == 0
           elapsed = Time.current - start_time
           rate = begin
-            processed_count / elapsed
+            processed_count.to_f / elapsed.to_f
           rescue StandardError
-            0
+            0.0
           end
-          remaining = rate > 0 ? (total_count - processed_count) / rate : 0
+          # Ensure all values are numeric before arithmetic
+          total_count_num = total_count.to_f
+          processed_count_num = processed_count.to_f
+          remaining = rate > 0 && total_count_num > 0 ? ((total_count_num - processed_count_num) / rate) : 0.0
 
           Rails.cache.write(progress_key, {
             total: total_count,
@@ -643,8 +660,33 @@ module Screeners
       daily_closes = daily_series.closes
       weekly_closes = weekly_series.closes
 
-      daily_change = daily_closes.size >= 5 ? ((daily_closes.last - daily_closes[-5]) / daily_closes[-5] * 100).round(2) : nil
-      weekly_change = weekly_closes.size >= 4 ? ((weekly_closes.last - weekly_closes[-4]) / weekly_closes[-4] * 100).round(2) : nil
+      # Ensure we have numeric values (defensive programming)
+      daily_closes = daily_closes.map do |c|
+        if c.is_a?(Numeric)
+          c
+        else
+          (c.respond_to?(:to_f) ? c.to_f : nil)
+        end
+      end.compact
+      weekly_closes = weekly_closes.map do |c|
+        if c.is_a?(Numeric)
+          c
+        else
+          (c.respond_to?(:to_f) ? c.to_f : nil)
+        end
+      end.compact
+
+      daily_change = if daily_closes.size >= 5 && daily_closes.last.is_a?(Numeric) && daily_closes[-5].is_a?(Numeric) && daily_closes[-5] != 0
+                       ((daily_closes.last - daily_closes[-5]) / daily_closes[-5] * 100).round(2)
+                     else
+                       nil
+                     end
+
+      weekly_change = if weekly_closes.size >= 4 && weekly_closes.last.is_a?(Numeric) && weekly_closes[-4].is_a?(Numeric) && weekly_closes[-4] != 0
+                        ((weekly_closes.last - weekly_closes[-4]) / weekly_closes[-4] * 100).round(2)
+                      else
+                        nil
+                      end
 
       {
         daily_change_5d: daily_change,

@@ -10,11 +10,22 @@ module Screeners
     # Retry strategy: polynomial backoff, max 3 attempts (Rails 8.1+)
     retry_on StandardError, wait: :polynomially_longer, attempts: 3
 
-    def perform(instruments: nil, limit: nil)
+    def perform(*args)
+      # Handle arguments - SolidQueue may pass them as positional or keyword
+      # Extract keyword arguments if provided as hash
+      opts = if args.any? && args.first.is_a?(Hash)
+               args.first.symbolize_keys
+             else
+               {}
+             end
+
+      instruments = opts[:instruments] || opts["instruments"]
+      limit = opts[:limit] || opts["limit"]
+
       # Log PID to verify job runs in worker process, not web process
       Rails.logger.info(
         "[Screeners::LongtermScreenerJob] Starting long-term screener " \
-        "worker_pid=#{Process.pid} queue=#{queue_name}"
+        "worker_pid=#{Process.pid} queue=#{queue_name}",
       )
 
       # Normalize limit parameter (handle string "ALL", nil, or integer)

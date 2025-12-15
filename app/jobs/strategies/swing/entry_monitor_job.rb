@@ -14,7 +14,18 @@ module Strategies
       # Retry strategy: exponential backoff, max 2 attempts
       retry_on StandardError, wait: :polynomially_longer, attempts: 2
 
-      def perform(candidate_ids: nil, dry_run: nil)
+      def perform(*args)
+        # Handle arguments - SolidQueue may pass them as positional or keyword
+        # Extract keyword arguments if provided as hash
+        opts = if args.any? && args.first.is_a?(Hash)
+                 args.first.symbolize_keys
+               else
+                 {}
+               end
+
+        candidate_ids = opts[:candidate_ids] || opts["candidate_ids"]
+        dry_run = opts[:dry_run] || opts["dry_run"]
+
         # Get candidates to monitor
         candidates = if candidate_ids
                        candidate_ids.map { |id| { instrument_id: id } }
@@ -104,8 +115,21 @@ module Strategies
         # In production, you might want to query stored screener results
         universe_file = Rails.root.join("config/universe/master_universe.yml")
         if universe_file.exist?
-          universe_symbols = YAML.load_file(universe_file).to_set
-          instruments = Instrument.where(symbol_name: universe_symbols.to_a).limit(limit)
+          universe_data = YAML.load_file(universe_file)
+          return [] if universe_data.blank?
+
+          # Extract symbol strings from YAML structure (handles both array of hashes and array of strings)
+          universe_symbols = if universe_data.first.is_a?(Hash)
+                               universe_data.map { |item| item[:symbol] || item["symbol"] }.compact
+                             else
+                               universe_data
+                             end
+
+          # Ensure we have an array of strings (not hashes or other objects)
+          universe_symbols = universe_symbols.select { |s| s.is_a?(String) }
+          return [] if universe_symbols.empty?
+
+          instruments = Instrument.where(symbol_name: universe_symbols).limit(limit)
           instruments.map { |inst| { instrument_id: inst.id } }
         else
           []
