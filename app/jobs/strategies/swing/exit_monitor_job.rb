@@ -230,12 +230,22 @@ module Strategies
         # Determine exit transaction type (opposite of entry)
         exit_transaction_type = position.long? ? "SELL" : "BUY"
 
-        # Place market order to exit
+        # Get current LTP for LIMIT order price
+        current_ltp = position.current_price || position.instrument.current_ltp
+        unless current_ltp&.positive?
+          return {
+            success: false,
+            error: "Current LTP not available for exit LIMIT order",
+          }
+        end
+
+        # Place LIMIT order to exit (always use LIMIT, never MARKET)
         result = Dhan::Orders.place_order(
           instrument: position.instrument,
-          order_type: "MARKET",
+          order_type: "LIMIT",
           transaction_type: exit_transaction_type,
           quantity: position.quantity,
+          price: current_ltp, # LIMIT order with current LTP
           client_order_id: "EXIT-#{position.order&.client_order_id || position.id}",
           dry_run: false,
         )
@@ -252,12 +262,22 @@ module Strategies
         # Determine exit transaction type (opposite of entry)
         exit_transaction_type = order.buy? ? "SELL" : "BUY"
 
-        # Place market order to exit
+        # Get current LTP for LIMIT order price
+        current_ltp = order.instrument.current_ltp
+        unless current_ltp&.positive?
+          return {
+            success: false,
+            error: "Current LTP not available for exit LIMIT order",
+          }
+        end
+
+        # Place LIMIT order to exit (always use LIMIT, never MARKET)
         result = Dhan::Orders.place_order(
           instrument: order.instrument,
-          order_type: "MARKET",
+          order_type: "LIMIT",
           transaction_type: exit_transaction_type,
           quantity: order.quantity,
+          price: current_ltp, # LIMIT order with current LTP
           client_order_id: "EXIT-#{order.client_order_id}",
           dry_run: order.dry_run,
         )

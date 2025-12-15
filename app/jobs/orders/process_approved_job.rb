@@ -81,17 +81,34 @@ module Orders
       # Verify order is approved
       return { success: false, error: "Order not approved" } unless order.approved?
 
+      # POLICY: Ensure order is LIMIT type (convert MARKET if needed)
+      order_type = order.order_type
+      order_price = order.price
+      
+      if order_type == "MARKET"
+        Rails.logger.warn("[Orders::ProcessApprovedJob] Converting MARKET order to LIMIT")
+        order_type = "LIMIT"
+        
+        # Use current LTP if price not set
+        if order_price.nil?
+          order_price = order.instrument.current_ltp
+          unless order_price&.positive?
+            return { success: false, error: "Cannot convert MARKET to LIMIT: LTP not available" }
+          end
+        end
+      end
+
       # Reconstruct signal from order metadata
       signal = reconstruct_signal_from_order(order)
       return { success: false, error: "Failed to reconstruct signal" } unless signal
 
-      # Execute order via Dhan::Orders
+      # Execute order via Dhan::Orders (always LIMIT)
       result = Dhan::Orders.place_order(
         instrument: order.instrument,
-        order_type: order.order_type,
+        order_type: order_type, # Always LIMIT
         transaction_type: order.transaction_type,
         quantity: order.quantity,
-        price: order.price,
+        price: order_price, # LIMIT price
         trigger_price: order.trigger_price,
         client_order_id: order.client_order_id,
         dry_run: order.dry_run,
@@ -100,7 +117,7 @@ module Orders
       if result[:success]
         Rails.logger.info(
           "[Orders::ProcessApprovedJob] Order placed: #{order.symbol} " \
-          "#{order.transaction_type} #{order.quantity} @ #{order.price || 'Market'}",
+          "#{order.transaction_type} #{order.quantity} @ ₹#{order_price} (LIMIT)",
         )
 
         # Send notification
@@ -149,7 +166,7 @@ module Orders
       message += "Symbol: #{placed_order.symbol}\n"
       message += "Type: #{placed_order.transaction_type} #{placed_order.order_type}\n"
       message += "Quantity: #{placed_order.quantity}\n"
-      message += "Price: #{placed_order.price ? "₹#{placed_order.price}" : 'Market'}\n"
+      message += "Price: #{placed_order.price ? "₹#{placed_order.price} (LIMIT)" : 'Market'}\n"
       message += "Status: #{placed_order.status}\n"
       message += "Order ID: #{placed_order.client_order_id}\n"
       message += "\nOriginally approved: #{original_order.approved_at}"
