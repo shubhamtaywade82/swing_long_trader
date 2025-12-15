@@ -8,15 +8,32 @@ This implementation adds real-time Last Traded Price (LTP) updates for screener 
 
 ### Components
 
+#### Polling-Based (Current Default - 5 Second Interval)
+
 1. **MarketHub::LtpBroadcaster** (`app/services/market_hub/ltp_broadcaster.rb`)
    - Service that fetches LTPs for screener stocks using DhanHQ REST API
    - Broadcasts updates via ActionCable to connected clients
    - Handles batching to avoid API rate limits
+   - **Update Frequency**: Every 5 seconds (not real-time)
 
 2. **MarketHub::LtpPollerJob** (`app/jobs/market_hub/ltp_poller_job.rb`)
    - Background job that polls LTPs every 5 seconds during market hours
    - Automatically stops when market closes
    - Reschedules itself while market is open
+   - **Limitation**: 5-second delay between updates
+
+#### Real-Time WebSocket-Based (Optional - True Real-Time Ticks)
+
+3. **MarketHub::WebsocketTickStreamer** (`app/services/market_hub/websocket_tick_streamer.rb`)
+   - Service that connects to DhanHQ WebSocket market feed
+   - Receives live ticks as they happen (true real-time)
+   - Broadcasts ticks immediately via ActionCable
+   - **Update Frequency**: Instant (as ticks arrive)
+
+4. **MarketHub::WebsocketTickStreamerJob** (`app/jobs/market_hub/websocket_tick_streamer_job.rb`)
+   - Background job that maintains WebSocket connection
+   - Handles reconnection on errors
+   - Stops automatically when market closes
 
 3. **DashboardController Actions**
    - `start_ltp_updates`: Starts LTP polling for screener stocks
@@ -29,13 +46,24 @@ This implementation adds real-time Last Traded Price (LTP) updates for screener 
 
 ## How It Works
 
-### Flow
+### Polling Mode (Default - 5 Second Interval)
 
 1. **Page Load**: When a screener page loads, JavaScript automatically detects if market is open and starts LTP updates
 2. **Job Scheduling**: `LtpPollerJob` is enqueued with instrument IDs from screener results
-3. **Polling**: Job runs every 5 seconds, fetching LTPs via `LtpBroadcaster`
+3. **Polling**: Job runs every 5 seconds, fetching LTPs via `LtpBroadcaster` using REST API
 4. **Broadcasting**: Updates are broadcast via ActionCable to `dashboard_updates` channel
 5. **UI Updates**: JavaScript receives updates and refreshes price cells in screener tables
+6. **Limitation**: 5-second delay between updates (not true real-time)
+
+### WebSocket Mode (Optional - True Real-Time)
+
+1. **Page Load**: JavaScript detects WebSocket availability and starts WebSocket stream
+2. **Job Scheduling**: `WebsocketTickStreamerJob` is enqueued to maintain WebSocket connection
+3. **WebSocket Connection**: Connects to DhanHQ market feed WebSocket
+4. **Live Ticks**: Receives ticks as they happen (true real-time, no delay)
+5. **Immediate Broadcasting**: Each tick is immediately broadcast via ActionCable
+6. **UI Updates**: JavaScript receives updates instantly and refreshes price cells
+7. **Advantage**: True real-time updates with no polling delay
 
 ### Market Hours Detection
 
@@ -55,27 +83,68 @@ LTP updates start automatically when:
 ### Manual Start
 
 ```javascript
-// Start LTP updates for swing screener
+// Start LTP updates for swing screener (polling mode)
 startLtpUpdates('swing');
 
-// Start for longterm screener
+// Start for longterm screener (polling mode)
 startLtpUpdates('longterm');
+
+// Start with WebSocket (true real-time) - requires WebSocket enabled
+fetch('/screeners/ltp/start', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+  body: JSON.stringify({ screener_type: 'swing', websocket: true })
+});
 ```
 
 ### API Endpoints
 
 ```ruby
-# Start LTP updates
+# Start LTP updates (polling mode - default)
 POST /screeners/ltp/start
 Body: {
   screener_type: "swing" | "longterm",
   instrument_ids: "1,2,3,4,5",  # Optional: comma-separated IDs
-  symbols: "RELIANCE,TCS,INFY"   # Optional: comma-separated symbols
+  symbols: "RELIANCE,TCS,INFY",  # Optional: comma-separated symbols
+  websocket: false  # false = polling (5 sec), true = WebSocket (real-time)
+}
+
+# Start LTP updates (WebSocket mode - true real-time)
+POST /screeners/ltp/start
+Body: {
+  screener_type: "swing" | "longterm",
+  instrument_ids: "1,2,3,4,5",
+  websocket: true  # Enable WebSocket for real-time ticks
 }
 
 # Stop LTP updates (automatic on market close)
 POST /screeners/ltp/stop
 ```
+
+### Enabling WebSocket Mode
+
+To use true real-time WebSocket ticks instead of polling:
+
+1. **Set Environment Variable**:
+   ```bash
+   export DHANHQ_WS_ENABLED=true
+   ```
+
+2. **Or Update Config** (`config/initializers/dhanhq_config.rb`):
+   ```ruby
+   config.x.dhanhq = ActiveSupport::InheritableOptions.new(
+     ws_enabled: true,  # Enable WebSocket for market feed
+     order_ws_enabled: false,  # Keep order WebSocket disabled
+   )
+   ```
+
+3. **Start with WebSocket flag**:
+   ```javascript
+   fetch('/screeners/ltp/start', {
+     method: 'POST',
+     body: JSON.stringify({ screener_type: 'swing', websocket: true })
+   });
+   ```
 
 ## Visual Indicators
 
@@ -144,13 +213,26 @@ Default: 50 instruments per batch (configurable in `LtpBroadcaster::BATCH_SIZE`)
 3. **Broadcasting**: Batch updates reduce ActionCable overhead
 4. **Frontend**: Debounced updates prevent UI jank
 
+## Comparison: Polling vs WebSocket
+
+| Feature | Polling Mode (Default) | WebSocket Mode (Optional) |
+|---------|----------------------|--------------------------|
+| **Update Frequency** | Every 5 seconds | Instant (as ticks arrive) |
+| **Latency** | 0-5 seconds | < 100ms |
+| **API Calls** | High (every 5 sec) | Low (one connection) |
+| **Real-Time** | ❌ No (5 sec delay) | ✅ Yes (true real-time) |
+| **Resource Usage** | Higher (REST API calls) | Lower (persistent connection) |
+| **Setup** | Simple (default) | Requires WebSocket config |
+| **Reliability** | High (stateless) | Medium (requires reconnection logic) |
+
 ## Future Enhancements
 
-1. **WebSocket Support**: If DhanHQ adds WebSocket support, migrate from polling
-2. **Caching**: Cache LTPs to reduce API calls
+1. ✅ **WebSocket Support**: Implemented - can be enabled via config
+2. **Caching**: Cache LTPs to reduce API calls (polling mode)
 3. **Selective Updates**: Only update visible rows
 4. **Price Alerts**: Add alerts for significant price movements
 5. **Historical Tracking**: Track price changes over time
+6. **Hybrid Mode**: Use WebSocket when available, fallback to polling
 
 ## Testing
 

@@ -433,22 +433,45 @@ class DashboardController < ApplicationController
     screener_type = params[:screener_type] || "swing"
     instrument_ids = params[:instrument_ids]&.split(",")&.map(&:to_i)
     symbols = params[:symbols]&.split(",")
+    use_websocket = params[:websocket] == "true" || ENV["DHANHQ_WS_ENABLED"] == "true"
 
-    # Start polling job
-    job = MarketHub::LtpPollerJob.perform_later(
-      screener_type: screener_type,
-      instrument_ids: instrument_ids,
-      symbols: symbols,
-    )
+    if use_websocket && websocket_available?
+      # Use WebSocket for real-time tick streaming
+      job = MarketHub::WebsocketTickStreamerJob.perform_later(
+        screener_type: screener_type,
+        instrument_ids: instrument_ids&.join(","),
+        symbols: symbols&.join(","),
+      )
 
-    render json: {
-      status: "started",
-      message: "LTP updates started",
-      job_id: job.job_id,
-    }
+      render json: {
+        status: "started",
+        message: "Real-time LTP updates started (WebSocket)",
+        job_id: job.job_id,
+        mode: "websocket",
+      }
+    else
+      # Fallback to polling (5-second interval)
+      job = MarketHub::LtpPollerJob.perform_later(
+        screener_type: screener_type,
+        instrument_ids: instrument_ids,
+        symbols: symbols,
+      )
+
+      render json: {
+        status: "started",
+        message: "LTP updates started (polling every 5 seconds)",
+        job_id: job.job_id,
+        mode: "polling",
+      }
+    end
   rescue StandardError => e
     Rails.logger.error("[DashboardController] Failed to start LTP updates: #{e.message}")
     render json: { status: "error", message: e.message }, status: :unprocessable_content
+  end
+
+  def websocket_available?
+    Rails.application.config.x.dhanhq&.ws_enabled == true ||
+      ENV["DHANHQ_WS_ENABLED"] == "true"
   end
 
   def stop_ltp_updates
