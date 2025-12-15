@@ -89,27 +89,7 @@ class AboutController < ApplicationController
     []
   end
 
-  def parse_dhan_date(date_string)
-    return nil unless date_string.present?
-
-    # Try parsing formats like "14/12/2025 19:08" or "2025-12-26 00:00:00.0"
-    if date_string.match?(%r{\d{2}/\d{2}/\d{4}})
-      # Format: "14/12/2025 19:08"
-      parts = date_string.split
-      date_part = parts[0]
-      time_part = parts[1] || "00:00"
-      day, month, year = date_part.split("/").map(&:to_i)
-      hour, minute = time_part.split(":").map(&:to_i)
-      Time.zone.local(year, month, day, hour, minute)
-    elsif date_string.match?(/\d{4}-\d{2}-\d{2}/)
-      # Format: "2025-12-26 00:00:00.0"
-      Time.zone.parse(date_string)
-    else
-      nil
-    end
-  rescue StandardError
-    nil
-  end
+  # parse_dhan_date available via DhanHelper concern
 
   def get_telegram_info
     return { configured: false } unless TelegramNotifier.enabled?
