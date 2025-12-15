@@ -71,7 +71,8 @@
           <% end %>
         </span>
       <% end %>
-      <%= form_with url: run_screener_path(type: "longterm"), method: :post, local: false, class: "d-inline screener-form" do |f| %>
+      <%= form_with url: run_screeners_path, method: :post, local: false, class: "d-inline screener-form" do |f| %>
+        <%= f.hidden_field :type, value: "longterm" %>
         <%= f.select :limit, options_for_select([["ALL", ""], ["10", 10], ["20", 20], ["50", 50], ["100", 100], ["200", 200]], @limit || ""), {}, { class: "form-select form-select-sm d-inline-block", style: "width: 80px;", title: "Limit number of results" } %>
         <%= f.hidden_field :priority, value: "normal", id: "priority_mode_lt" %>
         <%= f.submit "Run Screener", class: "btn btn-primary btn-sm", data: { screener_target: "runButton" } %>
@@ -392,7 +393,7 @@
             }
 
             // Check if results are available via API endpoint
-            fetch('<%= check_screener_results_path %>?type=longterm', {
+            fetch('<%= check_results_screeners_path %>?type=longterm', {
               method: 'GET',
               headers: {
                 'Accept': 'application/json',
@@ -549,7 +550,7 @@
       }
       
       // Start LTP polling
-      fetch('<%= start_ltp_updates_path %>', {
+      fetch('<%= start_ltp_updates_screeners_path %>', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -3,7 +3,7 @@
 class ScreenersController < ApplicationController
   include SolidQueueHelper
 
-  before_action :set_screener_type, only: [:show, :run, :check_results]
+  before_action :set_screener_type, only: [:run, :check_results]
 
   def swing
     @limit = params[:limit]&.to_i # No default - show all if not specified
