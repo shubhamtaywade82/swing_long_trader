@@ -78,12 +78,13 @@ class TelegramNotifier
     nil
   end
 
-  # Check if Telegram is enabled (has bot tokens and chat IDs for at least one domain)
+  # Check if Telegram is enabled (has bot tokens and chat ID)
   # @return [Boolean]
   def self.enabled?
-    trading_enabled = ENV["TELEGRAM_TRADING_BOT_TOKEN"].present? && ENV["TELEGRAM_TRADING_CHAT_ID"].present?
-    system_enabled = ENV["TELEGRAM_SYSTEM_BOT_TOKEN"].present? && ENV["TELEGRAM_SYSTEM_CHAT_ID"].present?
-    trading_enabled || system_enabled
+    chat_id_present = ENV["TELEGRAM_CHAT_ID"].present?
+    trading_token_present = ENV["TELEGRAM_TRADING_BOT_TOKEN"].present?
+    system_token_present = ENV["TELEGRAM_SYSTEM_BOT_TOKEN"].present?
+    chat_id_present && (trading_token_present || system_token_present)
   end
 
   # -- PRIVATE --------------------------------------------------------------
@@ -101,17 +102,12 @@ class TelegramNotifier
     end
   end
 
-  # Get chat ID for a domain
-  # @param domain [Symbol] Domain (:trading or :system)
+  # Get chat ID (shared for both domains)
+  # @param domain [Symbol] Domain (:trading or :system) - unused but kept for API consistency
   # @return [String] Chat ID
   # @raise [KeyError] if ENV variable is not set
-  def self.chat_id(domain)
-    case domain
-    when :trading
-      ENV.fetch("TELEGRAM_TRADING_CHAT_ID")
-    when :system
-      ENV.fetch("TELEGRAM_SYSTEM_CHAT_ID")
-    end
+  def self.chat_id(_domain = nil)
+    ENV.fetch("TELEGRAM_CHAT_ID")
   end
 
   # Validate domain parameter
