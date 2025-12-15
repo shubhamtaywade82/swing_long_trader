@@ -436,6 +436,29 @@ class DashboardController < ApplicationController
     use_websocket = params[:websocket] == "true" || ENV["DHANHQ_WS_ENABLED"] == "true"
 
     if use_websocket && websocket_available?
+      # Check if WebSocket stream is already running
+      stream_key = build_stream_key(screener_type, instrument_ids, symbols)
+      if websocket_stream_running?(stream_key)
+        render json: {
+          status: "already_running",
+          message: "WebSocket stream already active",
+          mode: "websocket",
+        }
+        return
+      end
+
+      # Check if job is already queued/running
+      existing_job = find_existing_websocket_job(screener_type, instrument_ids, symbols)
+      if existing_job
+        render json: {
+          status: "queued",
+          message: "WebSocket job already queued",
+          job_id: existing_job.id,
+          mode: "websocket",
+        }
+        return
+      end
+
       # Use WebSocket for real-time tick streaming
       job = MarketHub::WebsocketTickStreamerJob.perform_later(
         screener_type: screener_type,
@@ -472,6 +495,49 @@ class DashboardController < ApplicationController
   def websocket_available?
     Rails.application.config.x.dhanhq&.ws_enabled == true ||
       ENV["DHANHQ_WS_ENABLED"] == "true"
+  end
+
+  def build_stream_key(screener_type, instrument_ids, symbols)
+    parts = []
+    parts << "type:#{screener_type}" if screener_type
+    parts << "ids:#{instrument_ids&.join(',')}" if instrument_ids&.any?
+    parts << "symbols:#{symbols&.join(',')}" if symbols&.any?
+    parts.any? ? parts.join("|") : "default"
+  end
+
+  def websocket_stream_running?(stream_key)
+    # Check if thread is running (works within same process)
+    # For multi-process, would need Redis or shared state
+    return false unless defined?(MarketHub::WebsocketTickStreamerJob)
+
+    MarketHub::WebsocketTickStreamerJob.active_stream_count > 0
+  end
+
+  def find_existing_websocket_job(screener_type, instrument_ids, symbols)
+    return nil unless solid_queue_installed?
+
+    # Find jobs for WebsocketTickStreamerJob that are pending or running
+    job_class_name = "MarketHub::WebsocketTickStreamerJob"
+
+    # Check pending jobs
+    pending_job = SolidQueue::Job
+                  .where("class_name LIKE ?", "%WebsocketTickStreamerJob%")
+                  .where(finished_at: nil)
+                  .where("scheduled_at IS NULL OR scheduled_at <= ?", Time.current)
+                  .order(created_at: :desc)
+                  .first
+
+    return pending_job if pending_job
+
+    # Check running jobs (claimed executions)
+    running_execution = SolidQueue::ClaimedExecution
+                       .joins(:job)
+                       .where("solid_queue_jobs.class_name LIKE ?", "%WebsocketTickStreamerJob%")
+                       .where("solid_queue_jobs.finished_at IS NULL")
+                       .order("solid_queue_jobs.created_at DESC")
+                       .first
+
+    running_execution&.job
   end
 
   def stop_ltp_updates

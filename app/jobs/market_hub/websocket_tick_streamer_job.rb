@@ -24,7 +24,8 @@ module MarketHub
       # Create unique key for this stream
       stream_key = stream_key(screener_type, instrument_ids, symbols)
 
-      # Check if stream is already running
+      # Check if stream is already running (within same process)
+      # Note: For multi-process environments, controller-level checks prevent duplicate enqueueing
       if @@active_threads.key?(stream_key) && @@active_threads[stream_key].alive?
         Rails.logger.info(
           "[MarketHub::WebsocketTickStreamerJob] WebSocket stream already running for key: #{stream_key}",
