@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AiEvaluationsController < ApplicationController
+class AIEvaluationsController < ApplicationController
   include SignalFilterable
   include QueryBuilder
 

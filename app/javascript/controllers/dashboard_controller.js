@@ -117,7 +117,11 @@ export default class extends Controller {
       // Update multiple LTPs at once
       if (data.updates && Array.isArray(data.updates)) {
         data.updates.forEach((update) => {
-          this.updateScreenerLtp(update.symbol, update.instrument_id, update.ltp);
+          this.updateScreenerLtp(
+            update.symbol,
+            update.instrument_id,
+            update.ltp
+          );
         });
       }
     } else if (data.type === "screener_progress") {
@@ -488,8 +492,7 @@ export default class extends Controller {
     const stClass = stDirection === "bullish" ? "success" : "danger";
 
     // EMA trend
-    const emaTrend =
-      ema20 && ema50 ? (ema20 > ema50 ? "BULL" : "BEAR") : "";
+    const emaTrend = ema20 && ema50 ? (ema20 > ema50 ? "BULL" : "BEAR") : "";
     const emaClass = ema20 > ema50 ? "success" : "danger";
 
     // MACD
@@ -552,7 +555,11 @@ export default class extends Controller {
           ${
             aiScore
               ? `<span class="badge bg-${
-                  aiScore >= 80 ? "success" : aiScore >= 60 ? "warning" : "secondary"
+                  aiScore >= 80
+                    ? "success"
+                    : aiScore >= 60
+                    ? "warning"
+                    : "secondary"
                 }">${aiScore.toFixed(1)}</span>`
               : '<span class="text-muted">-</span>'
           }
@@ -584,19 +591,21 @@ export default class extends Controller {
       // Extract score from the third column (Score column)
       const scoreCellA = a.querySelector("td:nth-child(3)");
       const scoreCellB = b.querySelector("td:nth-child(3)");
-      
-      const scoreA = parseFloat(
-        scoreCellA?.querySelector(".badge")?.textContent?.trim() ||
-        scoreCellA?.textContent?.trim() ||
-        "0"
-      ) || 0;
-      
-      const scoreB = parseFloat(
-        scoreCellB?.querySelector(".badge")?.textContent?.trim() ||
-        scoreCellB?.textContent?.trim() ||
-        "0"
-      ) || 0;
-      
+
+      const scoreA =
+        parseFloat(
+          scoreCellA?.querySelector(".badge")?.textContent?.trim() ||
+            scoreCellA?.textContent?.trim() ||
+            "0"
+        ) || 0;
+
+      const scoreB =
+        parseFloat(
+          scoreCellB?.querySelector(".badge")?.textContent?.trim() ||
+            scoreCellB?.textContent?.trim() ||
+            "0"
+        ) || 0;
+
       return scoreB - scoreA; // Descending order
     });
 
@@ -676,11 +685,15 @@ export default class extends Controller {
         const score = record.ai_confidence * 10; // Convert 0-10 to 0-100
         const scoreClass =
           score >= 80 ? "success" : score >= 60 ? "warning" : "secondary";
-        aiScoreCell.innerHTML = `<span class="badge bg-${scoreClass}">${score.toFixed(1)}</span>`;
+        aiScoreCell.innerHTML = `<span class="badge bg-${scoreClass}">${score.toFixed(
+          1
+        )}</span>`;
       }
 
       if (aiConfidenceCell && record.ai_confidence) {
-        aiConfidenceCell.innerHTML = `<span class="badge bg-info">${record.ai_confidence.toFixed(1)}</span>`;
+        aiConfidenceCell.innerHTML = `<span class="badge bg-info">${record.ai_confidence.toFixed(
+          1
+        )}</span>`;
       }
     } else {
       // Add AI columns if they don't exist
@@ -689,7 +702,8 @@ export default class extends Controller {
       if (thead) {
         const headerRow = thead.querySelector("tr");
         // Check if AI headers exist
-        const hasAIHeaders = headerRow.querySelector("th:nth-child(11)") !== null;
+        const hasAIHeaders =
+          headerRow.querySelector("th:nth-child(11)") !== null;
 
         if (!hasAIHeaders) {
           // Add AI headers
@@ -709,8 +723,12 @@ export default class extends Controller {
           const score = record.ai_confidence * 10;
           const scoreClass =
             score >= 80 ? "success" : score >= 60 ? "warning" : "secondary";
-          aiScoreCell.innerHTML = `<span class="badge bg-${scoreClass}">${score.toFixed(1)}</span>`;
-          aiConfidenceCell.innerHTML = `<span class="badge bg-info">${record.ai_confidence.toFixed(1)}</span>`;
+          aiScoreCell.innerHTML = `<span class="badge bg-${scoreClass}">${score.toFixed(
+            1
+          )}</span>`;
+          aiConfidenceCell.innerHTML = `<span class="badge bg-info">${record.ai_confidence.toFixed(
+            1
+          )}</span>`;
         } else {
           aiScoreCell.innerHTML = '<span class="text-muted">-</span>';
           aiConfidenceCell.innerHTML = '<span class="text-muted">-</span>';
@@ -751,7 +769,9 @@ export default class extends Controller {
       const elapsed = progress.elapsed || 0;
       statusMessage.textContent = `AI Evaluation: ${progress.processed || 0}/${
         progress.total || 0
-      } evaluated, ${progress.evaluated || 0} approved - ${elapsed.toFixed(1)}s elapsed`;
+      } evaluated, ${progress.evaluated || 0} approved - ${elapsed.toFixed(
+        1
+      )}s elapsed`;
     }
   }
 
@@ -764,33 +784,59 @@ export default class extends Controller {
     );
 
     rows.forEach((row) => {
-      // Find the price cell (usually contains ₹ symbol)
-      const priceCells = row.querySelectorAll("td");
-      priceCells.forEach((cell) => {
-        const cellText = cell.textContent.trim();
-        // Check if this cell contains a price (starts with ₹)
-        if (cellText.startsWith("₹")) {
-          const oldPrice = parseFloat(cellText.replace("₹", "").replace(/,/g, ""));
-          const newPrice = parseFloat(ltp);
+      // First, try to find the dedicated price cell using data attribute
+      let priceCell = row.querySelector('td[data-price-cell="true"]');
 
-          // Update the price
-          cell.textContent = `₹${newPrice.toFixed(2)}`;
-
-          // Add visual indicator for price change
-          if (oldPrice && oldPrice !== newPrice) {
-            const changeClass = newPrice > oldPrice ? "price-up" : "price-down";
-            cell.classList.add(changeClass);
-            setTimeout(() => {
-              cell.classList.remove(changeClass);
-            }, 1000);
+      // Fallback: find any cell that contains a price (starts with ₹)
+      if (!priceCell) {
+        const priceCells = row.querySelectorAll("td");
+        priceCells.forEach((cell) => {
+          const cellText = cell.textContent.trim();
+          // Check if this cell contains a price (starts with ₹) and is not part of trade plan
+          if (
+            cellText.startsWith("₹") &&
+            !cellText.includes("Entry:") &&
+            !cellText.includes("SL:") &&
+            !cellText.includes("TP:")
+          ) {
+            priceCell = cell;
           }
+        });
+      }
 
-          // Update data attribute if present
-          if (row.hasAttribute("data-price")) {
-            row.setAttribute("data-price", newPrice.toFixed(2));
-          }
+      if (priceCell) {
+        const cellText = priceCell.textContent.trim();
+        const oldPrice = parseFloat(
+          cellText
+            .replace("₹", "")
+            .replace(/,/g, "")
+            .replace(/[^\d.]/g, "")
+        );
+        const newPrice = parseFloat(ltp);
+
+        // Update the price - preserve the <strong> tag if present
+        if (priceCell.querySelector("strong")) {
+          priceCell.querySelector("strong").textContent = `₹${newPrice.toFixed(
+            2
+          )}`;
+        } else {
+          priceCell.textContent = `₹${newPrice.toFixed(2)}`;
         }
-      });
+
+        // Add visual indicator for price change
+        if (oldPrice && oldPrice !== newPrice) {
+          const changeClass = newPrice > oldPrice ? "price-up" : "price-down";
+          priceCell.classList.add(changeClass);
+          setTimeout(() => {
+            priceCell.classList.remove(changeClass);
+          }, 1000);
+        }
+
+        // Update data attribute if present
+        if (row.hasAttribute("data-price")) {
+          row.setAttribute("data-price", newPrice.toFixed(2));
+        }
+      }
 
       // Add flash animation to indicate update
       row.classList.add("ltp-updated");

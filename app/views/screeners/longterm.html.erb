@@ -16,7 +16,7 @@
   .screener-table th[data-sort-type="number"], .screener-table td.text-right { text-align: right !important; }
   .nav-tabs { margin-bottom: 0.75rem !important; }
   .tab-content { margin-top: 0.5rem; }
-  
+
   /* Real-time LTP update styles */
   .screener-table tr.ltp-updated {
     background-color: rgba(13, 110, 253, 0.05);
@@ -520,36 +520,36 @@
         console.log('LTP updates already active, skipping...');
         return;
       }
-      
+
       // Only start during market hours (9:15 AM - 3:30 PM IST)
       const now = new Date();
       const istTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
       const hour = istTime.getHours();
       const minute = istTime.getMinutes();
       const day = istTime.getDay(); // 0 = Sunday, 1-5 = Mon-Fri
-      
+
       // Check if market is open (Mon-Fri, 9:15 AM - 3:30 PM IST)
-      const isMarketOpen = day >= 1 && day <= 5 && 
+      const isMarketOpen = day >= 1 && day <= 5 &&
                           ((hour === 9 && minute >= 15) || (hour > 9 && hour < 15) || (hour === 15 && minute <= 30));
-      
+
       if (!isMarketOpen) {
         console.log('Market is closed. LTP updates will start automatically when market opens.');
         return;
       }
-      
+
       // Get instrument IDs from current screener results
       const rows = document.querySelectorAll('tr[data-screener-instrument-id]');
       const instrumentIds = Array.from(rows)
         .map(row => row.getAttribute('data-screener-instrument-id'))
         .filter(id => id && id !== 'null')
         .slice(0, 200); // Limit to 200 stocks
-      
+
       if (instrumentIds.length === 0) {
         console.log('No screener results found. LTP updates will start when results are available.');
         return;
       }
-      
-      // Start LTP polling
+
+      // Start LTP updates (prefer WebSocket for real-time, fallback to polling)
       fetch('<%= start_ltp_updates_screeners_path %>', {
         method: 'POST',
         headers: {
@@ -558,7 +558,8 @@
         },
         body: JSON.stringify({
           screener_type: screenerType,
-          instrument_ids: instrumentIds.join(',')
+          instrument_ids: instrumentIds.join(','),
+          websocket: 'true' // Use WebSocket for true real-time updates
         })
       })
       .then(response => response.json())
@@ -591,7 +592,7 @@
         console.error('Failed to start LTP updates:', error);
       });
     }
-    
+
     // Function to toggle recommendations view for long-term screener
     window.toggleRecommendationsViewLT = function(view) {
       const buyBtn = document.getElementById('show-buy-recommendations-lt');

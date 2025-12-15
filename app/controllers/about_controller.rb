@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class AboutController < ApplicationController
+  include DhanHelper
+
   layout "dashboard"
 
   def index
