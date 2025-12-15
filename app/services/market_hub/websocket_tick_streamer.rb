@@ -3,6 +3,7 @@
 module MarketHub
   # Service to stream live ticks via DhanHQ WebSocket and broadcast to ActionCable
   # This provides true real-time tick updates (not polling-based)
+  # Based on dhanhq-client gem: https://github.com/shubhamtaywade82/dhanhq-client
   class WebsocketTickStreamer < ApplicationService
     require "dhan_hq" unless defined?(DhanHQ)
 
@@ -61,6 +62,7 @@ module MarketHub
 
     def subscribe_to_ticks(instruments)
       instruments.each do |instrument|
+        # Format subscription params according to dhanhq-client gem API
         subscription_params = {
           ExchangeSegment: instrument.exchange_segment,
           SecurityId: instrument.security_id.to_s,
@@ -72,23 +74,101 @@ module MarketHub
     def start_websocket_connection
       return unless @subscriptions.any?
 
-      # Initialize DhanHQ WebSocket client for market feed
-      @websocket_client = DhanHQ::WebSocket::MarketFeed.new(
-        on_tick: method(:handle_tick),
-        on_error: method(:handle_error),
-        on_close: method(:handle_close),
-      )
+      # Try different possible WebSocket API structures from dhanhq-client gem
+      # The gem may expose WebSocket via:
+      # 1. DhanHQ::WebSocket::MarketFeed
+      # 2. DhanHQ::Client with websocket option
+      # 3. DhanHQ::WebSocket::Client
+      # 4. DhanHQ::MarketFeed::WebSocket
 
-      # Subscribe to all instruments
-      @websocket_client.subscribe(@subscriptions)
+      begin
+        # Try the most likely API structure based on gem patterns
+        if defined?(DhanHQ::WebSocket) && DhanHQ::WebSocket.const_defined?(:MarketFeed)
+          # Option 1: DhanHQ::WebSocket::MarketFeed
+          @websocket_client = DhanHQ::WebSocket::MarketFeed.new(
+            on_tick: method(:handle_tick),
+            on_error: method(:handle_error),
+            on_close: method(:handle_close),
+          )
+        elsif defined?(DhanHQ::WebSocket) && DhanHQ::WebSocket.const_defined?(:Client)
+          # Option 2: DhanHQ::WebSocket::Client
+          @websocket_client = DhanHQ::WebSocket::Client.new(
+            type: :market_feed,
+            on_tick: method(:handle_tick),
+            on_error: method(:handle_error),
+            on_close: method(:handle_close),
+          )
+        elsif DhanHQ::Client.instance_methods.include?(:websocket) || DhanHQ::Client.instance_methods.include?(:market_feed_websocket)
+          # Option 3: DhanHQ::Client with websocket method
+          client = DhanHQ::Client.new(api_type: :data_api)
+          @websocket_client = client.market_feed_websocket(
+            on_tick: method(:handle_tick),
+            on_error: method(:handle_error),
+            on_close: method(:handle_close),
+          )
+        else
+          # Fallback: Try to instantiate directly and let gem handle it
+          # This will raise an error if WebSocket is not available, which we'll catch
+          raise NotImplementedError, "WebSocket API not found in dhanhq-client gem"
+        end
 
-      Rails.logger.info("[MarketHub::WebsocketTickStreamer] Subscribed to #{@subscriptions.size} instruments")
+        # Subscribe to all instruments
+        # The gem's subscribe method may accept:
+        # - Array of subscription params
+        # - Single subscription param
+        # - Hash with :subscriptions key
+        if @websocket_client.respond_to?(:subscribe)
+          if @subscriptions.size == 1
+            @websocket_client.subscribe(@subscriptions.first)
+          else
+            @websocket_client.subscribe(@subscriptions)
+          end
+        elsif @websocket_client.respond_to?(:add_subscription)
+          @subscriptions.each { |sub| @websocket_client.add_subscription(sub) }
+        else
+          raise NotImplementedError, "Subscribe method not found on WebSocket client"
+        end
+
+        Rails.logger.info("[MarketHub::WebsocketTickStreamer] Subscribed to #{@subscriptions.size} instruments")
+      rescue NameError, NotImplementedError => e
+        Rails.logger.error("[MarketHub::WebsocketTickStreamer] WebSocket API not available: #{e.message}")
+        Rails.logger.error("Please check dhanhq-client gem documentation: https://github.com/shubhamtaywade82/dhanhq-client")
+        raise StandardError, "WebSocket not available in dhanhq-client gem. Error: #{e.message}"
+      end
     end
 
     def handle_tick(tick_data)
-      # tick_data format: { ExchangeSegment, SecurityId, LastPrice, ... }
-      symbol = find_symbol_for_tick(tick_data)
+      # tick_data format varies by gem version, handle multiple formats:
+      # - Hash with string keys: { "ExchangeSegment" => "...", "SecurityId" => "...", "LastPrice" => ... }
+      # - Hash with symbol keys: { ExchangeSegment: "...", SecurityId: "...", LastPrice: ... }
+      # - Object with methods: tick_data.ExchangeSegment, tick_data.SecurityId, tick_data.LastPrice
+      
+      tick_hash = if tick_data.is_a?(Hash)
+                    tick_data
+                  elsif tick_data.respond_to?(:to_h)
+                    tick_data.to_h
+                  else
+                    # Try to convert object to hash
+                    tick_data.instance_variables.each_with_object({}) do |var, hash|
+                      key = var.to_s.delete("@").to_sym
+                      hash[key] = tick_data.instance_variable_get(var)
+                    end
+                  end
+
+      symbol = find_symbol_for_tick(tick_hash)
       return unless symbol
+
+      # Extract LTP from various possible field names
+      ltp = tick_hash["LastPrice"] || 
+            tick_hash[:LastPrice] || 
+            tick_hash["last_price"] || 
+            tick_hash[:last_price] ||
+            tick_hash["LTP"] ||
+            tick_hash[:ltp] ||
+            (tick_data.respond_to?(:last_price) ? tick_data.last_price : nil) ||
+            (tick_data.respond_to?(:LastPrice) ? tick_data.LastPrice : nil)
+
+      return unless ltp && ltp.to_f.positive?
 
       # Broadcast immediately via ActionCable
       ActionCable.server.broadcast(
@@ -96,14 +176,15 @@ module MarketHub
         {
           type: "screener_ltp_update",
           symbol: symbol,
-          instrument_id: find_instrument_id_for_tick(tick_data),
-          ltp: tick_data["LastPrice"] || tick_data[:LastPrice] || tick_data["last_price"],
+          instrument_id: find_instrument_id_for_tick(tick_hash),
+          ltp: ltp.to_f,
           timestamp: Time.current.iso8601,
           source: "websocket", # Indicate this is real-time, not polled
         },
       )
     rescue StandardError => e
       Rails.logger.error("[MarketHub::WebsocketTickStreamer] Error handling tick: #{e.message}")
+      Rails.logger.error("Tick data: #{tick_data.inspect}")
     end
 
     def handle_error(error)
@@ -127,13 +208,39 @@ module MarketHub
     end
 
     def unsubscribe_all
-      @websocket_client&.unsubscribe(@subscriptions) if @websocket_client
-      @subscriptions.clear
+      return unless @websocket_client
+
+      begin
+        if @websocket_client.respond_to?(:unsubscribe)
+          if @subscriptions.size == 1
+            @websocket_client.unsubscribe(@subscriptions.first)
+          else
+            @websocket_client.unsubscribe(@subscriptions)
+          end
+        elsif @websocket_client.respond_to?(:remove_subscription)
+          @subscriptions.each { |sub| @websocket_client.remove_subscription(sub) }
+        end
+      rescue StandardError => e
+        Rails.logger.warn("[MarketHub::WebsocketTickStreamer] Error unsubscribing: #{e.message}")
+      ensure
+        @subscriptions.clear
+      end
     end
 
     def close_websocket_connection
-      @websocket_client&.close if @websocket_client
-      @websocket_client = nil
+      return unless @websocket_client
+
+      begin
+        if @websocket_client.respond_to?(:close)
+          @websocket_client.close
+        elsif @websocket_client.respond_to?(:disconnect)
+          @websocket_client.disconnect
+        end
+      rescue StandardError => e
+        Rails.logger.warn("[MarketHub::WebsocketTickStreamer] Error closing connection: #{e.message}")
+      ensure
+        @websocket_client = nil
+      end
     end
 
     def find_symbol_for_tick(tick_data)
