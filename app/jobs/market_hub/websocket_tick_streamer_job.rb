@@ -96,12 +96,12 @@ module MarketHub
               sleep(5) # Check every 5 seconds if market is still open
 
               # Refresh cache every 30 seconds to indicate stream is alive
-              if Time.current - last_refresh >= 30
-                refresh_stream_heartbeat(cache_key)
-                # Also update market stream heartbeat for health check
-                redis_client.setex("market_stream:heartbeat", 60, Time.current.to_i)
-                last_refresh = Time.current
-              end
+              next unless Time.current - last_refresh >= 30
+
+              refresh_stream_heartbeat(cache_key)
+              # Also update market stream heartbeat for health check
+              redis_client.setex("market_stream:heartbeat", 60, Time.current.to_i)
+              last_refresh = Time.current
             end
 
             Rails.logger.info(
@@ -303,7 +303,7 @@ module MarketHub
       return false unless heartbeat
 
       heartbeat_time = begin
-        Time.parse(heartbeat)
+        Time.zone.parse(heartbeat.to_s)
       rescue StandardError
         nil
       end
@@ -356,15 +356,13 @@ module MarketHub
     end
 
     def redis_client
-      @redis_client ||= begin
-        if defined?(Redis) && ENV["REDIS_URL"].present?
-          Redis.new(url: ENV["REDIS_URL"])
-        elsif Rails.cache.respond_to?(:redis)
-          Rails.cache.redis
-        else
-          Rails.cache
-        end
-      end
+      @redis_client ||= if defined?(Redis) && ENV["REDIS_URL"].present?
+                          Redis.new(url: ENV.fetch("REDIS_URL", nil))
+                        elsif Rails.cache.respond_to?(:redis)
+                          Rails.cache.redis
+                        else
+                          Rails.cache
+                        end
     end
   end
 end

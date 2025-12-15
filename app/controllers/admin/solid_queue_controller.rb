@@ -154,7 +154,7 @@ module Admin
       queue_name = params[:queue_name].presence || "default"
       arguments = parse_arguments(params[:arguments])
       priority = (params[:priority] || 0).to_i
-      scheduled_at = params[:scheduled_at].present? ? Time.parse(params[:scheduled_at]) : nil
+      scheduled_at = params[:scheduled_at].present? ? Time.zone.parse(params[:scheduled_at]) : nil
 
       # Validate class exists
       job_class = class_name.constantize

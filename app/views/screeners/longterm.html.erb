@@ -295,23 +295,42 @@
     // Auto-start LTP updates for screener stocks
     setTimeout(() => {
       startLtpUpdates('longterm');
-      // Also start polling the new API endpoint for real-time prices
-      startLtpPolling();
+      // Initial API call for page load (one-time, then rely on ActionCable for real-time updates)
+      fetchInitialPrices();
     }, 2000); // Wait 2 seconds for page to fully load
 
-    // Re-start polling when user switches tabs (to only fetch active table stocks)
-    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
-      tab.addEventListener('shown.bs.tab', function() {
-        console.log('[LTP Polling] Tab changed, restarting polling for active table');
-        startLtpPolling();
-      });
+    // Polling fallback (only used if ActionCable disconnects)
+    let ltpPollingInterval = null;
+    let actionCableConnected = false;
+
+    // Monitor ActionCable connection status via custom events
+    window.addEventListener('actioncable:connected', function() {
+      actionCableConnected = true;
+      console.log('[LTP] ActionCable connected, using real-time updates');
+      stopLtpPollingFallback();
     });
 
-    // Poll API endpoint for real-time LTP updates
-    let ltpPollingInterval = null;
-    let lastPrices = {}; // Track last prices for change detection
+    window.addEventListener('actioncable:disconnected', function() {
+      actionCableConnected = false;
+      console.log('[LTP] ActionCable disconnected, starting polling fallback');
+      startLtpPollingFallback();
+    });
 
-    function startLtpPolling() {
+    // Check initial connection status after a delay
+    setTimeout(() => {
+      if (!actionCableConnected) {
+        console.log('[LTP] ActionCable not detected, starting polling fallback');
+        startLtpPollingFallback();
+      }
+    }, 3000);
+
+    // Fallback polling (only starts if ActionCable disconnects)
+    function startLtpPollingFallback() {
+      if (actionCableConnected) {
+        console.log('[LTP] ActionCable connected, skipping polling fallback');
+        return;
+      }
+
       // Stop any existing polling
       if (ltpPollingInterval) {
         clearInterval(ltpPollingInterval);
@@ -320,33 +339,28 @@
       // Collect instrument keys only from the currently visible/active table
       const activeTabPane = document.querySelector('.tab-pane.active, .tab-pane.show');
       if (!activeTabPane) {
-        console.log('[LTP Polling] No active tab pane found, skipping polling');
         return;
       }
 
-      // Only look for cells within the active tab pane
       const priceCells = activeTabPane.querySelectorAll('.js-ltp-cell[data-instrument-key]');
       if (priceCells.length === 0) {
-        console.log('[LTP Polling] No price cells found in active tab, skipping polling');
         return;
       }
 
       const instrumentKeys = Array.from(priceCells)
         .map(cell => cell.getAttribute('data-instrument-key'))
         .filter(key => key && key.trim() !== '')
-        .filter((key, index, self) => self.indexOf(key) === index); // Remove duplicates
+        .filter((key, index, self) => self.indexOf(key) === index);
 
       if (instrumentKeys.length === 0) {
-        console.log('[LTP Polling] No instrument keys found, skipping polling');
         return;
       }
 
-      console.log(`[LTP Polling] Starting polling for ${instrumentKeys.length} instruments from active table`);
+      console.log(`[LTP Fallback] Starting polling fallback for ${instrumentKeys.length} instruments`);
 
-      // Poll every 1-2 seconds
-      const pollInterval = 1500; // 1.5 seconds
+      // Poll every 1.5 seconds (fallback only)
+      const pollInterval = 1500;
       ltpPollingInterval = setInterval(() => {
-        // Re-collect keys from active table on each poll (in case tab changed)
         const currentActiveTabPane = document.querySelector('.tab-pane.active, .tab-pane.show');
         if (currentActiveTabPane) {
           const currentCells = currentActiveTabPane.querySelectorAll('.js-ltp-cell[data-instrument-key]');
@@ -360,9 +374,25 @@
           }
         }
       }, pollInterval);
+    }
 
-      // Initial fetch
-      fetchLtpUpdates(instrumentKeys);
+    // One-time initial price fetch for page load
+    function fetchInitialPrices() {
+      const activeTabPane = document.querySelector('.tab-pane.active, .tab-pane.show');
+      if (!activeTabPane) return;
+
+      const priceCells = activeTabPane.querySelectorAll('.js-ltp-cell[data-instrument-key]');
+      if (priceCells.length === 0) return;
+
+      const instrumentKeys = Array.from(priceCells)
+        .map(cell => cell.getAttribute('data-instrument-key'))
+        .filter(key => key && key.trim() !== '')
+        .filter((key, index, self) => self.indexOf(key) === index);
+
+      if (instrumentKeys.length > 0) {
+        console.log(`[LTP] Fetching initial prices for ${instrumentKeys.length} instruments`);
+        fetchLtpUpdates(instrumentKeys);
+      }
     }
 
     function fetchLtpUpdates(instrumentKeys) {
@@ -467,11 +497,11 @@
       });
     }
 
-    function stopLtpPolling() {
+    function stopLtpPollingFallback() {
       if (ltpPollingInterval) {
         clearInterval(ltpPollingInterval);
         ltpPollingInterval = null;
-        console.log('[LTP Polling] Stopped polling');
+        console.log('[LTP Fallback] Stopped polling fallback');
       }
     }
 

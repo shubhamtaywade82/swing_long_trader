@@ -232,9 +232,21 @@ module MarketHub
 
       # Cache LTP in Redis for fast API reads (key format: ltp:SEGMENT:SECURITY_ID)
       cache_key = "ltp:#{segment}:#{security_id}"
-      redis_client.setex(cache_key, 30, ltp.to_f.to_s)
+      begin
+        if redis_client.respond_to?(:setex)
+          redis_client.setex(cache_key, 30, ltp.to_f.to_s)
+          Rails.logger.debug { "[MarketHub::WebsocketTickStreamer] 💾 Cached LTP in Redis: #{cache_key} = ₹#{ltp.to_f}" }
+        else
+          # Fallback to Rails.cache if Redis client doesn't support setex
+          Rails.cache.write(cache_key, ltp.to_f.to_s, expires_in: 30.seconds)
+          Rails.logger.debug { "[MarketHub::WebsocketTickStreamer] 💾 Cached LTP in Rails.cache: #{cache_key} = ₹#{ltp.to_f}" }
+        end
+      rescue StandardError => e
+        Rails.logger.error("[MarketHub::WebsocketTickStreamer] Failed to cache LTP: #{e.message}")
+      end
 
-      # Broadcast immediately via ActionCable
+      # Publish to Redis Pub/Sub channel for broker-style architecture
+      # This allows multiple Rails instances to subscribe and broadcast via ActionCable
       broadcast_data = {
         type: "screener_ltp_update",
         symbol: instrument.symbol_name,
@@ -247,12 +259,26 @@ module MarketHub
         day_open: tick_data[:day_open] || tick_data["day_open"],
         day_high: tick_data[:day_high] || tick_data["day_high"],
         day_low: tick_data[:day_low] || tick_data["day_low"],
+        segment: segment,
+        security_id: security_id.to_s,
       }
 
-      ActionCable.server.broadcast("dashboard_updates", broadcast_data)
-
-      # Always log broadcasts (not just in development) to track if messages are being sent
-      Rails.logger.debug { "[MarketHub::WebsocketTickStreamer] 📡 Cached & broadcasted LTP: #{instrument.symbol_name} (#{instrument.id}) = ₹#{ltp.to_f}" }
+      # Publish to Redis Pub/Sub channel (broker pattern)
+      pubsub_channel = "live_ltp_updates"
+      begin
+        if redis_client.respond_to?(:publish)
+          redis_client.publish(pubsub_channel, broadcast_data.to_json)
+          Rails.logger.debug { "[MarketHub::WebsocketTickStreamer] 📡 Published LTP to Redis Pub/Sub: #{instrument.symbol_name} (#{instrument.id}) = ₹#{ltp.to_f}" }
+        else
+          # Fallback: direct ActionCable broadcast if Redis Pub/Sub not available
+          ActionCable.server.broadcast("dashboard_updates", broadcast_data)
+          Rails.logger.debug { "[MarketHub::WebsocketTickStreamer] 📡 Cached & broadcasted LTP (fallback): #{instrument.symbol_name} (#{instrument.id}) = ₹#{ltp.to_f}" }
+        end
+      rescue StandardError => e
+        Rails.logger.error("[MarketHub::WebsocketTickStreamer] Failed to publish to Pub/Sub: #{e.message}")
+        # Fallback to ActionCable
+        ActionCable.server.broadcast("dashboard_updates", broadcast_data)
+      end
     rescue StandardError => e
       Rails.logger.error("[MarketHub::WebsocketTickStreamer] Error handling tick: #{e.message}")
       Rails.logger.error("Tick data: #{tick_data.inspect}")

@@ -243,11 +243,15 @@ export default class extends Controller {
         connected: () => {
           console.log("Connected to ActionCable");
           this.updateConnectionStatus(true);
+          // Dispatch event for screener pages to know ActionCable is connected
+          window.dispatchEvent(new CustomEvent("actioncable:connected"));
         },
 
         disconnected: () => {
           console.log("Disconnected from ActionCable");
           this.updateConnectionStatus(false);
+          // Dispatch event for screener pages to start fallback polling
+          window.dispatchEvent(new CustomEvent("actioncable:disconnected"));
         },
 
         received: (data) => {

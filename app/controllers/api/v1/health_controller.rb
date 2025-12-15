@@ -22,7 +22,11 @@ module Api
             heartbeat = cache_data[:heartbeat]
             next unless heartbeat
 
-            Time.parse(heartbeat.to_s) rescue nil
+            begin
+              Time.zone.parse(heartbeat.to_s)
+            rescue StandardError
+              nil
+            end
           end.compact.max
 
           if latest_heartbeat
@@ -46,7 +50,11 @@ module Api
         else
           # Fallback: check Redis heartbeat (for backward compatibility)
           heartbeat_key = "market_stream:heartbeat"
-          heartbeat_timestamp = redis_client.read(heartbeat_key)
+          heartbeat_timestamp = if redis_client.respond_to?(:get)
+                                  redis_client.get(heartbeat_key)
+                                else
+                                  redis_client.read(heartbeat_key)
+                                end
 
           if heartbeat_timestamp
             heartbeat_time = Time.at(heartbeat_timestamp.to_i)
@@ -82,29 +90,25 @@ module Api
         # Find all active stream cache keys
         # This is approximate - in production you might want a more sophisticated tracking mechanism
         keys = []
-        
+
         # Check common stream key patterns
         ["type:swing", "type:longterm", "default"].each do |prefix|
           cache_key = "websocket_stream:#{prefix}"
           cache_data = Rails.cache.read(cache_key)
-          if cache_data.is_a?(Hash) && cache_data[:status] == "running"
-            keys << prefix
-          end
+          keys << prefix if cache_data.is_a?(Hash) && cache_data[:status] == "running"
         end
 
         keys
       end
 
       def redis_client
-        @redis_client ||= begin
-          if defined?(Redis) && ENV["REDIS_URL"].present?
-            Redis.new(url: ENV["REDIS_URL"])
-          elsif Rails.cache.respond_to?(:redis)
-            Rails.cache.redis
-          else
-            Rails.cache
-          end
-        end
+        @redis_client ||= if defined?(Redis) && ENV["REDIS_URL"].present?
+                            Redis.new(url: ENV.fetch("REDIS_URL", nil))
+                          elsif Rails.cache.respond_to?(:redis)
+                            Rails.cache.redis
+                          else
+                            Rails.cache
+                          end
       end
 
       def json_request?
