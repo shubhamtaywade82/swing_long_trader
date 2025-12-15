@@ -32,7 +32,7 @@
               <% setup_status = candidate[:setup_status] || "UNKNOWN" %>
               <% weekly_adx = candidate.dig(:weekly_indicators, :adx) %>
               <% daily_rsi = candidate.dig(:daily_indicators, :rsi) %>
-              <% 
+              <%
                 instrument_key = nil
                 if candidate[:instrument_id]
                   instrument = Instrument.find_by(id: candidate[:instrument_id])

@@ -38,7 +38,7 @@
               <% adx = indicators[:adx] || indicators["adx"] || candidate.dig(:daily_indicators, :adx) %>
               <% trade_plan = candidate[:trade_plan] %>
               <% setup_status = candidate[:setup_status] || "UNKNOWN" %>
-              <% 
+              <%
                 instrument_key = nil
                 if candidate[:instrument_id]
                   instrument = Instrument.find_by(id: candidate[:instrument_id])

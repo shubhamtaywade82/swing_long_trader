@@ -64,7 +64,7 @@
                 data-dailyrsi="<%= daily_rsi || 0 %>"
                 data-momentum="<%= momentum %>"
                 data-recommendation="<%= candidate[:recommendation] || '' %>"
-                <% 
+                <%
                   instrument_key = nil
                   if candidate[:instrument_id]
                     instrument = Instrument.find_by(id: candidate[:instrument_id])

@@ -58,7 +58,7 @@
             <% ema_trend = (ema20 && ema50) ? (ema20 > ema50 ? "BULL" : "BEAR") : "" %>
             <% macd = indicators[:macd] || indicators["macd"] || candidate.dig(:daily_indicators, :macd) %>
             <% macd_trend = (macd.is_a?(Array) && macd.size >= 2) ? (macd[0] > macd[1] ? "BULL" : "BEAR") : "" %>
-            <% 
+            <%
               instrument_key = nil
               if candidate[:instrument_id]
                 instrument = Instrument.find_by(id: candidate[:instrument_id])
