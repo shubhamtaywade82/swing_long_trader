@@ -63,7 +63,17 @@
                 data-weeklyadx="<%= weekly_adx || 0 %>"
                 data-dailyrsi="<%= daily_rsi || 0 %>"
                 data-momentum="<%= momentum %>"
-                data-recommendation="<%= candidate[:recommendation] || '' %>">
+                data-recommendation="<%= candidate[:recommendation] || '' %>"
+                <% 
+                  instrument_key = nil
+                  if candidate[:instrument_id]
+                    instrument = Instrument.find_by(id: candidate[:instrument_id])
+                    instrument_key = instrument ? "#{instrument.exchange_segment}:#{instrument.security_id}" : nil
+                  end
+                %>
+                <% if instrument_key %>
+                  data-instrument-key="<%= instrument_key %>"
+                <% end %>>
               <td class="text-right"><strong>#<%= index + 1 %></strong></td>
               <td><strong><%= candidate[:symbol] %></strong></td>
               <td class="text-right">
@@ -85,7 +95,7 @@
               </td>
               <td class="text-right tech-col" style="display: none;"><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
               <td class="text-right tech-col" style="display: none;"><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
-              <td class="text-right" data-price-cell="true">₹<%= number_with_precision(price, precision: 2) %></td>
+              <td class="text-right js-ltp-cell" data-price-cell="true" <% if instrument_key %>data-instrument-key="<%= instrument_key %>"<% end %>>₹<%= number_with_precision(price, precision: 2) %></td>
               <% if has_accumulation_plan %>
                 <% accumulation_plan = candidate[:accumulation_plan] %>
                 <% if accumulation_plan %>

@@ -230,6 +230,10 @@ module MarketHub
         return
       end
 
+      # Cache LTP in Redis for fast API reads (key format: ltp:SEGMENT:SECURITY_ID)
+      cache_key = "ltp:#{segment}:#{security_id}"
+      redis_client.setex(cache_key, 30, ltp.to_f.to_s)
+
       # Broadcast immediately via ActionCable
       broadcast_data = {
         type: "screener_ltp_update",
@@ -248,8 +252,8 @@ module MarketHub
       ActionCable.server.broadcast("dashboard_updates", broadcast_data)
 
       # Always log broadcasts (not just in development) to track if messages are being sent
-      Rails.logger.info(
-        "[MarketHub::WebsocketTickStreamer] 📡 Broadcasted LTP update: #{instrument.symbol_name} (#{instrument.id}) = ₹#{ltp.to_f}",
+      Rails.logger.debug(
+        "[MarketHub::WebsocketTickStreamer] 📡 Cached & broadcasted LTP: #{instrument.symbol_name} (#{instrument.id}) = ₹#{ltp.to_f}",
       )
     rescue StandardError => e
       Rails.logger.error("[MarketHub::WebsocketTickStreamer] Error handling tick: #{e.message}")
@@ -317,6 +321,20 @@ module MarketHub
       market_close = now.change(hour: 15, min: 30, sec: 0)
 
       now >= market_open && now <= market_close
+    end
+
+    def redis_client
+      @redis_client ||= begin
+        # Try to use Redis directly if available, otherwise fall back to Rails.cache
+        if defined?(Redis) && ENV["REDIS_URL"].present?
+          Redis.new(url: ENV["REDIS_URL"])
+        elsif Rails.cache.respond_to?(:redis)
+          Rails.cache.redis
+        else
+          # Fallback: use Rails.cache with manual key management
+          Rails.cache
+        end
+      end
     end
   end
 end

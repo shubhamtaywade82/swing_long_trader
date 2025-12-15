@@ -38,8 +38,18 @@
               <% adx = indicators[:adx] || indicators["adx"] || candidate.dig(:daily_indicators, :adx) %>
               <% trade_plan = candidate[:trade_plan] %>
               <% setup_status = candidate[:setup_status] || "UNKNOWN" %>
+              <% 
+                instrument_key = nil
+                if candidate[:instrument_id]
+                  instrument = Instrument.find_by(id: candidate[:instrument_id])
+                  instrument_key = instrument ? "#{instrument.exchange_segment}:#{instrument.security_id}" : nil
+                end
+              %>
               <tr data-screener-symbol="<%= candidate[:symbol] %>"
                   data-screener-instrument-id="<%= candidate[:instrument_id] %>"
+                  <% if instrument_key %>
+                    data-instrument-key="<%= instrument_key %>"
+                  <% end %>
                   data-rank="<%= index + 1 %>"
                   data-symbol="<%= candidate[:symbol] %>"
                   data-score="<%= candidate[:score] || 0 %>"
@@ -72,7 +82,7 @@
                     <%= setup_status.gsub('_', ' ') %>
                   </span>
                 </td>
-                <td class="text-right" data-price-cell="true">
+                <td class="text-right js-ltp-cell" data-price-cell="true" <% if instrument_key %>data-instrument-key="<%= instrument_key %>"<% end %>>
                   <strong>₹<%= number_with_precision(latest_close, precision: 2) %></strong>
                 </td>
                 <td class="text-right">

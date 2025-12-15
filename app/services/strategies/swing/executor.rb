@@ -307,8 +307,17 @@ module Strategies
         # Check if paper trading is enabled
         return execute_paper_trade if Rails.configuration.x.paper_trading.enabled
 
-        # Determine order type (MARKET for swing trading)
-        order_type = "MARKET" # Swing trading typically uses market orders
+        # Always use LIMIT orders (never MARKET orders)
+        # Use entry_price from signal as limit price
+        order_type = "LIMIT"
+        limit_price = @signal[:entry_price]
+
+        unless limit_price&.positive?
+          return {
+            success: false,
+            error: "Entry price required for LIMIT order",
+          }
+        end
 
         # Map direction to transaction type
         transaction_type = @signal[:direction] == :long ? "BUY" : "SELL"
@@ -344,7 +353,7 @@ module Strategies
           order_type: order_type,
           transaction_type: transaction_type,
           quantity: @signal[:qty],
-          price: nil, # Market order
+          price: limit_price, # LIMIT order with entry price
           client_order_id: generate_order_id,
           dry_run: @dry_run,
         )
@@ -399,10 +408,10 @@ module Strategies
           exchange_segment: @instrument.exchange_segment,
           security_id: @instrument.security_id,
           product_type: "EQUITY",
-          order_type: order_type,
+          order_type: "LIMIT", # Always LIMIT orders
           transaction_type: transaction_type,
           quantity: @signal[:qty],
-          price: @signal[:entry_price],
+          price: @signal[:entry_price], # LIMIT price
           validity: "DAY",
           status: "pending",
           dry_run: false,
@@ -603,7 +612,7 @@ module Strategies
         message += "Symbol: #{order.symbol}\n"
         message += "Type: #{order.transaction_type} #{order.order_type}\n"
         message += "Quantity: #{order.quantity}\n"
-        message += "Price: #{order.price ? "₹#{order.price}" : 'Market'}\n"
+        message += "Price: #{order.price ? "₹#{order.price} (LIMIT)" : 'Market'}\n"
         message += "Status: #{order.status}\n"
         message += "Order ID: #{order.client_order_id}"
 
@@ -628,7 +637,7 @@ module Strategies
                            "#{@signal[:qty]} @ ₹#{@signal[:entry_price]}"
                        else
                          "#{result[:order]&.symbol} #{result[:order]&.transaction_type} " \
-                           "#{result[:order]&.quantity} @ #{result[:order]&.price || 'Market'}"
+                           "#{result[:order]&.quantity} @ ₹#{result[:order]&.price} (LIMIT)"
                        end
 
           Rails.logger.info(

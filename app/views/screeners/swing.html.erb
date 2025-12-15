@@ -627,7 +627,135 @@
     // Auto-start LTP updates when page loads (if market is open and results exist)
     setTimeout(() => {
       startLtpUpdates('swing');
+      // Also start polling the new API endpoint for real-time prices
+      startLtpPolling();
     }, 2000); // Wait 2 seconds for page to fully load
+
+    // Poll API endpoint for real-time LTP updates
+    let ltpPollingInterval = null;
+    let lastPrices = {}; // Track last prices for change detection
+
+    function startLtpPolling() {
+      // Stop any existing polling
+      if (ltpPollingInterval) {
+        clearInterval(ltpPollingInterval);
+      }
+
+      // Collect all instrument keys from the table
+      const priceCells = document.querySelectorAll('.js-ltp-cell[data-instrument-key]');
+      if (priceCells.length === 0) {
+        console.log('[LTP Polling] No price cells found, skipping polling');
+        return;
+      }
+
+      const instrumentKeys = Array.from(priceCells)
+        .map(cell => cell.getAttribute('data-instrument-key'))
+        .filter(key => key && key.trim() !== '');
+
+      if (instrumentKeys.length === 0) {
+        console.log('[LTP Polling] No instrument keys found, skipping polling');
+        return;
+      }
+
+      console.log(`[LTP Polling] Starting polling for ${instrumentKeys.length} instruments`);
+
+      // Poll every 1-2 seconds
+      const pollInterval = 1500; // 1.5 seconds
+      ltpPollingInterval = setInterval(() => {
+        fetchLtpUpdates(instrumentKeys);
+      }, pollInterval);
+
+      // Initial fetch
+      fetchLtpUpdates(instrumentKeys);
+    }
+
+    function fetchLtpUpdates(instrumentKeys) {
+      if (instrumentKeys.length === 0) return;
+
+      const keysParam = instrumentKeys.join(',');
+      const apiUrl = `/api/v1/current_prices?keys=${encodeURIComponent(keysParam)}`;
+
+      fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.prices) {
+          updatePrices(data.prices);
+        }
+      })
+      .catch(error => {
+        console.error('[LTP Polling] Error fetching prices:', error);
+      });
+    }
+
+    function updatePrices(prices) {
+      Object.keys(prices).forEach(instrumentKey => {
+        const price = prices[instrumentKey];
+        if (price === null || price === undefined) return;
+
+        // Find all cells with this instrument key
+        const cells = document.querySelectorAll(
+          `.js-ltp-cell[data-instrument-key="${instrumentKey}"]`
+        );
+
+        cells.forEach(cell => {
+          const currentPrice = parseFloat(cell.textContent.replace(/[₹,\s]/g, '')) || 0;
+          const newPrice = parseFloat(price);
+
+          if (newPrice && newPrice !== currentPrice) {
+            // Update price
+            cell.textContent = `₹${newPrice.toFixed(2)}`;
+
+            // Add visual feedback
+            const row = cell.closest('tr');
+            if (row) {
+              row.classList.add('ltp-updated');
+              setTimeout(() => {
+                row.classList.remove('ltp-updated');
+              }, 500);
+
+              // Add price direction class
+              if (newPrice > currentPrice) {
+                cell.classList.add('price-up');
+                cell.classList.remove('price-down');
+              } else if (newPrice < currentPrice) {
+                cell.classList.add('price-down');
+                cell.classList.remove('price-up');
+              }
+
+              // Remove direction class after animation
+              setTimeout(() => {
+                cell.classList.remove('price-up', 'price-down');
+              }, 500);
+            }
+
+            // Update data-price attribute for sorting
+            const rowElement = cell.closest('tr');
+            if (rowElement) {
+              rowElement.setAttribute('data-price', newPrice);
+            }
+          }
+        });
+      });
+    }
+
+    function stopLtpPolling() {
+      if (ltpPollingInterval) {
+        clearInterval(ltpPollingInterval);
+        ltpPollingInterval = null;
+        console.log('[LTP Polling] Stopped polling');
+      }
+    }
 
     // Function to toggle recommendations view
     window.toggleRecommendationsView = function(view) {
