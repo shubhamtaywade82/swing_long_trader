@@ -38,6 +38,9 @@ module MarketHub
       unsubscribe_all
       close_websocket_connection
       { success: true, message: "WebSocket stream stopped" }
+    rescue StandardError => e
+      Rails.logger.warn("[MarketHub::WebsocketTickStreamer] Error during stop: #{e.message}")
+      { success: false, error: e.message }
     end
 
     private
