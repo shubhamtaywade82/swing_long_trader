@@ -61,8 +61,10 @@ module MarketHub
     end
 
     def subscribe_to_ticks(instruments)
+      # Format subscription params for dhanhq-client gem API
+      # API: ws.subscribe_one(segment: "NSE_EQ", security_id: "12345")
+      # Note: Up to 100 instruments per SUB message (client auto-chunks)
       instruments.each do |instrument|
-        # Format subscription params according to dhanhq-client gem API
         subscription_params = {
           ExchangeSegment: instrument.exchange_segment,
           SecurityId: instrument.security_id.to_s,
@@ -74,112 +76,89 @@ module MarketHub
     def start_websocket_connection
       return unless @subscriptions.any?
 
-      # Try different possible WebSocket API structures from dhanhq-client gem
-      # The gem may expose WebSocket via:
-      # 1. DhanHQ::WebSocket::MarketFeed
-      # 2. DhanHQ::Client with websocket option
-      # 3. DhanHQ::WebSocket::Client
-      # 4. DhanHQ::MarketFeed::WebSocket
-
       begin
-        # Try the most likely API structure based on gem patterns
-        if defined?(DhanHQ::WebSocket) && DhanHQ::WebSocket.const_defined?(:MarketFeed)
-          # Option 1: DhanHQ::WebSocket::MarketFeed
-          @websocket_client = DhanHQ::WebSocket::MarketFeed.new(
-            on_tick: method(:handle_tick),
-            on_error: method(:handle_error),
-            on_close: method(:handle_close),
-          )
-        elsif defined?(DhanHQ::WebSocket) && DhanHQ::WebSocket.const_defined?(:Client)
-          # Option 2: DhanHQ::WebSocket::Client
-          @websocket_client = DhanHQ::WebSocket::Client.new(
-            type: :market_feed,
-            on_tick: method(:handle_tick),
-            on_error: method(:handle_error),
-            on_close: method(:handle_close),
-          )
-        elsif DhanHQ::Client.instance_methods.include?(:websocket) || DhanHQ::Client.instance_methods.include?(:market_feed_websocket)
-          # Option 3: DhanHQ::Client with websocket method
-          client = DhanHQ::Client.new(api_type: :data_api)
-          @websocket_client = client.market_feed_websocket(
-            on_tick: method(:handle_tick),
-            on_error: method(:handle_error),
-            on_close: method(:handle_close),
-          )
-        else
-          # Fallback: Try to instantiate directly and let gem handle it
-          # This will raise an error if WebSocket is not available, which we'll catch
-          raise NotImplementedError, "WebSocket API not found in dhanhq-client gem"
+        # Initialize WebSocket client using dhanhq-client gem API
+        # API: DhanHQ::WS::Client.new(mode: :quote).start
+        # Modes: :ticker (LTP+LTT), :quote (OHLCV+totals, recommended), :full (quote+OI+depth)
+        mode = ENV.fetch("DHANHQ_WS_MODE", "quote").to_sym
+        mode = :quote unless %i[ticker quote full].include?(mode)
+
+        @websocket_client = DhanHQ::WS::Client.new(mode: mode).start
+
+        # Set up tick handler
+        # API: ws.on(:tick) { |t| ... }
+        @websocket_client.on(:tick) do |tick|
+          handle_tick(tick)
         end
 
         # Subscribe to all instruments
-        # The gem's subscribe method may accept:
-        # - Array of subscription params
-        # - Single subscription param
-        # - Hash with :subscriptions key
-        if @websocket_client.respond_to?(:subscribe)
-          if @subscriptions.size == 1
-            @websocket_client.subscribe(@subscriptions.first)
-          else
-            @websocket_client.subscribe(@subscriptions)
-          end
-        elsif @websocket_client.respond_to?(:add_subscription)
-          @subscriptions.each { |sub| @websocket_client.add_subscription(sub) }
-        else
-          raise NotImplementedError, "Subscribe method not found on WebSocket client"
+        # API: ws.subscribe_one(segment: "NSE_EQ", security_id: "12345")
+        # Note: Up to 100 instruments per message (client auto-chunks)
+        @subscriptions.each do |sub|
+          @websocket_client.subscribe_one(
+            segment: sub[:ExchangeSegment] || sub["ExchangeSegment"],
+            security_id: sub[:SecurityId] || sub["SecurityId"],
+          )
         end
 
-        Rails.logger.info("[MarketHub::WebsocketTickStreamer] Subscribed to #{@subscriptions.size} instruments")
-      rescue NameError, NotImplementedError => e
+        Rails.logger.info(
+          "[MarketHub::WebsocketTickStreamer] Started WebSocket (mode: #{mode}) and subscribed to #{@subscriptions.size} instruments",
+        )
+      rescue NameError => e
         Rails.logger.error("[MarketHub::WebsocketTickStreamer] WebSocket API not available: #{e.message}")
-        Rails.logger.error("Please check dhanhq-client gem documentation: https://github.com/shubhamtaywade82/dhanhq-client")
+        Rails.logger.error("Please ensure dhanhq-client gem is updated: https://github.com/shubhamtaywade82/dhanhq-client")
         raise StandardError, "WebSocket not available in dhanhq-client gem. Error: #{e.message}"
+      rescue StandardError => e
+        Rails.logger.error("[MarketHub::WebsocketTickStreamer] Failed to start WebSocket: #{e.message}")
+        raise
       end
     end
 
     def handle_tick(tick_data)
-      # tick_data format varies by gem version, handle multiple formats:
-      # - Hash with string keys: { "ExchangeSegment" => "...", "SecurityId" => "...", "LastPrice" => ... }
-      # - Hash with symbol keys: { ExchangeSegment: "...", SecurityId: "...", LastPrice: ... }
-      # - Object with methods: tick_data.ExchangeSegment, tick_data.SecurityId, tick_data.LastPrice
+      # Tick format from dhanhq-client gem (normalized Hash):
+      # {
+      #   kind: :quote,                 # :ticker | :quote | :full | :oi | :prev_close | :misc
+      #   segment: "NSE_FNO",           # string enum
+      #   security_id: "12345",
+      #   ltp: 101.5,
+      #   ts:  1723791300,              # LTT epoch (sec) if present
+      #   vol: 123456,                  # quote/full
+      #   atp: 100.9,                   # quote/full
+      #   day_open: 100.1, day_high: 102.4, day_low: 99.5, day_close: nil,
+      #   oi: 987654,                   # full or OI packet
+      #   bid: 101.45, ask: 101.55      # from depth (mode :full)
+      # }
       
-      tick_hash = if tick_data.is_a?(Hash)
-                    tick_data
-                  elsif tick_data.respond_to?(:to_h)
-                    tick_data.to_h
-                  else
-                    # Try to convert object to hash
-                    tick_data.instance_variables.each_with_object({}) do |var, hash|
-                      key = var.to_s.delete("@").to_sym
-                      hash[key] = tick_data.instance_variable_get(var)
-                    end
-                  end
+      return unless tick_data.is_a?(Hash)
 
-      symbol = find_symbol_for_tick(tick_hash)
-      return unless symbol
+      segment = tick_data[:segment] || tick_data["segment"]
+      security_id = tick_data[:security_id] || tick_data["security_id"]
+      ltp = tick_data[:ltp] || tick_data["ltp"]
 
-      # Extract LTP from various possible field names
-      ltp = tick_hash["LastPrice"] || 
-            tick_hash[:LastPrice] || 
-            tick_hash["last_price"] || 
-            tick_hash[:last_price] ||
-            tick_hash["LTP"] ||
-            tick_hash[:ltp] ||
-            (tick_data.respond_to?(:last_price) ? tick_data.last_price : nil) ||
-            (tick_data.respond_to?(:LastPrice) ? tick_data.LastPrice : nil)
+      return unless segment && security_id && ltp && ltp.to_f.positive?
 
-      return unless ltp && ltp.to_f.positive?
+      # Find instrument and symbol
+      instrument = Instrument.find_by(
+        exchange_segment: segment,
+        security_id: security_id.to_s,
+      )
+      return unless instrument
 
       # Broadcast immediately via ActionCable
       ActionCable.server.broadcast(
         "dashboard_updates",
         {
           type: "screener_ltp_update",
-          symbol: symbol,
-          instrument_id: find_instrument_id_for_tick(tick_hash),
+          symbol: instrument.symbol_name,
+          instrument_id: instrument.id,
           ltp: ltp.to_f,
           timestamp: Time.current.iso8601,
           source: "websocket", # Indicate this is real-time, not polled
+          tick_kind: tick_data[:kind] || tick_data["kind"], # :ticker, :quote, :full, etc.
+          volume: tick_data[:vol] || tick_data["vol"],
+          day_open: tick_data[:day_open] || tick_data["day_open"],
+          day_high: tick_data[:day_high] || tick_data["day_high"],
+          day_low: tick_data[:day_low] || tick_data["day_low"],
         },
       )
     rescue StandardError => e
@@ -189,36 +168,31 @@ module MarketHub
 
     def handle_error(error)
       Rails.logger.error("[MarketHub::WebsocketTickStreamer] WebSocket error: #{error.message}")
-      # Attempt reconnection
-      reconnect_websocket
+      # Note: dhanhq-client gem handles reconnection automatically with exponential backoff
+      # On reconnect, the client resends the current subscription snapshot (idempotent)
     end
 
     def handle_close
       Rails.logger.warn("[MarketHub::WebsocketTickStreamer] WebSocket connection closed")
-      # Attempt reconnection if market is still open
-      reconnect_websocket if market_open?
-    end
-
-    def reconnect_websocket
-      return unless market_open?
-
-      Rails.logger.info("[MarketHub::WebsocketTickStreamer] Attempting reconnection...")
-      sleep(2) # Wait before reconnecting
-      start_websocket_connection
+      # Note: dhanhq-client gem handles reconnection automatically
+      # Only reconnect manually if needed (e.g., after graceful disconnect)
+      if market_open? && @websocket_client.nil?
+        Rails.logger.info("[MarketHub::WebsocketTickStreamer] Attempting reconnection...")
+        sleep(2) # Wait before reconnecting
+        start_websocket_connection
+      end
     end
 
     def unsubscribe_all
       return unless @websocket_client
 
       begin
-        if @websocket_client.respond_to?(:unsubscribe)
-          if @subscriptions.size == 1
-            @websocket_client.unsubscribe(@subscriptions.first)
-          else
-            @websocket_client.unsubscribe(@subscriptions)
-          end
-        elsif @websocket_client.respond_to?(:remove_subscription)
-          @subscriptions.each { |sub| @websocket_client.remove_subscription(sub) }
+        # API: ws.unsubscribe_one(segment: "NSE_EQ", security_id: "12345")
+        @subscriptions.each do |sub|
+          @websocket_client.unsubscribe_one(
+            segment: sub[:ExchangeSegment] || sub["ExchangeSegment"],
+            security_id: sub[:SecurityId] || sub["SecurityId"],
+          )
         end
       rescue StandardError => e
         Rails.logger.warn("[MarketHub::WebsocketTickStreamer] Error unsubscribing: #{e.message}")
@@ -231,10 +205,12 @@ module MarketHub
       return unless @websocket_client
 
       begin
-        if @websocket_client.respond_to?(:close)
-          @websocket_client.close
-        elsif @websocket_client.respond_to?(:disconnect)
-          @websocket_client.disconnect
+        # API: ws.disconnect! (graceful) or ws.stop (hard stop)
+        # Use disconnect! for graceful shutdown (sends broker disconnect code 12, no reconnect)
+        if @websocket_client.respond_to?(:disconnect!)
+          @websocket_client.disconnect!
+        elsif @websocket_client.respond_to?(:stop)
+          @websocket_client.stop
         end
       rescue StandardError => e
         Rails.logger.warn("[MarketHub::WebsocketTickStreamer] Error closing connection: #{e.message}")
@@ -243,31 +219,6 @@ module MarketHub
       end
     end
 
-    def find_symbol_for_tick(tick_data)
-      exchange_segment = tick_data["ExchangeSegment"] || tick_data[:ExchangeSegment]
-      security_id = tick_data["SecurityId"] || tick_data[:SecurityId]
-
-      return nil unless exchange_segment && security_id
-
-      instrument = Instrument.find_by(
-        exchange_segment: exchange_segment,
-        security_id: security_id.to_s,
-      )
-      instrument&.symbol_name
-    end
-
-    def find_instrument_id_for_tick(tick_data)
-      exchange_segment = tick_data["ExchangeSegment"] || tick_data[:ExchangeSegment]
-      security_id = tick_data["SecurityId"] || tick_data[:SecurityId]
-
-      return nil unless exchange_segment && security_id
-
-      instrument = Instrument.find_by(
-        exchange_segment: exchange_segment,
-        security_id: security_id.to_s,
-      )
-      instrument&.id
-    end
 
     def market_open?
       now = Time.current.in_time_zone("Asia/Kolkata")

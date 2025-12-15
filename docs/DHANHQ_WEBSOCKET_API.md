@@ -2,104 +2,148 @@
 
 ## Overview
 
-This document describes how to implement WebSocket-based real-time tick streaming using the `dhanhq-client` gem.
+This document describes the WebSocket-based real-time tick streaming implementation using the `dhanhq-client` gem.
 
 **Gem Repository**: https://github.com/shubhamtaywade82/dhanhq-client
 
-## Current Implementation Status
+## WebSocket API (Verified)
 
-The `WebsocketTickStreamer` service has been implemented with multiple API fallbacks to handle different possible WebSocket API structures from the gem. However, **the actual WebSocket API structure needs to be verified** by checking the gem's documentation or source code.
+Based on the dhanhq-client gem documentation, the WebSocket API is:
 
-## Possible WebSocket API Structures
+### Client Initialization
 
-Based on common Ruby gem patterns and the gem's structure, the WebSocket API might be:
-
-### Option 1: `DhanHQ::WebSocket::MarketFeed`
 ```ruby
-client = DhanHQ::WebSocket::MarketFeed.new(
-  on_tick: ->(tick) { handle_tick(tick) },
-  on_error: ->(error) { handle_error(error) },
-  on_close: -> { handle_close }
-)
-client.subscribe([{ ExchangeSegment: "NSE_EQ", SecurityId: "11536" }])
+# Modes: :ticker (LTP+LTT), :quote (OHLCV+totals, recommended), :full (quote+OI+depth)
+ws = DhanHQ::WS::Client.new(mode: :quote).start
 ```
 
-### Option 2: `DhanHQ::WebSocket::Client`
+### Event Handlers
+
 ```ruby
-client = DhanHQ::WebSocket::Client.new(
-  type: :market_feed,
-  on_tick: ->(tick) { handle_tick(tick) },
-  on_error: ->(error) { handle_error(error) },
-  on_close: -> { handle_close }
-)
-client.subscribe([{ ExchangeSegment: "NSE_EQ", SecurityId: "11536" }])
+ws.on(:tick) do |t|
+  puts "[#{t[:segment]}:#{t[:security_id]}] LTP=#{t[:ltp]} kind=#{t[:kind]}"
+end
 ```
 
-### Option 3: `DhanHQ::Client` with websocket method
+### Subscription
+
 ```ruby
-client = DhanHQ::Client.new(api_type: :data_api)
-ws_client = client.market_feed_websocket(
-  on_tick: ->(tick) { handle_tick(tick) },
-  on_error: ->(error) { handle_error(error) },
-  on_close: -> { handle_close }
-)
-ws_client.subscribe([{ ExchangeSegment: "NSE_EQ", SecurityId: "11536" }])
+# Subscribe instruments (≤100 per frame; client auto-chunks)
+ws.subscribe_one(segment: "NSE_EQ", security_id: "12345")
+ws.subscribe_one(segment: "IDX_I", security_id: "13")  # NIFTY index
 ```
 
-## Verification Steps
+### Unsubscription
 
-To verify the actual WebSocket API:
+```ruby
+ws.unsubscribe_one(segment: "NSE_EQ", security_id: "12345")
+```
 
-1. **Check Gem Documentation**:
-   ```bash
-   # View gem README
-   bundle show DhanHQ
-   cat $(bundle show DhanHQ)/README.md
-   ```
+### Disconnect
 
-2. **Inspect Gem Source**:
-   ```bash
-   # Check WebSocket classes
-   bundle exec rails runner "require 'dhan_hq'; puts DhanHQ.constants"
-   bundle exec rails runner "require 'dhan_hq'; puts DhanHQ::WebSocket.constants rescue puts 'No WebSocket module'"
-   ```
+```ruby
+# Graceful disconnect (sends broker disconnect code 12, no reconnect)
+ws.disconnect!
 
-3. **Check Gem Examples**:
-   - Look for examples in the gem's `examples/` directory
-   - Check the gem's test files for usage examples
+# Or hard stop (no broker message, just closes and halts loop)
+ws.stop
 
-4. **Test WebSocket Connection**:
-   ```ruby
-   # In Rails console
-   require 'dhan_hq'
-   
-   # Try different API structures
-   begin
-     ws = DhanHQ::WebSocket::MarketFeed.new
-     puts "Found: DhanHQ::WebSocket::MarketFeed"
-   rescue => e
-     puts "Not found: #{e.message}"
-   end
-   ```
+# Safety: kill all local sockets (useful in IRB)
+DhanHQ::WS.disconnect_all_local!
+```
 
-## Current Implementation
+## Tick Format
 
-The `WebsocketTickStreamer` service (`app/services/market_hub/websocket_tick_streamer.rb`) includes:
+Normalized ticks are Hash objects:
 
-1. **Multiple API fallbacks** - Tries different possible API structures
-2. **Flexible tick handling** - Handles various tick data formats
-3. **Error handling** - Graceful fallback if WebSocket is not available
-4. **ActionCable integration** - Broadcasts ticks to connected clients
+```ruby
+{
+  kind: :quote,                 # :ticker | :quote | :full | :oi | :prev_close | :misc
+  segment: "NSE_FNO",           # string enum
+  security_id: "12345",
+  ltp: 101.5,
+  ts:  1723791300,              # LTT epoch (sec) if present
+  vol: 123456,                  # quote/full
+  atp: 100.9,                   # quote/full
+  day_open: 100.1, day_high: 102.4, day_low: 99.5, day_close: nil,
+  oi: 987654,                   # full or OI packet
+  bid: 101.45, ask: 101.55      # from depth (mode :full)
+}
+```
 
-## Next Steps
+## Exchange Segment Enums
 
-1. **Verify API Structure**: Check the actual gem API and update the implementation
-2. **Test Connection**: Test WebSocket connection with real DhanHQ credentials
-3. **Handle Reconnection**: Implement robust reconnection logic
-4. **Rate Limiting**: Handle WebSocket rate limits if any
+| Enum | Exchange | Segment |
+|------|----------|---------|
+| IDX_I | Index | Index Value |
+| NSE_EQ | NSE | Equity Cash |
+| NSE_FNO | NSE | Futures & Options |
+| NSE_CURRENCY | NSE | Currency |
+| BSE_EQ | BSE | Equity Cash |
+| MCX_COMM | MCX | Commodity |
+| BSE_CURRENCY | BSE | Currency |
+| BSE_FNO | BSE | Futures & Options |
+
+## Implementation
+
+The `WebsocketTickStreamer` service (`app/services/market_hub/websocket_tick_streamer.rb`) implements:
+
+1. **Client initialization** with configurable mode (`:quote` default)
+2. **Tick handler** that broadcasts via ActionCable
+3. **Subscription management** for screener instruments
+4. **Automatic reconnection** (handled by gem with exponential backoff)
+5. **Graceful shutdown** using `disconnect!`
+
+## Features
+
+- **Automatic reconnection**: Gem handles reconnection with exponential backoff
+- **Subscription persistence**: On reconnect, client resends subscription snapshot (idempotent)
+- **Rate limiting**: Handles 429 errors with 60s cool-off
+- **Connection limits**: Up to 5 WS connections per user (per Dhan)
+- **Batch subscriptions**: Up to 100 instruments per SUB message (auto-chunked)
+
+## Configuration
+
+Set environment variables:
+
+```bash
+# Enable WebSocket
+export DHANHQ_WS_ENABLED=true
+
+# Set mode (:ticker, :quote, :full)
+export DHANHQ_WS_MODE=quote  # default: quote
+
+# Log level
+export DHAN_LOG_LEVEL=INFO
+```
+
+## Usage Example
+
+```ruby
+# In Rails initializer or service
+ws = DhanHQ::WS::Client.new(mode: :quote).start
+
+ws.on(:tick) do |tick|
+  # Broadcast to ActionCable
+  ActionCable.server.broadcast("dashboard_updates", {
+    type: "screener_ltp_update",
+    symbol: find_symbol(tick[:segment], tick[:security_id]),
+    ltp: tick[:ltp],
+    timestamp: Time.current.iso8601
+  })
+end
+
+# Subscribe to screener stocks
+screener_instruments.each do |instrument|
+  ws.subscribe_one(
+    segment: instrument.exchange_segment,
+    security_id: instrument.security_id.to_s
+  )
+end
+```
 
 ## References
 
 - Gem Repository: https://github.com/shubhamtaywade82/dhanhq-client
-- DhanHQ API Documentation: https://dhanhq.co/api-docs/
-- WebSocket Implementation: `app/services/market_hub/websocket_tick_streamer.rb`
+- Implementation: `app/services/market_hub/websocket_tick_streamer.rb`
+- Job: `app/jobs/market_hub/websocket_tick_streamer_job.rb`
