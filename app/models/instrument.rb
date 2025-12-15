@@ -60,6 +60,7 @@ require "bigdecimal"
 class Instrument < ApplicationRecord
   include InstrumentHelpers
   include CandleLoader
+  include MarketData::LtpAccessor
 
   # Removed scalper-specific associations:
   # - derivatives (options/futures tracking)
