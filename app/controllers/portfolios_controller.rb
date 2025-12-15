@@ -2,6 +2,8 @@
 
 class PortfoliosController < ApplicationController
   include PortfolioInitializer
+  include Filterable
+  include QueryBuilder
 
   # @api public
   # Displays portfolio information and performance metrics
@@ -9,19 +11,12 @@ class PortfoliosController < ApplicationController
   # @return [void] Renders portfolios/show view
   def show
     portfolio_params = params.permit(:mode)
-    @mode = validate_trading_mode(portfolio_params[:mode])
+    @mode = validate_trading_mode(portfolio_params[:mode], allowed_modes: %w[live paper])
 
     if @mode == "paper"
-      # Use CapitalAllocationPortfolio for paper trading (consistent with dashboard)
-      @portfolio = CapitalAllocationPortfolio.paper.active.first
-      ensure_paper_portfolio_initialized
-      # Use unified Position model for paper positions
-      @positions = Position.paper.open.includes(:instrument).order(opened_at: :desc).limit(100)
-      @ledger_entries = @portfolio ? @portfolio.ledger_entries.order(created_at: :desc).limit(50) : []
+      load_paper_portfolio
     else
-      @portfolios = Portfolio.live.recent.limit(30)
-      @current_portfolio = @portfolios.first
-      @positions = @current_portfolio ? @current_portfolio.positions.includes(:instrument).order(opened_at: :desc).limit(100) : []
+      load_live_portfolio
     end
 
     @performance_metrics = calculate_performance_metrics(@mode)
@@ -29,8 +24,36 @@ class PortfoliosController < ApplicationController
 
   private
 
-  def validate_trading_mode(mode_param)
-    %w[live paper].include?(mode_param.to_s) ? mode_param.to_s : current_trading_mode
+  def load_paper_portfolio
+    # Use CapitalAllocationPortfolio for paper trading (consistent with dashboard)
+    @portfolio = CapitalAllocationPortfolio.paper.active.first
+    ensure_paper_portfolio_initialized
+    # Use unified Position model for paper positions
+    @positions = build_paginated_query(
+      Position.paper.open,
+      includes: [:instrument],
+      order_column: :opened_at,
+      order_direction: :desc,
+      limit: 100
+    )
+    @ledger_entries = @portfolio ? build_paginated_query(
+      @portfolio.ledger_entries,
+      order_column: :created_at,
+      order_direction: :desc,
+      limit: 50
+    ) : []
+  end
+
+  def load_live_portfolio
+    @portfolios = Portfolio.live.recent.limit(30)
+    @current_portfolio = @portfolios.first
+    @positions = @current_portfolio ? build_paginated_query(
+      @current_portfolio.positions,
+      includes: [:instrument],
+      order_column: :opened_at,
+      order_direction: :desc,
+      limit: 100
+    ) : []
   end
 
   # @api private
