@@ -89,8 +89,8 @@ module LongTerm
       {
         timeframe: tf_value,
         candles_count: series.candles.size,
-        latest_close: series.candles.last&.close,
-        latest_timestamp: series.candles.last&.timestamp,
+        latest_close: series.latest_close,
+        latest_timestamp: series.latest_candle&.timestamp,
         indicators: indicators,
         trend_score: trend_score,
         momentum_score: momentum_score,

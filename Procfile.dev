@@ -1,4 +1,4 @@
 web: env RUBY_DEBUG_OPEN=true bin/rails server
-worker: QUEUES=screener_now,screener,ai_evaluation,execution,monitoring,data_ingestion,background,notifier bundle exec rails solid_queue:start
+worker: QUEUES=* bundle exec rails solid_queue:start
 js: yarn watch
 css: yarn watch:css

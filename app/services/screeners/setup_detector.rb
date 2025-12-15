@@ -70,7 +70,7 @@ module Screeners
     end
 
     def detect_setup
-      latest_close = @indicators[:latest_close] || @daily_series.candles.last&.close
+      latest_close = @indicators[:latest_close] || @daily_series.latest_close
       ema20 = @indicators[:ema20]
       ema50 = @indicators[:ema50]
       atr = @indicators[:atr]
@@ -187,7 +187,8 @@ module Screeners
       # Check if price is in a range (high-low spread < 5% over last 10 candles)
       return false if @daily_series.candles.size < 10
 
-      recent_candles = @daily_series.candles.last(10)
+      # Get recent candles sorted by timestamp (most recent last)
+      recent_candles = @daily_series.candles.sort_by(&:timestamp).last(10)
       highs = recent_candles.map(&:high)
       lows = recent_candles.map(&:low)
 
@@ -202,7 +203,8 @@ module Screeners
       # Find recent swing high (resistance)
       return nil if @daily_series.candles.size < 20
 
-      recent_candles = @daily_series.candles.last(20)
+      # Get recent candles sorted by timestamp (most recent last)
+      recent_candles = @daily_series.candles.sort_by(&:timestamp).last(20)
       highs = recent_candles.map(&:high)
 
       # Find local maxima (swing highs)

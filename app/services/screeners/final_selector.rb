@@ -52,7 +52,7 @@ module Screeners
       # Prefer paper portfolio for screening (safer, allows testing)
       # Initialize paper portfolio if it doesn't exist or has no capital
       paper_portfolio = CapitalAllocationPortfolio.paper.active.first
-      
+
       if paper_portfolio
         # Ensure it has valid capital allocated
         if paper_portfolio.total_equity.zero? || paper_portfolio.available_swing_capital <= 0
@@ -78,6 +78,9 @@ module Screeners
 
       # Rank candidates by combined score
       ranked = rank_candidates(@swing_candidates)
+
+      # Preload all instruments and IndexConstituents to avoid N+1 queries
+      preload_instruments_and_constituents(ranked)
 
       # Apply portfolio filters
       selected = []
@@ -261,23 +264,57 @@ module Screeners
       end
     end
 
+    def preload_instruments_and_constituents(candidates)
+      # Collect all instrument IDs
+      instrument_ids = candidates.filter_map { |c| c[:instrument_id] }.compact.uniq
+      return if instrument_ids.empty?
+
+      # Preload all instruments in one query
+      @preloaded_instruments ||= {}
+      instruments = Instrument.where(id: instrument_ids).index_by(&:id)
+      @preloaded_instruments.merge!(instruments)
+
+      # Preload IndexConstituents by symbol and ISIN
+      instrument_symbols = instruments.values.map(&:symbol_name).map(&:upcase).compact.uniq
+      instrument_isins = instruments.values.filter_map(&:isin).map(&:upcase).compact.uniq
+
+      @preloaded_constituents_by_symbol ||= {}
+      @preloaded_constituents_by_isin ||= {}
+
+      if instrument_symbols.any?
+        IndexConstituent.where(symbol: instrument_symbols).each do |constituent|
+          @preloaded_constituents_by_symbol[constituent.symbol.upcase] = constituent
+        end
+      end
+
+      if instrument_isins.any?
+        IndexConstituent.where(isin_code: instrument_isins).each do |constituent|
+          @preloaded_constituents_by_isin[constituent.isin_code.upcase] = constituent
+        end
+      end
+    end
+
     def get_sector(candidate)
       return nil unless candidate[:instrument_id]
 
-      instrument = Instrument.find_by(id: candidate[:instrument_id])
+      # Use preloaded instrument to avoid N+1 query
+      instrument = @preloaded_instruments&.[](candidate[:instrument_id])
+      return nil unless instrument
+
       get_sector_for_instrument(instrument)
     end
 
     def get_sector_for_instrument(instrument)
       return nil unless instrument
 
-      # Try to get sector from IndexConstituent
-      constituent = IndexConstituent.find_by(symbol: instrument.symbol_name.upcase)
+      # Use preloaded IndexConstituents to avoid N+1 queries
+      # Try to get sector from IndexConstituent by symbol
+      constituent = @preloaded_constituents_by_symbol&.[](instrument.symbol_name.upcase)
       return constituent.industry if constituent&.industry.present?
 
       # Fallback: try ISIN match
       if instrument.isin.present?
-        constituent = IndexConstituent.find_by(isin_code: instrument.isin.upcase)
+        constituent = @preloaded_constituents_by_isin&.[](instrument.isin.upcase)
         return constituent.industry if constituent&.industry.present?
       end
 
@@ -325,6 +362,9 @@ module Screeners
 
     def select_longterm_candidates
       return [] if @longterm_candidates.empty?
+
+      # Preload all instruments and IndexConstituents to avoid N+1 queries
+      preload_instruments_and_constituents(@longterm_candidates)
 
       # For long-term, use screener score primarily (AI ranking optional)
       ranked = @longterm_candidates.map do |candidate|

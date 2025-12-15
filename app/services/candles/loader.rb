@@ -73,6 +73,9 @@ module Candles
         series.add_candle(candle)
       end
 
+      # Ensure candles are sorted by timestamp (safety check)
+      series.candles.sort_by!(&:timestamp)
+
       series
     end
   end

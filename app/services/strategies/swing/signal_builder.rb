@@ -120,7 +120,7 @@ module Strategies
           ema200: @daily_series.ema(200),
           atr: @daily_series.atr(14),
           supertrend: calculate_supertrend,
-          latest_close: @daily_series.candles.last&.close,
+          latest_close: @daily_series.latest_close,
         }
       end
 
@@ -149,7 +149,7 @@ module Strategies
       end
 
       def calculate_entry_price(direction)
-        latest_candle = @daily_series.candles.last
+        latest_candle = @daily_series.latest_candle
         return nil unless latest_candle
 
         latest_close = latest_candle.close
@@ -158,13 +158,15 @@ module Strategies
         case direction
         when :long
           # Entry on breakout above recent high or retest of support
-          recent_high = @daily_series.candles.last(20).map(&:high).max
+          # Get recent candles sorted by timestamp (most recent last)
+          recent_high = @daily_series.candles.sort_by(&:timestamp).last(20).map(&:high).max
           entry = [recent_high, latest_close].max
           # Add small buffer for breakout entry
           entry + (atr * 0.1)
         when :short
           # Entry on breakdown below recent low or retest of resistance
-          recent_low = @daily_series.candles.last(20).map(&:low).min
+          # Get recent candles sorted by timestamp (most recent last)
+          recent_low = @daily_series.candles.sort_by(&:timestamp).last(20).map(&:low).min
           entry = [recent_low, latest_close].min
           # Subtract small buffer for breakdown entry
           entry - (atr * 0.1)
@@ -185,7 +187,8 @@ module Strategies
             support_based_sl = nearest_support * 0.98 # 2% below support
           end
 
-          recent_low = @daily_series.candles.last(20).map(&:low).min
+          # Get recent candles sorted by timestamp (most recent last)
+          recent_low = @daily_series.candles.sort_by(&:timestamp).last(20).map(&:low).min
           atr_based_sl = entry_price - (atr * 2.0)
           pct_based_sl = entry_price * (1 - (stop_loss_pct / 100.0))
 
@@ -199,7 +202,8 @@ module Strategies
             resistance_based_sl = nearest_resistance * 1.02 # 2% above resistance
           end
 
-          recent_high = @daily_series.candles.last(20).map(&:high).max
+          # Get recent candles sorted by timestamp (most recent last)
+          recent_high = @daily_series.candles.sort_by(&:timestamp).last(20).map(&:high).max
           atr_based_sl = entry_price + (atr * 2.0)
           pct_based_sl = entry_price * (1 + (stop_loss_pct / 100.0))
 
@@ -289,7 +293,7 @@ module Strategies
         risk_pct = @risk_config[:risk_per_trade_pct] || DEFAULT_RISK_PCT
         account_size = @risk_config[:account_size] || 100_000 # Default 1 lakh
 
-        case @daily_series.candles.last&.close && @instrument.ltp
+        case @daily_series.latest_close && @instrument.ltp
         when :long
           risk_amount = account_size * (risk_pct / 100.0)
           risk_per_share = entry_price - stop_loss
@@ -352,8 +356,8 @@ module Strategies
       def estimate_holding_days
         # Estimate based on profit target and volatility
         profit_target_pct = @exit_config[:profit_target_pct] || 15.0
-        atr_pct = if @daily_series.atr(14) && @daily_series.candles.last&.close
-                    (@daily_series.atr(14) / @daily_series.candles.last.close * 100).round(2)
+        atr_pct = if @daily_series.atr(14) && @daily_series.latest_close
+                    (@daily_series.atr(14) / @daily_series.latest_close * 100).round(2)
                   else
                     2.0
                   end

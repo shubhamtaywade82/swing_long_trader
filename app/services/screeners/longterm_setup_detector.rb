@@ -78,7 +78,7 @@ module Screeners
 
     def detect_accumulation_setup
       # Safely extract numeric values from indicators (handle Hash/String/nil cases)
-      weekly_close = extract_numeric(@weekly_indicators[:latest_close]) || @weekly_series.candles.last&.close
+      weekly_close = extract_numeric(@weekly_indicators[:latest_close]) || @weekly_series.latest_close
       weekly_ema20 = extract_numeric(@weekly_indicators[:ema20])
       weekly_ema50 = extract_numeric(@weekly_indicators[:ema50])
       weekly_adx = extract_numeric(@weekly_indicators[:adx])
@@ -214,7 +214,8 @@ module Screeners
       # Check if price is in a range (high-low spread < 8% over last 10 weekly candles)
       return false if @weekly_series.candles.size < 10
 
-      recent_candles = @weekly_series.candles.last(10)
+      # Get recent candles sorted by timestamp (most recent last)
+      recent_candles = @weekly_series.candles.sort_by(&:timestamp).last(10)
       highs = recent_candles.map(&:high)
       lows = recent_candles.map(&:low)
 
@@ -229,7 +230,8 @@ module Screeners
       # Find recent swing high (resistance) on weekly
       return nil if @weekly_series.candles.size < 20
 
-      recent_candles = @weekly_series.candles.last(20)
+      # Get recent candles sorted by timestamp (most recent last)
+      recent_candles = @weekly_series.candles.sort_by(&:timestamp).last(20)
       highs = recent_candles.map(&:high)
 
       # Find local maxima (swing highs)

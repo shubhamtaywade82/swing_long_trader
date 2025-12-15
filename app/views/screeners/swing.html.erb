@@ -631,6 +631,14 @@
       startLtpPolling();
     }, 2000); // Wait 2 seconds for page to fully load
 
+    // Re-start polling when user switches tabs (to only fetch active table stocks)
+    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+      tab.addEventListener('shown.bs.tab', function() {
+        console.log('[LTP Polling] Tab changed, restarting polling for active table');
+        startLtpPolling();
+      });
+    });
+
     // Poll API endpoint for real-time LTP updates
     let ltpPollingInterval = null;
     let lastPrices = {}; // Track last prices for change detection
@@ -641,28 +649,48 @@
         clearInterval(ltpPollingInterval);
       }
 
-      // Collect all instrument keys from the table
-      const priceCells = document.querySelectorAll('.js-ltp-cell[data-instrument-key]');
+      // Collect instrument keys only from the currently visible/active table
+      const activeTabPane = document.querySelector('.tab-pane.active, .tab-pane.show');
+      if (!activeTabPane) {
+        console.log('[LTP Polling] No active tab pane found, skipping polling');
+        return;
+      }
+
+      // Only look for cells within the active tab pane
+      const priceCells = activeTabPane.querySelectorAll('.js-ltp-cell[data-instrument-key]');
       if (priceCells.length === 0) {
-        console.log('[LTP Polling] No price cells found, skipping polling');
+        console.log('[LTP Polling] No price cells found in active tab, skipping polling');
         return;
       }
 
       const instrumentKeys = Array.from(priceCells)
         .map(cell => cell.getAttribute('data-instrument-key'))
-        .filter(key => key && key.trim() !== '');
+        .filter(key => key && key.trim() !== '')
+        .filter((key, index, self) => self.indexOf(key) === index); // Remove duplicates
 
       if (instrumentKeys.length === 0) {
         console.log('[LTP Polling] No instrument keys found, skipping polling');
         return;
       }
 
-      console.log(`[LTP Polling] Starting polling for ${instrumentKeys.length} instruments`);
+      console.log(`[LTP Polling] Starting polling for ${instrumentKeys.length} instruments from active table`);
 
       // Poll every 1-2 seconds
       const pollInterval = 1500; // 1.5 seconds
       ltpPollingInterval = setInterval(() => {
-        fetchLtpUpdates(instrumentKeys);
+        // Re-collect keys from active table on each poll (in case tab changed)
+        const currentActiveTabPane = document.querySelector('.tab-pane.active, .tab-pane.show');
+        if (currentActiveTabPane) {
+          const currentCells = currentActiveTabPane.querySelectorAll('.js-ltp-cell[data-instrument-key]');
+          const currentKeys = Array.from(currentCells)
+            .map(cell => cell.getAttribute('data-instrument-key'))
+            .filter(key => key && key.trim() !== '')
+            .filter((key, index, self) => self.indexOf(key) === index);
+
+          if (currentKeys.length > 0) {
+            fetchLtpUpdates(currentKeys);
+          }
+        }
       }, pollInterval);
 
       // Initial fetch

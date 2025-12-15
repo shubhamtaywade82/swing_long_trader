@@ -102,7 +102,7 @@ module Strategies
       end
 
       def build_long_term_signal(daily_series, _weekly_series)
-        latest_close = daily_series.candles.last&.close
+        latest_close = daily_series.latest_close
         return nil unless latest_close
 
         exit_config = @config[:exit_conditions] || {}

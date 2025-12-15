@@ -270,6 +270,8 @@ module Screeners
             )
             daily_series.add_candle(candle)
           end
+          # Ensure candles are sorted by timestamp (safety check)
+          daily_series.candles.sort_by!(&:timestamp)
           @candle_cache[instrument.id] ||= {}
           @candle_cache[instrument.id]["1D"] = daily_series
         end
@@ -289,6 +291,8 @@ module Screeners
           )
           weekly_series.add_candle(candle)
         end
+        # Ensure candles are sorted by timestamp (safety check)
+        weekly_series.candles.sort_by!(&:timestamp)
         @candle_cache[instrument.id] ||= {}
         @candle_cache[instrument.id]["1W"] = weekly_series
       end
@@ -515,7 +519,7 @@ module Screeners
         atr: series.atr(14),
         macd: series.macd(12, 26, 9),
         supertrend: calculate_supertrend(series),
-        latest_close: series.candles.last&.close,
+        latest_close: series.latest_close,
       }
     rescue StandardError => e
       Rails.logger.error("[Screeners::LongtermScreener] Indicator calculation failed: #{e.message}")
@@ -616,8 +620,8 @@ module Screeners
         ltp: instrument.ltp,
         daily_candles_count: daily_series.candles.size,
         weekly_candles_count: weekly_series.candles.size,
-        latest_daily_timestamp: daily_series.candles.last&.timestamp,
-        latest_weekly_timestamp: weekly_series.candles.last&.timestamp,
+        latest_daily_timestamp: daily_series.latest_candle&.timestamp,
+        latest_weekly_timestamp: weekly_series.latest_candle&.timestamp,
         trend_alignment: check_trend_alignment(daily_indicators, weekly_indicators),
         momentum: calculate_momentum(daily_series, weekly_series, daily_indicators, weekly_indicators),
       }

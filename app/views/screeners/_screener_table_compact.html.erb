@@ -44,6 +44,10 @@
                   instrument = Instrument.find_by(id: candidate[:instrument_id])
                   instrument_key = instrument ? "#{instrument.exchange_segment}:#{instrument.security_id}" : nil
                 end
+                # Check if trade plan is stale (current price too far from entry)
+                entry_price = trade_plan ? trade_plan[:entry_price] : nil
+                price_gap_pct = entry_price && entry_price > 0 ? ((latest_close - entry_price) / entry_price * 100).abs : 0
+                is_stale = price_gap_pct > 25.0 # More than 25% gap indicates stale plan
               %>
               <tr data-screener-symbol="<%= candidate[:symbol] %>"
                   data-screener-instrument-id="<%= candidate[:instrument_id] %>"
@@ -82,16 +86,26 @@
                     <%= setup_status.gsub('_', ' ') %>
                   </span>
                 </td>
-                <td class="text-right js-ltp-cell" data-price-cell="true" <% if instrument_key %>data-instrument-key="<%= instrument_key %>"<% end %>>
+                <td class="text-right js-ltp-cell" data-price-cell="true" <% if instrument_key %>data-instrument-key="<%= instrument_key %>"<% end %> data-entry-price="<%= entry_price || '' %>">
                   <strong>₹<%= number_with_precision(latest_close, precision: 2) %></strong>
                 </td>
                 <td class="text-right">
                   <% if trade_plan %>
-                    <div style="line-height: 1.4;">
-                      <div><strong>Entry:</strong> ₹<%= number_with_precision(trade_plan[:entry_price], precision: 2) %></div>
-                      <div class="text-danger" style="font-size: 0.85rem;"><strong>SL:</strong> ₹<%= number_with_precision(trade_plan[:stop_loss], precision: 2) %></div>
-                      <div class="text-success" style="font-size: 0.85rem;"><strong>TP:</strong> ₹<%= number_with_precision(trade_plan[:take_profit], precision: 2) %></div>
-                    </div>
+                    <% if is_stale %>
+                      <div style="line-height: 1.4;">
+                        <span class="badge bg-warning" title="Trade plan is stale - current price differs <%= price_gap_pct.round(1) %>% from entry">STALE</span>
+                        <div class="text-muted" style="font-size: 0.75rem; margin-top: 0.25rem;">
+                          Entry: ₹<%= number_with_precision(trade_plan[:entry_price], precision: 2) %><br>
+                          Gap: <%= price_gap_pct.round(1) %>%
+                        </div>
+                      </div>
+                    <% else %>
+                      <div style="line-height: 1.4;">
+                        <div><strong>Entry:</strong> ₹<%= number_with_precision(trade_plan[:entry_price], precision: 2) %></div>
+                        <div class="text-danger" style="font-size: 0.85rem;"><strong>SL:</strong> ₹<%= number_with_precision(trade_plan[:stop_loss], precision: 2) %></div>
+                        <div class="text-success" style="font-size: 0.85rem;"><strong>TP:</strong> ₹<%= number_with_precision(trade_plan[:take_profit], precision: 2) %></div>
+                      </div>
+                    <% end %>
                   <% else %>
                     <span class="text-muted">-</span>
                   <% end %>

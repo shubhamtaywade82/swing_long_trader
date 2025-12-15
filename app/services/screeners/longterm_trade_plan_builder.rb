@@ -37,7 +37,7 @@ module Screeners
       return nil unless @setup_status[:status] == LongtermSetupDetector::ACCUMULATE
 
       # Safely extract numeric values from indicators
-      weekly_close = extract_numeric(@weekly_indicators[:latest_close]) || @weekly_series.candles.last&.close
+      weekly_close = extract_numeric(@weekly_indicators[:latest_close]) || @weekly_series.latest_close
       weekly_ema20 = extract_numeric(@weekly_indicators[:ema20])
       weekly_ema50 = extract_numeric(@weekly_indicators[:ema50])
       weekly_ema200 = extract_numeric(@weekly_indicators[:ema200])

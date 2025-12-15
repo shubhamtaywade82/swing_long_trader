@@ -4,9 +4,18 @@ module Screeners
   # Generates actionable trade plan: Entry, SL, TP, RR, Quantity
   # This is what makes a screener result tradeable
   class TradePlanBuilder < ApplicationService
-    DEFAULT_RISK_PCT = 0.75 # 0.75% of capital per trade
-    MIN_RR = 2.0 # Minimum risk-reward ratio
+    # STRICT RISK MANAGEMENT RULES (as per user requirements)
+    DAILY_RISK_PCT = 2.0 # 2% of capital per day (max)
+    MAX_TRADES_PER_DAY = 2 # Maximum trades per day
+    MIN_RR = 2.5 # Minimum risk-reward ratio (1:3 = 3.0, but we use 2.5 for safety margin)
     DEFAULT_TP_MULTIPLE = 2.5 # Target = Entry + (Risk * 2.5)
+
+    # Risk per trade = Daily Risk / Number of trades
+    # For 1 trade: 2% / 1 = 2%
+    # For 2 trades: 2% / 2 = 1% each
+    def self.risk_per_trade_pct(trades_today: 1)
+      [DAILY_RISK_PCT / [trades_today, MAX_TRADES_PER_DAY].min, DAILY_RISK_PCT].min
+    end
 
     def self.call(candidate:, daily_series:, indicators:, setup_status:, portfolio: nil, current_ltp: nil)
       new(
@@ -33,7 +42,7 @@ module Screeners
       # Only generate trade plan for READY setups
       return nil unless @setup_status[:status] == SetupDetector::READY
 
-      latest_close = @indicators[:latest_close] || @daily_series.candles.last&.close
+      latest_close = @indicators[:latest_close] || @daily_series.latest_close
       ema20 = @indicators[:ema20]
       ema50 = @indicators[:ema50]
       atr = @indicators[:atr]
@@ -158,7 +167,8 @@ module Screeners
     def find_recent_swing_low
       return nil if @daily_series.candles.size < 20
 
-      recent_candles = @daily_series.candles.last(20)
+      # Get recent candles sorted by timestamp (most recent last)
+      recent_candles = @daily_series.candles.sort_by(&:timestamp).last(20)
       lows = recent_candles.map(&:low)
 
       # Find local minima (swing lows)
@@ -174,7 +184,8 @@ module Screeners
       # Find resistance levels above entry
       return nil if @daily_series.candles.size < 20
 
-      recent_candles = @daily_series.candles.last(20)
+      # Get recent candles sorted by timestamp (most recent last)
+      recent_candles = @daily_series.candles.sort_by(&:timestamp).last(20)
       highs = recent_candles.map(&:high)
 
       # Find swing highs above entry
@@ -201,8 +212,11 @@ module Screeners
 
       return default_quantity_result(entry_price) if available_capital <= 0
 
-      # Calculate risk per trade (0.75% of capital)
-      risk_per_trade = available_capital * (DEFAULT_RISK_PCT / 100.0)
+      # Calculate risk per trade based on daily risk limit and number of trades today
+      # Daily risk = 2% of capital, split by number of trades (1-2 trades per day)
+      trades_today = count_trades_today
+      risk_per_trade_pct = self.class.risk_per_trade_pct(trades_today: trades_today)
+      risk_per_trade = available_capital * (risk_per_trade_pct / 100.0)
 
       # Calculate quantity based on risk
       quantity_by_risk = (risk_per_trade / risk_per_share).floor
@@ -229,11 +243,30 @@ module Screeners
       }
     end
 
+    def count_trades_today
+      return 1 unless @portfolio # Default to 1 trade if no portfolio
+
+      today = Date.current
+      if @portfolio.is_a?(CapitalAllocationPortfolio)
+        @portfolio.open_swing_positions
+                  .where("created_at >= ?", today.beginning_of_day)
+                  .count
+      elsif @portfolio.respond_to?(:open_positions)
+        @portfolio.open_positions
+                  .where("opened_at >= ?", today.beginning_of_day)
+                  .count
+      else
+        1
+      end
+    end
+
     def default_quantity_result(entry_price)
       # Default calculation when no portfolio (for display purposes)
       # Assume 100k capital for calculation
       assumed_capital = 100_000
-      risk_per_trade = assumed_capital * (DEFAULT_RISK_PCT / 100.0)
+      # Use 2% daily risk, assume 1 trade today
+      risk_per_trade_pct = self.class.risk_per_trade_pct(trades_today: 1)
+      risk_per_trade = assumed_capital * (risk_per_trade_pct / 100.0)
       risk_per_share = @indicators[:atr] ? (@indicators[:atr] * 2) : (entry_price * 0.08)
       quantity = (risk_per_trade / risk_per_share).floor
       quantity = [quantity, 1].max

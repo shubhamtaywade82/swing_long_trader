@@ -15,6 +15,19 @@ class CandleSeries
   def each(&) = candles.each(&)
   def add_candle(candle) = candles << candle
 
+  # Get the latest candle by timestamp (not just the last in array)
+  # Ensures we always get the most recent candle even if array isn't sorted
+  def latest_candle
+    return nil if candles.empty?
+
+    candles.max_by(&:timestamp)
+  end
+
+  # Get latest close price by timestamp
+  def latest_close
+    latest_candle&.close
+  end
+
   def load_from_raw(response)
     normalise_candles(response).each do |row|
       @candles << Candle.new(
@@ -24,6 +37,8 @@ class CandleSeries
         volume: row[:volume]
       )
     end
+    # Ensure candles are sorted by timestamp after loading
+    @candles.sort_by!(&:timestamp)
   end
 
   def normalise_candles(resp)
@@ -160,11 +175,15 @@ class CandleSeries
   end
 
   def recent_highs(count = 20)
-    candles.last(count).map(&:high)
+    # Ensure candles are sorted by timestamp before getting recent ones
+    sorted_candles = candles.sort_by(&:timestamp)
+    sorted_candles.last(count).map(&:high)
   end
 
   def recent_lows(count = 20)
-    candles.last(count).map(&:low)
+    # Ensure candles are sorted by timestamp before getting recent ones
+    sorted_candles = candles.sort_by(&:timestamp)
+    sorted_candles.last(count).map(&:low)
   end
 
   def previous_swing_high
@@ -184,25 +203,31 @@ class CandleSeries
   def liquidity_grab_up?(_lookback: 20)
     return false if candles.empty?
 
-    high_now = candles.last.high
+    latest = latest_candle
+    return false unless latest
+
+    high_now = latest.high
     high_prev = previous_swing_high
     return false unless high_prev
 
     high_now > high_prev &&
-      candles.last.close < high_prev &&
-      candles.last.bearish?
+      latest.close < high_prev &&
+      latest.bearish?
   end
 
   def liquidity_grab_down?(_lookback: 20)
     return false if candles.empty?
 
-    low_now = candles.last.low
+    latest = latest_candle
+    return false unless latest
+
+    low_now = latest.low
     low_prev = previous_swing_low
     return false unless low_prev
 
     low_now < low_prev &&
-      candles.last.close > low_prev &&
-      candles.last.bullish?
+      latest.close > low_prev &&
+      latest.bullish?
   end
 
   def rsi(period = 14)

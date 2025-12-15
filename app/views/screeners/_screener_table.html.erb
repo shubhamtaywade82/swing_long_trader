@@ -114,41 +114,61 @@
                   <%= setup_status.gsub('_', ' ') %>
                 </span>
               </td>
-              <td class="text-right js-ltp-cell" data-price-cell="true" data-instrument-key="<%= instrument_key %>">₹<%= number_with_precision(latest_close, precision: 2) %></td>
+              <%
+                # Get trade plan early for validation
+                trade_plan = candidate[:trade_plan] if has_trade_plan
+                entry_price = trade_plan ? trade_plan[:entry_price] : nil
+                price_gap_pct = entry_price && entry_price > 0 ? ((latest_close - entry_price) / entry_price * 100).abs : 0
+                is_stale = price_gap_pct > 25.0 # More than 25% gap indicates stale plan
+              %>
+              <td class="text-right js-ltp-cell" data-price-cell="true" data-instrument-key="<%= instrument_key %>" data-entry-price="<%= entry_price || '' %>">₹<%= number_with_precision(latest_close, precision: 2) %></td>
               <% if has_trade_plan %>
-                <% trade_plan = candidate[:trade_plan] %>
                 <% if trade_plan %>
-                  <td class="text-right">
-                    <strong>₹<%= number_with_precision(trade_plan[:entry_price], precision: 2) %></strong>
-                    <small class="text-muted d-block" style="font-size: 0.7rem;">
-                      <%= trade_plan[:entry_zone] %>
-                    </small>
-                  </td>
-                  <td class="text-right">
-                    <span class="badge bg-danger">₹<%= number_with_precision(trade_plan[:stop_loss], precision: 2) %></span>
-                  </td>
-                  <td class="text-right">
-                    <span class="badge bg-success">₹<%= number_with_precision(trade_plan[:take_profit], precision: 2) %></span>
-                  </td>
-                  <td class="text-right">
-                    <span class="badge bg-<%= trade_plan[:risk_reward] >= 2.5 ? 'success' : 'warning' %>">
-                      <%= number_with_precision(trade_plan[:risk_reward], precision: 1) %>R
-                    </span>
-                  </td>
-                  <td class="text-right">
-                    <strong><%= trade_plan[:quantity] %></strong>
-                    <% if trade_plan[:max_capital_pct] && trade_plan[:max_capital_pct] > 0 %>
+                  <td class="text-right <%= 'trade-plan-stale' if is_stale %>" data-trade-plan-entry="<%= trade_plan[:entry_price] %>">
+                    <% if is_stale %>
+                      <span class="badge bg-warning" title="Trade plan is stale - current price differs <%= price_gap_pct.round(1) %>% from entry">STALE</span>
+                      <small class="text-muted d-block" style="font-size: 0.7rem; margin-top: 0.25rem;">
+                        Entry: ₹<%= number_with_precision(trade_plan[:entry_price], precision: 2) %>
+                      </small>
+                    <% else %>
+                      <strong>₹<%= number_with_precision(trade_plan[:entry_price], precision: 2) %></strong>
                       <small class="text-muted d-block" style="font-size: 0.7rem;">
-                        <%= number_with_precision(trade_plan[:max_capital_pct], precision: 1) %>% capital
+                        <%= trade_plan[:entry_zone] %>
                       </small>
                     <% end %>
                   </td>
-                  <td class="text-right">
-                    <strong class="text-danger">₹<%= number_with_precision(trade_plan[:risk_amount], precision: 0) %></strong>
-                    <small class="text-muted d-block" style="font-size: 0.7rem;">
-                      Capital: ₹<%= number_with_precision(trade_plan[:capital_used], precision: 0) %>
-                    </small>
-                  </td>
+                  <% if is_stale %>
+                    <td colspan="5" class="text-muted text-center" style="font-size: 0.75rem;">
+                      Trade plan outdated - price moved <%= price_gap_pct.round(1) %>%<br>
+                      <small>Re-run screener for updated plan</small>
+                    </td>
+                  <% else %>
+                    <td class="text-right">
+                      <span class="badge bg-danger">₹<%= number_with_precision(trade_plan[:stop_loss], precision: 2) %></span>
+                    </td>
+                    <td class="text-right">
+                      <span class="badge bg-success">₹<%= number_with_precision(trade_plan[:take_profit], precision: 2) %></span>
+                    </td>
+                    <td class="text-right">
+                      <span class="badge bg-<%= trade_plan[:risk_reward] >= 2.5 ? 'success' : 'warning' %>">
+                        <%= number_with_precision(trade_plan[:risk_reward], precision: 1) %>R
+                      </span>
+                    </td>
+                    <td class="text-right">
+                      <strong><%= trade_plan[:quantity] %></strong>
+                      <% if trade_plan[:max_capital_pct] && trade_plan[:max_capital_pct] > 0 %>
+                        <small class="text-muted d-block" style="font-size: 0.7rem;">
+                          <%= number_with_precision(trade_plan[:max_capital_pct], precision: 1) %>% capital
+                        </small>
+                      <% end %>
+                    </td>
+                    <td class="text-right">
+                      <strong class="text-danger">₹<%= number_with_precision(trade_plan[:risk_amount], precision: 0) %></strong>
+                      <small class="text-muted d-block" style="font-size: 0.7rem;">
+                        Capital: ₹<%= number_with_precision(trade_plan[:capital_used], precision: 0) %>
+                      </small>
+                    </td>
+                  <% end %>
                 <% else %>
                   <td colspan="6" class="text-muted text-center">-</td>
                 <% end %>

@@ -265,6 +265,9 @@ module Screeners
           series.add_candle(candle)
         end
 
+        # Ensure candles are sorted by timestamp (safety check)
+        series.candles.sort_by!(&:timestamp)
+
         @candle_cache[instrument.id] ||= {}
         @candle_cache[instrument.id]["1D"] = series
       end
@@ -428,17 +431,9 @@ module Screeners
       if setup_result[:status] == Screeners::SetupDetector::READY
         # Get current LTP for more accurate entry price calculation
         # Prefer real-time LTP from Redis cache (via LtpAccessor), fallback to metadata
-        current_ltp = nil
-        if candidate[:instrument_id]
-          instrument = Instrument.find_by(id: candidate[:instrument_id])
-          if instrument
-            # Use current_ltp method from LtpAccessor concern (fetches from Redis cache)
-            current_ltp = instrument.current_ltp
-            # Fallback to metadata LTP if cache miss
-            current_ltp ||= candidate.dig(:metadata, :ltp)
-          end
-        end
-        # Final fallback to metadata
+        # Use instrument parameter directly (already available, no need to query again - fixes N+1)
+        current_ltp = instrument.current_ltp
+        # Fallback to metadata LTP if cache miss
         current_ltp ||= candidate.dig(:metadata, :ltp)
 
         trade_plan = Screeners::TradePlanBuilder.call(
@@ -500,7 +495,7 @@ module Screeners
         atr: series.atr(14),
         macd: series.macd(12, 26, 9),
         supertrend: calculate_supertrend(series),
-        latest_close: series.candles.last&.close,
+        latest_close: series.latest_close,
         volume: calculate_volume_metrics(series),
       }
     rescue StandardError => e
@@ -617,7 +612,7 @@ module Screeners
       metadata = {
         ltp: instrument.ltp,
         candles_count: series.candles.size,
-        latest_timestamp: series.candles.last&.timestamp,
+        latest_timestamp: series.latest_candle&.timestamp,
         trend_alignment: check_trend_alignment(indicators),
         volatility: calculate_volatility(series, indicators),
         momentum: calculate_momentum(series, indicators),
