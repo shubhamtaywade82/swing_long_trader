@@ -6,7 +6,7 @@ class MonitoringController < ApplicationController
   def index
     @jobs_status = get_jobs_status
     @system_health = get_system_health
-    @queue_stats = get_queue_stats
+    @queue_stats = get_solid_queue_stats
     @recent_errors = get_recent_errors
   end
 
