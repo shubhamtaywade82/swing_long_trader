@@ -1,0 +1,37 @@
+# Trading Agent Configuration
+# Feature flags for incremental rollout
+
+trading:
+  # Enable/disable DTO system (Phase 1)
+  dto_enabled: false
+
+  # Decision Engine configuration (Phase 3)
+  decision_engine:
+    enabled: false
+    min_risk_reward: 2.0
+    min_confidence: 60.0
+    max_volatility_pct: 8.0
+    max_positions_per_symbol: 1
+    max_daily_risk_pct: 2.0
+
+  # LLM Review configuration (Phase 5)
+  llm:
+    enabled: false
+    provider: "auto"  # "auto", "ollama", "openai"
+    model: null  # Uses default from provider
+
+  # Automation modes (Phase 4)
+  modes:
+    current: "advisory"  # "advisory", "semi_automated", "fully_automated"
+    advisory:
+      enabled: true
+    semi_automated:
+      enabled: false
+      require_approval: true
+    fully_automated:
+      enabled: false
+      kill_switches:
+        max_daily_loss_pct: 5.0
+        max_consecutive_losses: 3
+        max_positions: 5
+        market_hours_only: true
