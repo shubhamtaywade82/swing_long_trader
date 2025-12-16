@@ -211,6 +211,62 @@ class ScreenersController < ApplicationController
   end
 
   # @api public
+  # Manually triggers daily candle ingestion
+  # @param [Integer] days_back Optional number of days to fetch (default: 365)
+  # @return [JSON] Job status and ID
+  def trigger_daily_ingestion
+    days_back = params[:days_back]&.to_i || 365
+
+    # Enqueue job in background
+    job = Candles::DailyIngestorJob.perform_later(days_back: days_back)
+
+    Rails.logger.info(
+      "[ScreenersController] Daily candle ingestion triggered: Job ID #{job.job_id}, days_back=#{days_back}",
+    )
+
+    render json: {
+      status: "queued",
+      message: "Daily candle ingestion job queued (Job ID: #{job.job_id}). This may take several minutes.",
+      job_id: job.job_id,
+      days_back: days_back,
+    }
+  rescue StandardError => e
+    Rails.logger.error("[ScreenersController] Failed to trigger daily ingestion: #{e.message}")
+    render json: {
+      status: "error",
+      message: "Failed to trigger daily candle ingestion: #{e.message}",
+    }, status: :internal_server_error
+  end
+
+  # @api public
+  # Manually triggers weekly candle ingestion
+  # @param [Integer] weeks_back Optional number of weeks to fetch (default: 52)
+  # @return [JSON] Job status and ID
+  def trigger_weekly_ingestion
+    weeks_back = params[:weeks_back]&.to_i || 52
+
+    # Enqueue job in background
+    job = Candles::WeeklyIngestorJob.perform_later(weeks_back: weeks_back)
+
+    Rails.logger.info(
+      "[ScreenersController] Weekly candle ingestion triggered: Job ID #{job.job_id}, weeks_back=#{weeks_back}",
+    )
+
+    render json: {
+      status: "queued",
+      message: "Weekly candle ingestion job queued (Job ID: #{job.job_id}). This may take several minutes.",
+      job_id: job.job_id,
+      weeks_back: weeks_back,
+    }
+  rescue StandardError => e
+    Rails.logger.error("[ScreenersController] Failed to trigger weekly ingestion: #{e.message}")
+    render json: {
+      status: "error",
+      message: "Failed to trigger weekly candle ingestion: #{e.message}",
+    }, status: :internal_server_error
+  end
+
+  # @api public
   # Starts real-time LTP (Last Traded Price) updates for screener stocks
   # @param [String] screener_type Type of screener: "swing" or "longterm"
   # @param [String] instrument_ids Comma-separated list of instrument IDs

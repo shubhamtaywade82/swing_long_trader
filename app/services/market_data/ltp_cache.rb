@@ -108,7 +108,14 @@ module MarketData
       # @return [Boolean] True if LTP is cached
       def cached?(segment, security_id)
         key = build_key(segment, security_id)
-        redis_client.exist?(key)
+        if redis_client.respond_to?(:exists?)
+          redis_client.exists?(key)
+        elsif redis_client.respond_to?(:exist?)
+          redis_client.exist?(key)
+        else
+          # Fallback for Rails.cache
+          redis_client.read(key).present?
+        end
       end
 
       # Get all cached LTPs (use with caution - can be slow for large datasets)

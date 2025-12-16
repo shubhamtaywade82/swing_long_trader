@@ -71,15 +71,25 @@
           <% end %>
         </span>
       <% end %>
-      <%= form_with url: run_screeners_path, method: :post, local: false, class: "d-inline screener-form" do |f| %>
-        <%= f.hidden_field :type, value: "longterm" %>
-        <%= f.select :limit, options_for_select([["ALL", ""], ["10", 10], ["20", 20], ["50", 50], ["100", 100], ["200", 200]], @limit || ""), {}, { class: "form-select form-select-sm d-inline-block", style: "width: 80px;", title: "Limit number of results" } %>
-        <%= f.hidden_field :priority, value: "normal", id: "priority_mode_lt" %>
-        <%= f.submit "Run Screener", class: "btn btn-primary btn-sm", data: { screener_target: "runButton" } %>
-        <button type="button" class="btn btn-outline-secondary btn-sm ms-1" onclick="document.getElementById('priority_mode_lt').value='now'; this.form.requestSubmit();" title="Run with high priority (queued immediately, still runs in background worker)">
-          <i class="bi bi-play-fill"></i> Run Now
-        </button>
-      <% end %>
+      <div class="btn-group" role="group">
+        <%= form_with url: run_screeners_path, method: :post, local: false, class: "d-inline screener-form" do |f| %>
+          <%= f.hidden_field :type, value: "longterm" %>
+          <%= f.select :limit, options_for_select([["ALL", ""], ["10", 10], ["20", 20], ["50", 50], ["100", 100], ["200", 200]], @limit || ""), {}, { class: "form-select form-select-sm d-inline-block", style: "width: 80px;", title: "Limit number of results" } %>
+          <%= f.hidden_field :priority, value: "normal", id: "priority_mode_lt" %>
+          <%= f.submit "Run Screener", class: "btn btn-primary btn-sm", data: { screener_target: "runButton" } %>
+          <button type="button" class="btn btn-outline-secondary btn-sm ms-1" onclick="document.getElementById('priority_mode_lt').value='now'; this.form.requestSubmit();" title="Run with high priority (queued immediately, still runs in background worker)">
+            <i class="bi bi-play-fill"></i> Run Now
+          </button>
+        <% end %>
+        <div class="btn-group ms-2" role="group">
+          <button type="button" class="btn btn-outline-info btn-sm" id="trigger-daily-ingestion-lt" title="Trigger daily candle ingestion (last 365 days)">
+            <i class="bi bi-calendar-day"></i> Ingest Daily
+          </button>
+          <button type="button" class="btn btn-outline-info btn-sm" id="trigger-weekly-ingestion-lt" title="Trigger weekly candle ingestion (last 52 weeks)">
+            <i class="bi bi-calendar-week"></i> Ingest Weekly
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -836,5 +846,81 @@
         contentDiv.innerHTML = document.getElementById('bearish-stocks-html-lt').innerHTML;
       }
     };
+
+    // Candle Ingestion Button Handlers
+    const dailyIngestionBtnLt = document.getElementById('trigger-daily-ingestion-lt');
+    const weeklyIngestionBtnLt = document.getElementById('trigger-weekly-ingestion-lt');
+
+    if (dailyIngestionBtnLt) {
+      dailyIngestionBtnLt.addEventListener('click', function() {
+        if (confirm('Trigger daily candle ingestion? This will fetch candles for all instruments (last 365 days). This may take several minutes.')) {
+          const btn = this;
+          const originalText = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Queuing...';
+
+          fetch('<%= trigger_daily_ingestion_screeners_path %>', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({ days_back: 365 })
+          })
+          .then(response => response.json())
+          .then(data => {
+            if (data.status === 'queued') {
+              alert('✅ ' + data.message);
+            } else {
+              alert('❌ ' + (data.message || 'Failed to trigger daily ingestion'));
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            alert('❌ Failed to trigger daily ingestion: ' + error.message);
+          })
+          .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+          });
+        }
+      });
+    }
+
+    if (weeklyIngestionBtnLt) {
+      weeklyIngestionBtnLt.addEventListener('click', function() {
+        if (confirm('Trigger weekly candle ingestion? This will aggregate weekly candles for all instruments (last 52 weeks). This may take several minutes.')) {
+          const btn = this;
+          const originalText = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Queuing...';
+
+          fetch('<%= trigger_weekly_ingestion_screeners_path %>', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({ weeks_back: 52 })
+          })
+          .then(response => response.json())
+          .then(data => {
+            if (data.status === 'queued') {
+              alert('✅ ' + data.message);
+            } else {
+              alert('❌ ' + (data.message || 'Failed to trigger weekly ingestion'));
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            alert('❌ Failed to trigger weekly ingestion: ' + error.message);
+          })
+          .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+          });
+        }
+      });
+    }
   });
 </script>

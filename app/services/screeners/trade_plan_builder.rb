@@ -7,14 +7,8 @@ module Screeners
     # STRICT RISK MANAGEMENT RULES (as per user requirements)
     DAILY_RISK_PCT = 2.0 # 2% of capital per day (max)
     MAX_TRADES_PER_DAY = 2 # Maximum trades per day
-    MIN_RR = 3.0 # Minimum risk-reward ratio (1:3 = 3.0)
-    # ATR-based take profit multiples
-    TP1_ATR_MULTIPLE = 2.0 # TP1 = Entry + (ATR × 2)
-    TP2_ATR_MULTIPLE = 4.0 # TP2 = Entry + (ATR × 4)
-    # ATR stop loss multipliers based on volatility
-    ATR_SL_LOW_VOL = 1.5 # Low volatility: ATR % < 2%
-    ATR_SL_MED_VOL = 2.0 # Medium volatility: ATR % 2-5%
-    ATR_SL_HIGH_VOL = 2.5 # High volatility: ATR % > 5%
+    MIN_RR = 2.5 # Minimum risk-reward ratio (1:3 = 3.0, but we use 2.5 for safety margin)
+    DEFAULT_TP_MULTIPLE = 2.5 # Target = Entry + (Risk * 2.5)
 
     # Risk per trade = Daily Risk / Number of trades
     # For 1 trade: 2% / 1 = 2%
@@ -48,15 +42,7 @@ module Screeners
       # Only generate trade plan for READY setups
       return nil unless @setup_status[:status] == SetupDetector::READY
 
-      # Get latest candle OHLC data
-      latest_candle = @daily_series.latest_candle
-      return nil unless latest_candle
-
-      latest_close = @indicators[:latest_close] || latest_candle.close
-      latest_high = latest_candle.high
-      latest_low = latest_candle.low
-      latest_open = latest_candle.open
-
+      latest_close = @indicators[:latest_close] || @daily_series.latest_close
       ema20 = @indicators[:ema20]
       ema50 = @indicators[:ema50]
       atr = @indicators[:atr]
@@ -67,27 +53,23 @@ module Screeners
       # Current LTP is more accurate for entry price calculation
       current_price = get_current_price(latest_close)
 
-      # Calculate entry price using LTP, OHLC data, and indicators
-      entry_price = calculate_entry_price(current_price, latest_high, latest_low, latest_open, latest_close, ema20,
-                                          ema50)
+      # Calculate entry price using current price
+      entry_price = calculate_entry_price(current_price, ema20, ema50)
 
-      # Calculate ATR percentage for volatility classification
-      atr_pct = (atr / latest_close * 100).round(2)
+      # Calculate stop loss
+      stop_loss = calculate_stop_loss(entry_price, ema20, ema50, atr)
 
-      # Calculate stop loss with dynamic ATR multiplier based on volatility
-      stop_loss = calculate_stop_loss(entry_price, ema20, ema50, atr, atr_pct)
-
-      # Calculate take profit targets (TP1 and TP2) using ATR multiples
-      take_profit_result = calculate_take_profit_atr(entry_price, atr, stop_loss)
+      # Calculate take profit
+      take_profit = calculate_take_profit(entry_price, stop_loss, atr)
 
       # Calculate risk per share
       risk_per_share = (entry_price - stop_loss).abs
 
-      # Calculate risk-reward ratio based on TP2 (final target)
-      reward = (take_profit_result[:tp2] - entry_price).abs
+      # Calculate risk-reward ratio
+      reward = (take_profit - entry_price).abs
       risk_reward = risk_per_share.positive? ? (reward / risk_per_share).round(2) : 0
 
-      # Reject if RR is too low (based on TP2)
+      # Reject if RR is too low
       return nil if risk_reward < MIN_RR
 
       # Calculate quantity based on capital and risk
@@ -96,19 +78,14 @@ module Screeners
       {
         entry_price: entry_price.round(2),
         stop_loss: stop_loss.round(2),
-        take_profit: take_profit_result[:tp2].round(2), # TP2 is the final target
-        tp1: take_profit_result[:tp1].round(2),
-        tp2: take_profit_result[:tp2].round(2),
-        atr: atr.round(2),
-        atr_pct: atr_pct,
-        atr_sl_multiplier: take_profit_result[:atr_sl_multiplier],
+        take_profit: take_profit.round(2),
         risk_reward: risk_reward,
         risk_per_share: risk_per_share.round(2),
         quantity: quantity_result[:quantity],
         capital_used: quantity_result[:capital_used],
         risk_amount: quantity_result[:risk_amount],
         max_capital_pct: quantity_result[:max_capital_pct],
-        entry_zone: calculate_entry_zone(entry_price, latest_high, latest_low, current_price, latest_candle),
+        entry_zone: "#{entry_price.round(2)} - #{(entry_price * 1.02).round(2)}",
         setup_type: determine_setup_type(entry_price, ema20, current_price),
       }
     end
@@ -142,119 +119,49 @@ module Screeners
       end
     end
 
-    def calculate_entry_price(current_price, latest_high, latest_low, _latest_open, _latest_close, ema20, ema50)
-      # Entry price calculation based on LTP, OHLC data, and indicators
-      # Priority: LTP > Latest Close > EMA20 > EMA50
+    def calculate_entry_price(latest_close, ema20, _ema50)
+      # If price is near EMA20, use EMA20 as entry
+      distance_from_ema20_pct = ((latest_close - ema20) / ema20 * 100).round(2)
 
-      # Use current LTP (real-time price) as base
-      base_price = current_price
-
-      # Calculate distance from EMA20
-      distance_from_ema20_pct = ((base_price - ema20) / ema20 * 100).round(2)
-
-      # Strategy 1: If price is near EMA20 (within 2%), use EMA20 as ideal entry
-      return ema20 if distance_from_ema20_pct.between?(-2, 2)
-
-      # Strategy 2: If price is below EMA20 but above EMA50, use lower of LTP or latest low
-      # This captures pullback entries
-      if base_price < ema20 && (!ema50 || base_price > ema50)
-        # Use the lower of current LTP or latest candle low for better entry
-        return [base_price, latest_low].min
-      end
-
-      # Strategy 3: If price is above EMA20, consider using latest high for breakout entries
-      # But prefer current LTP if it's reasonable
-      if base_price > ema20
-        # For momentum continuation, use current LTP
-        # But if LTP is significantly above latest high, use latest high + small buffer
-        if base_price > latest_high * 1.02
-          # LTP is too extended, use latest high with small buffer
-          return latest_high * 1.005
-        end
-
-        return base_price
-      end
-
-      # Strategy 4: Default to current LTP, but ensure it's within reasonable range of OHLC
-      # If LTP is outside the day's range, use the closer boundary
-      if base_price > latest_high
-        # LTP above day's high - use high with small buffer for breakout
-        latest_high * 1.005
-      elsif base_price < latest_low
-        # LTP below day's low - use low for pullback entry
-        latest_low
+      if distance_from_ema20_pct.between?(-2, 2)
+        # Near EMA20 - use EMA20 as ideal entry
+        ema20
       else
-        # LTP within day's range - use LTP
-        base_price
+        # Use current price as entry (slightly extended or momentum continuation)
+        latest_close
       end
     end
 
-    def calculate_stop_loss(entry_price, _ema20, ema50, atr, atr_pct)
-      # Determine ATR multiplier based on volatility
-      # Low volatility: ATR % < 2% → Use 1.5× ATR
-      # Medium volatility: ATR % 2-5% → Use 2.0× ATR
-      # High volatility: ATR % > 5% → Use 2.5× ATR
-      atr_multiplier = if atr_pct < 2.0
-                         ATR_SL_LOW_VOL
-                       elsif atr_pct <= 5.0
-                         ATR_SL_MED_VOL
-                       else
-                         ATR_SL_HIGH_VOL
-                       end
-
-      # Stop loss should be below recent swing low (from OHLC data) or EMA50, whichever is higher
+    def calculate_stop_loss(entry_price, _ema20, ema50, atr)
+      # Stop loss should be below recent swing low or EMA50, whichever is higher
       swing_low = find_recent_swing_low
 
-      # Also consider latest candle's low as a potential stop level
-      latest_candle = @daily_series.latest_candle
-      latest_low = latest_candle&.low
-
-      # Use dynamic ATR multiplier below entry as base stop loss
-      atr_stop = entry_price - (atr * atr_multiplier)
+      # Use 2 ATR below entry as base stop loss
+      atr_stop = entry_price - (atr * 2)
 
       # Use EMA50 if it's below entry and above ATR stop
       ema50_stop = ema50 && ema50 < entry_price ? ema50 : nil
 
-      # Consider latest candle low if it's below entry and reasonable
-      # This uses actual OHLC data for stop placement
-      candle_low_stop = (latest_low if latest_low && latest_low < entry_price && latest_low > atr_stop)
-
       # Use swing low if it's the highest (safest stop)
-      # Swing low comes from actual OHLC data (candle lows)
-      candidates = [atr_stop, ema50_stop, candle_low_stop, swing_low].compact
-      final_stop = candidates.max # Use the highest stop (tightest, safest)
-
-      # Store ATR multiplier in result for reference
-      @atr_sl_multiplier_used = atr_multiplier
-
-      final_stop
+      candidates = [atr_stop, ema50_stop, swing_low].compact
+      candidates.max # Use the highest stop (tightest, safest)
     end
 
-    def calculate_take_profit_atr(entry_price, atr, _stop_loss)
-      # Calculate TP1 and TP2 using ATR multiples (as per requirements)
-      # TP1 = Entry + (ATR × 2)
-      # TP2 = Entry + (ATR × 4)
-      tp1 = entry_price + (atr * TP1_ATR_MULTIPLE)
-      tp2 = entry_price + (atr * TP2_ATR_MULTIPLE)
+    def calculate_take_profit(entry_price, stop_loss, _atr)
+      risk = (entry_price - stop_loss).abs
 
-      # Also check for structure-based targets (resistance levels)
+      # Target = Entry + (Risk * 2.5) for 2.5R
+      target = entry_price + (risk * DEFAULT_TP_MULTIPLE)
+
+      # Also check for structure-based target (resistance levels)
       structure_target = find_structure_target(entry_price)
 
-      # Adjust TP1 if structure target is reasonable
-      if structure_target && structure_target > entry_price && structure_target <= tp1 * 1.1
-        tp1 = [tp1, structure_target].min # Use lower of ATR-based or structure-based
+      # Use structure target if available and reasonable, otherwise use R-multiple target
+      if structure_target && structure_target > entry_price && structure_target <= target * 1.2
+        structure_target
+      else
+        target
       end
-
-      # Adjust TP2 if structure target is reasonable and higher than TP1
-      if structure_target && structure_target > tp1 && structure_target <= tp2 * 1.2
-        tp2 = [tp2, structure_target].min # Use lower of ATR-based or structure-based
-      end
-
-      {
-        tp1: tp1,
-        tp2: tp2,
-        atr_sl_multiplier: @atr_sl_multiplier_used || ATR_SL_MED_VOL,
-      }
     end
 
     def find_recent_swing_low
@@ -360,21 +267,7 @@ module Screeners
       # Use 2% daily risk, assume 1 trade today
       risk_per_trade_pct = self.class.risk_per_trade_pct(trades_today: 1)
       risk_per_trade = assumed_capital * (risk_per_trade_pct / 100.0)
-      # Use dynamic ATR multiplier for default calculation
-      atr = @indicators[:atr]
-      if atr
-        atr_pct = (atr / entry_price * 100).round(2)
-        atr_multiplier = if atr_pct < 2.0
-                           ATR_SL_LOW_VOL
-                         elsif atr_pct <= 5.0
-                           ATR_SL_MED_VOL
-                         else
-                           ATR_SL_HIGH_VOL
-                         end
-        risk_per_share = atr * atr_multiplier
-      else
-        risk_per_share = entry_price * 0.08
-      end
+      risk_per_share = @indicators[:atr] ? (@indicators[:atr] * 2) : (entry_price * 0.08)
       quantity = (risk_per_trade / risk_per_share).floor
       quantity = [quantity, 1].max
 

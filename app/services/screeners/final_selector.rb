@@ -144,7 +144,65 @@ module Screeners
         end
       end
 
+      # Optional: Process through Trading Agent system (if enabled)
+      if Trading::Config.dto_enabled? && Trading::Config.decision_engine_enabled?
+        selected = process_through_trading_agent(selected)
+      end
+
       selected
+    end
+
+    def process_through_trading_agent(candidates)
+      # Process each candidate through Trading Agent
+      processed = []
+
+      candidates.each do |candidate|
+        # Find ScreenerResult
+        screener_result = if @screener_run_id && candidate[:instrument_id]
+                           ScreenerResult.find_by(
+                             screener_run_id: @screener_run_id,
+                             instrument_id: candidate[:instrument_id],
+                             screener_type: "swing",
+                           )
+                         else
+                           ScreenerResult.where(
+                             instrument_id: candidate[:instrument_id],
+                             screener_type: "swing",
+                           ).order(analyzed_at: :desc).first
+                         end
+
+        next unless screener_result
+
+        # Process through Trading Agent
+        result = Trading::Orchestrator.process_screener_result(
+          screener_result,
+          portfolio: @portfolio,
+          mode: Trading::Config.current_mode,
+          dry_run: false,
+        )
+
+        # Only include if Decision Engine approved
+        if result[:success] && result[:decision_result]&.dig(:approved)
+          processed << candidate.merge(
+            trading_agent_approved: true,
+            trading_agent_decision: result[:decision_result],
+          )
+        else
+          # Rejected by Trading Agent - log but don't include
+          Rails.logger.info(
+            "[Screeners::FinalSelector] Trading Agent rejected #{candidate[:symbol]}: " \
+            "#{result[:error] || 'Decision Engine rejected'}",
+          )
+        end
+      rescue StandardError => e
+        Rails.logger.error(
+          "[Screeners::FinalSelector] Trading Agent processing failed for #{candidate[:symbol]}: #{e.message}",
+        )
+        # Include candidate anyway (fallback to old behavior)
+        processed << candidate
+      end
+
+      processed
     end
 
     def rank_candidates(candidates)

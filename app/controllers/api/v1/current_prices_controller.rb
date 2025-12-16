@@ -86,7 +86,13 @@ module Api
           redis_client.mget(*keys)
         else
           # Fallback: fetch individually (slower but works with Rails.cache)
-          keys.map { |key| redis_client.read(key) }
+          keys.map do |key|
+            if redis_client.respond_to?(:get)
+              redis_client.get(key)
+            else
+              redis_client.read(key)
+            end
+          end
         end
       end
 

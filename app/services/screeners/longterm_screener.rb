@@ -245,7 +245,24 @@ module Screeners
 
     def preload_candles_for_instruments
       # Batch load all daily and weekly candles for all instruments to avoid N+1 queries
-      Rails.logger.info("[Screeners::LongtermScreener] Preloading candles for #{@instruments.count} instruments...")
+      # Safely get count to avoid Hash return from GROUP BY queries
+      instrument_count = begin
+        count_result = @instruments.count
+        if count_result.is_a?(Integer)
+          count_result
+        elsif count_result.is_a?(Numeric)
+          count_result.to_i
+        elsif count_result.is_a?(Hash)
+          # GROUP BY query returned Hash, use size instead
+          @instruments.size
+        else
+          @instruments.size
+        end
+      rescue StandardError => e
+        Rails.logger.warn("[Screeners::LongtermScreener] Error getting count for preload: #{e.message}, using size")
+        @instruments.size
+      end
+      Rails.logger.info("[Screeners::LongtermScreener] Preloading candles for #{instrument_count} instruments...")
 
       # Get instrument IDs as a simple array to avoid any relation issues
       # The relation has joins and WHERE clauses referencing candle_series table

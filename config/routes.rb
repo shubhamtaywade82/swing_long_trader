@@ -34,6 +34,8 @@ Rails.application.routes.draw do
       post :stop_ltp_updates, path: "ltp/stop"
       get :websocket_status, path: "websocket/status"
       post :test_broadcast, path: "websocket/test"
+      post :trigger_daily_ingestion, path: "candles/daily"
+      post :trigger_weekly_ingestion, path: "candles/weekly"
     end
   end
 

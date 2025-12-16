@@ -88,34 +88,37 @@ module Admin
       # NOTE: SolidQueue::FailedExecution doesn't have a retried_at column
       # The job is re-enqueued and will appear as a new job
 
-      redirect_to admin_solid_queue_index_path, notice: "Job re-enqueued successfully"
+      redirect_to admin_solid_queue_index_path(tab: "failures"), notice: "Job re-enqueued successfully"
     rescue StandardError => e
-      redirect_to admin_solid_queue_index_path, alert: "Failed to retry job: #{e.message}"
+      redirect_to admin_solid_queue_index_path(tab: "failures"), alert: "Failed to retry job: #{e.message}"
     end
 
     def clear_finished
       count = SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)
-      redirect_to admin_solid_queue_index_path, notice: "Cleared #{count} finished jobs"
+      redirect_to admin_solid_queue_index_path(tab: params[:tab] || "overview"),
+                  notice: "Cleared #{count} finished jobs"
     rescue StandardError => e
-      redirect_to admin_solid_queue_index_path, alert: "Failed to clear jobs: #{e.message}"
+      redirect_to admin_solid_queue_index_path(tab: params[:tab] || "overview"),
+                  alert: "Failed to clear jobs: #{e.message}"
     end
 
     def delete_job
       job = SolidQueue::Job.find(params[:id])
       job_id = job.id
       job.destroy
-      redirect_to admin_solid_queue_index_path, notice: "Job ##{job_id} deleted successfully"
+      redirect_to admin_solid_queue_index_path(tab: params[:tab] || "jobs"),
+                  notice: "Job ##{job_id} deleted successfully"
     rescue StandardError => e
-      redirect_to admin_solid_queue_index_path, alert: "Failed to delete job: #{e.message}"
+      redirect_to admin_solid_queue_index_path(tab: params[:tab] || "jobs"), alert: "Failed to delete job: #{e.message}"
     end
 
     def delete_failed
       job = SolidQueue::Job.find(params[:id])
       job_id = job.id
       job.destroy
-      redirect_to admin_solid_queue_index_path, notice: "Failed job ##{job_id} deleted successfully"
+      redirect_to admin_solid_queue_index_path(tab: "failures"), notice: "Failed job ##{job_id} deleted successfully"
     rescue StandardError => e
-      redirect_to admin_solid_queue_index_path, alert: "Failed to delete job: #{e.message}"
+      redirect_to admin_solid_queue_index_path(tab: "failures"), alert: "Failed to delete job: #{e.message}"
     end
 
     def unqueue_job
@@ -125,28 +128,33 @@ module Admin
       # Cancel pending jobs by marking them as finished
       if job.finished_at.nil?
         job.update!(finished_at: Time.current)
-        redirect_to admin_solid_queue_index_path, notice: "Job ##{job_id} unqueued (marked as finished)"
+        redirect_to admin_solid_queue_index_path(tab: params[:tab] || "jobs"),
+                    notice: "Job ##{job_id} unqueued (marked as finished)"
       else
-        redirect_to admin_solid_queue_index_path, alert: "Job ##{job_id} is already finished"
+        redirect_to admin_solid_queue_index_path(tab: params[:tab] || "jobs"),
+                    alert: "Job ##{job_id} is already finished"
       end
     rescue StandardError => e
-      redirect_to admin_solid_queue_index_path, alert: "Failed to unqueue job: #{e.message}"
+      redirect_to admin_solid_queue_index_path(tab: params[:tab] || "jobs"),
+                  alert: "Failed to unqueue job: #{e.message}"
     end
 
     def pause_queue
       queue_name = params[:queue_name]
       SolidQueue::Pause.find_or_create_by!(queue_name: queue_name)
-      redirect_to admin_solid_queue_index_path(queue: queue_name), notice: "Queue '#{queue_name}' paused"
+      redirect_to admin_solid_queue_index_path(tab: "overview", queue: queue_name),
+                  notice: "Queue '#{queue_name}' paused"
     rescue StandardError => e
-      redirect_to admin_solid_queue_index_path, alert: "Failed to pause queue: #{e.message}"
+      redirect_to admin_solid_queue_index_path(tab: "overview"), alert: "Failed to pause queue: #{e.message}"
     end
 
     def unpause_queue
       queue_name = params[:queue_name]
       SolidQueue::Pause.where(queue_name: queue_name).destroy_all
-      redirect_to admin_solid_queue_index_path(queue: queue_name), notice: "Queue '#{queue_name}' unpaused"
+      redirect_to admin_solid_queue_index_path(tab: "overview", queue: queue_name),
+                  notice: "Queue '#{queue_name}' unpaused"
     rescue StandardError => e
-      redirect_to admin_solid_queue_index_path, alert: "Failed to unpause queue: #{e.message}"
+      redirect_to admin_solid_queue_index_path(tab: "overview"), alert: "Failed to unpause queue: #{e.message}"
     end
 
     def create_job
@@ -168,40 +176,40 @@ module Admin
         message = "Job enqueued successfully"
       end
 
-      redirect_to admin_solid_queue_index_path, notice: message
+      redirect_to admin_solid_queue_index_path(tab: "jobs"), notice: message
     rescue NameError
-      redirect_to admin_solid_queue_index_path, alert: "Class '#{class_name}' not found"
+      redirect_to admin_solid_queue_index_path(tab: "jobs"), alert: "Class '#{class_name}' not found"
     rescue StandardError => e
-      redirect_to admin_solid_queue_index_path, alert: "Failed to create job: #{e.message}"
+      redirect_to admin_solid_queue_index_path(tab: "jobs"), alert: "Failed to create job: #{e.message}"
     end
 
     def bulk_delete
       job_ids_param = params[:job_ids]
-      return redirect_to admin_solid_queue_index_path, alert: "No jobs selected" if job_ids_param.blank?
+      return redirect_to admin_solid_queue_index_path(tab: "jobs"), alert: "No jobs selected" if job_ids_param.blank?
 
       # Handle both array and comma-separated string
       job_ids = job_ids_param.is_a?(Array) ? job_ids_param : job_ids_param.split(",").map(&:strip)
-      return redirect_to admin_solid_queue_index_path, alert: "No jobs selected" if job_ids.empty?
+      return redirect_to admin_solid_queue_index_path(tab: "jobs"), alert: "No jobs selected" if job_ids.empty?
 
       count = SolidQueue::Job.where(id: job_ids).delete_all
-      redirect_to admin_solid_queue_index_path, notice: "Deleted #{count} job(s)"
+      redirect_to admin_solid_queue_index_path(tab: "jobs"), notice: "Deleted #{count} job(s)"
     rescue StandardError => e
-      redirect_to admin_solid_queue_index_path, alert: "Failed to delete jobs: #{e.message}"
+      redirect_to admin_solid_queue_index_path(tab: "jobs"), alert: "Failed to delete jobs: #{e.message}"
     end
 
     def bulk_unqueue
       job_ids_param = params[:job_ids]
-      return redirect_to admin_solid_queue_index_path, alert: "No jobs selected" if job_ids_param.blank?
+      return redirect_to admin_solid_queue_index_path(tab: "jobs"), alert: "No jobs selected" if job_ids_param.blank?
 
       # Handle both array and comma-separated string
       job_ids = job_ids_param.is_a?(Array) ? job_ids_param : job_ids_param.split(",").map(&:strip)
-      return redirect_to admin_solid_queue_index_path, alert: "No jobs selected" if job_ids.empty?
+      return redirect_to admin_solid_queue_index_path(tab: "jobs"), alert: "No jobs selected" if job_ids.empty?
 
       count = SolidQueue::Job.where(id: job_ids, finished_at: nil)
                              .update_all(finished_at: Time.current)
-      redirect_to admin_solid_queue_index_path, notice: "Unqueued #{count} job(s)"
+      redirect_to admin_solid_queue_index_path(tab: "jobs"), notice: "Unqueued #{count} job(s)"
     rescue StandardError => e
-      redirect_to admin_solid_queue_index_path, alert: "Failed to unqueue jobs: #{e.message}"
+      redirect_to admin_solid_queue_index_path(tab: "jobs"), alert: "Failed to unqueue jobs: #{e.message}"
     end
 
     private

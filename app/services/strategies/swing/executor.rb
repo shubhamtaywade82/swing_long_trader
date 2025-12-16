@@ -166,13 +166,19 @@ module Strategies
         message += "Entry Price: ₹#{@signal[:entry_price].round(2)}\n"
         message += "Quantity: #{@signal[:qty]}\n"
         message += "Order Value: ₹#{order_value.round(2)}\n"
-
-        message += "Stop Loss: ₹#{@signal[:sl].round(2)}\n" if @signal[:sl]
-
-        message += "Take Profit: ₹#{@signal[:tp].round(2)}\n" if @signal[:tp]
-
-        message += "Confidence: #{(@signal[:confidence] * 100).round(1)}%\n" if @signal[:confidence]
-
+        
+        if @signal[:sl]
+          message += "Stop Loss: ₹#{@signal[:sl].round(2)}\n"
+        end
+        
+        if @signal[:tp]
+          message += "Take Profit: ₹#{@signal[:tp].round(2)}\n"
+        end
+        
+        if @signal[:confidence]
+          message += "Confidence: #{(@signal[:confidence] * 100).round(1)}%\n"
+        end
+        
         message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         message += "💰 <b>Balance Information:</b>\n"
         message += "Required: ₹#{required_amount.round(2)}\n"
@@ -199,17 +205,27 @@ module Strategies
         message += "Entry Price: ₹#{@signal[:entry_price].round(2)}\n"
         message += "Quantity: #{@signal[:qty]}\n"
         message += "Order Value: ₹#{order_value.round(2)}\n"
-
-        message += "Stop Loss: ₹#{@signal[:sl].round(2)}\n" if @signal[:sl]
-
-        message += "Take Profit: ₹#{@signal[:tp].round(2)}\n" if @signal[:tp]
-
-        message += "Confidence: #{@signal[:confidence].round(1)}%\n" if @signal[:confidence]
-
-        message += "Risk-Reward: #{@signal[:rr]}:1\n" if @signal[:rr]
-
-        message += "Est. Holding: #{@signal[:holding_days_estimate]} days\n" if @signal[:holding_days_estimate]
-
+        
+        if @signal[:sl]
+          message += "Stop Loss: ₹#{@signal[:sl].round(2)}\n"
+        end
+        
+        if @signal[:tp]
+          message += "Take Profit: ₹#{@signal[:tp].round(2)}\n"
+        end
+        
+        if @signal[:confidence]
+          message += "Confidence: #{@signal[:confidence].round(1)}%\n"
+        end
+        
+        if @signal[:rr]
+          message += "Risk-Reward: #{@signal[:rr]}:1\n"
+        end
+        
+        if @signal[:holding_days_estimate]
+          message += "Est. Holding: #{@signal[:holding_days_estimate]} days\n"
+        end
+        
         message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         message += "❌ <b>Balance Check Failed</b>\n"
         message += "Unable to verify account balance.\n"
@@ -343,7 +359,9 @@ module Strategies
         )
 
         # Create position record if order placed successfully
-        create_position_from_order(result[:order]) if result[:success] && result[:order] && !@dry_run
+        if result[:success] && result[:order] && !@dry_run
+          create_position_from_order(result[:order])
+        end
 
         # Log order placement
         log_order_placement(result)
@@ -538,14 +556,6 @@ module Strategies
         metadata = order.metadata_hash
         signal_data = metadata["signal"] || {}
 
-        # Extract ATR-based fields from signal
-        tp1 = signal_data["tp1"] || @signal[:tp1]
-        tp2 = signal_data["tp2"] || @signal[:tp2] || signal_data["tp"] || @signal[:tp]
-        atr = signal_data["atr"] || @signal[:atr]
-        atr_pct = signal_data["atr_pct"] || @signal[:atr_pct]
-        # ATR trailing multiplier: use 1.5× ATR for trailing stop (as per requirements: 1-2× ATR)
-        atr_trailing_multiplier = 1.5
-
         # Create position record for live trading
         Position.create!(
           instrument: @instrument,
@@ -560,13 +570,7 @@ module Strategies
           average_entry_price: order.average_price,
           filled_quantity: order.filled_quantity.positive? ? order.filled_quantity : order.quantity,
           stop_loss: signal_data["sl"] || @signal[:sl],
-          take_profit: tp2, # TP2 is the final target
-          tp1: tp1,
-          tp2: tp2,
-          atr: atr,
-          atr_pct: atr_pct,
-          atr_trailing_multiplier: atr_trailing_multiplier,
-          initial_stop_loss: signal_data["sl"] || @signal[:sl], # Store original stop loss
+          take_profit: signal_data["tp"] || @signal[:tp],
           status: "open",
           opened_at: order.created_at,
           metadata: {
