@@ -107,7 +107,7 @@ module Screeners
           "[Screeners::SwingScreenerJob] Layer 3: AI Evaluation " \
           "(evaluating #{prefiltered_candidates.size} tradable candidates, highest scores first)",
         )
-        layer3_candidates = AIEvaluator.call(
+        layer3_candidates = Screeners::AIEvaluator.call(
           candidates: prefiltered_candidates,
           limit: 15,
           screener_run_id: screener_run.id,

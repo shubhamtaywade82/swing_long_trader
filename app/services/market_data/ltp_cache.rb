@@ -34,7 +34,11 @@ module MarketData
       # @return [Float, nil] LTP value or nil if not cached
       def get(segment, security_id)
         key = build_key(segment, security_id)
-        value = redis_client.read(key)
+        value = if redis_client.respond_to?(:get)
+                  redis_client.get(key)
+                else
+                  redis_client.read(key)
+                end
         value ? value.to_f : nil
       end
 
@@ -121,7 +125,7 @@ module MarketData
           result = {}
           keys.each_with_index do |key, index|
             # Extract segment:security_id from key (remove "ltp:" prefix)
-            instrument_key = key.gsub(/^#{LTP_KEY_PREFIX}:/, "")
+            instrument_key = key.gsub(/^#{LTP_KEY_PREFIX}:/o, "")
             value = values[index]
             result[instrument_key] = value ? value.to_f : nil
           end
@@ -170,22 +174,26 @@ module MarketData
           redis_client.mget(*keys)
         else
           # Fallback: fetch individually (slower but works with Rails.cache)
-          keys.map { |key| redis_client.read(key) }
+          keys.map do |key|
+            if redis_client.respond_to?(:get)
+              redis_client.get(key)
+            else
+              redis_client.read(key)
+            end
+          end
         end
       end
 
       def redis_client
-        @redis_client ||= begin
-          # Try to use Redis directly if available
-          if defined?(Redis) && ENV["REDIS_URL"].present?
-            Redis.new(url: ENV["REDIS_URL"])
-          elsif Rails.cache.respond_to?(:redis)
-            Rails.cache.redis
-          else
-            # Fallback to Rails.cache (doesn't support MGET efficiently, but works)
-            Rails.cache
-          end
-        end
+        # Try to use Redis directly if available
+        @redis_client ||= if defined?(Redis) && ENV["REDIS_URL"].present?
+                            Redis.new(url: ENV.fetch("REDIS_URL", nil))
+                          elsif Rails.cache.respond_to?(:redis)
+                            Rails.cache.redis
+                          else
+                            # Fallback to Rails.cache (doesn't support MGET efficiently, but works)
+                            Rails.cache
+                          end
       end
     end
   end
