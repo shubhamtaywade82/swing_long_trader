@@ -22,8 +22,7 @@ module Trading
       config_value("trading", "modes", "current") || "advisory"
     end
 
-    private
-
+    # Internal: Get config value by keys
     def self.config_value(*keys)
       begin
         config = Rails.application.config_for(:trading)
