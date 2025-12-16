@@ -14,9 +14,10 @@ module Trading
     attr_reader :invalidation_conditions
     attr_reader :entry_conditions
     attr_reader :reasoning
+    attr_reader :lifecycle
     attr_reader :created_at
 
-    def initialize(facts:, intent:, quantity: 0, risk_amount: 0.0, confidence_score: nil, invalidation_conditions: [], entry_conditions: {}, reasoning: [], created_at: Time.current)
+    def initialize(facts:, intent:, quantity: 0, risk_amount: 0.0, confidence_score: nil, invalidation_conditions: [], entry_conditions: {}, reasoning: [], lifecycle: nil, created_at: Time.current)
       @facts = facts
       @intent = intent
       @entry_price = intent.proposed_entry
@@ -30,6 +31,7 @@ module Trading
       @invalidation_conditions = invalidation_conditions.freeze
       @entry_conditions = entry_conditions.freeze
       @reasoning = reasoning.freeze
+      @lifecycle = lifecycle || TradeLifecycle.new(initial_state: TradeLifecycle::PROPOSED, created_at: created_at)
       @created_at = created_at
     end
 
@@ -88,6 +90,7 @@ module Trading
         invalidation_conditions: invalidation_conditions,
         entry_conditions: entry_conditions,
         reasoning: reasoning,
+        lifecycle: lifecycle.to_hash,
         facts: facts.to_hash,
         intent: intent.to_hash,
         created_at: created_at.iso8601,
