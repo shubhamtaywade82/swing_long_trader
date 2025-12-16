@@ -66,18 +66,27 @@ module Strategies
         # Estimate holding days
         holding_days = estimate_holding_days
 
+        # Calculate TP1 and TP2 for ATR-based targets
+        atr = @daily_series.atr(14) || (entry_price * 0.02)
+        tp1 = direction == :long ? entry_price + (atr * 2.0) : entry_price - (atr * 2.0)
+        tp2 = take_profit # TP2 is the final target
+
         {
           instrument_id: @instrument.id,
           symbol: @instrument.symbol_name,
           direction: direction,
           entry_price: entry_price.round(2),
           sl: stop_loss.round(2),
-          tp: take_profit.round(2),
+          tp: take_profit.round(2), # TP2 (final target)
+          tp1: tp1.round(2),
+          tp2: tp2.round(2),
+          atr: atr.round(2),
+          atr_pct: atr && entry_price.positive? ? (atr / entry_price * 100).round(2) : nil,
           rr: risk_reward.round(2),
           qty: quantity,
           confidence: confidence.round(2),
           holding_days_estimate: holding_days,
-          metadata: build_metadata(entry_price, stop_loss, take_profit, direction, mtf_analysis),
+          metadata: build_metadata(entry_price, stop_loss, take_profit, direction, mtf_analysis, tp1, tp2, atr),
         }
       end
 
@@ -234,40 +243,60 @@ module Strategies
       end
 
       def calculate_take_profit(entry_price, stop_loss, direction, mtf_analysis = nil)
-        profit_target_pct = @exit_config[:profit_target_pct] || 15.0
         atr = @daily_series.atr(14) || (entry_price * 0.02)
+        atr_pct = atr && entry_price.positive? ? (atr / entry_price * 100).round(2) : nil
 
         case direction
         when :long
-          # Use MTF resistance levels if available
+          # Calculate TP1 and TP2 using ATR multiples (as per requirements)
+          # TP1 = Entry + (ATR × 2)
+          # TP2 = Entry + (ATR × 4)
+          tp1 = entry_price + (atr * 2.0)
+          tp2 = entry_price + (atr * 4.0)
+
+          # Use MTF resistance levels if available to adjust targets
           if mtf_analysis && mtf_analysis[:support_resistance][:resistance_levels].any?
             nearest_resistance = mtf_analysis[:support_resistance][:resistance_levels].first
             resistance_target = nearest_resistance * 0.99 # Slightly below resistance
+
+            # Adjust TP1 if resistance is reasonable
+            if resistance_target > entry_price && resistance_target <= tp1 * 1.1
+              tp1 = [tp1, resistance_target].min
+            end
+
+            # Adjust TP2 if resistance is reasonable and higher than TP1
+            if resistance_target > tp1 && resistance_target <= tp2 * 1.2
+              tp2 = [tp2, resistance_target].min
+            end
           end
 
-          risk = entry_price - stop_loss
-          rr_target = risk * (DEFAULT_MIN_RR * 1.5) # Target 2.25x RR
-          pct_target = entry_price * (1 + (profit_target_pct / 100.0))
-          atr_target = entry_price + (atr * 3.0)
-
-          candidates = [rr_target + entry_price, pct_target, atr_target]
-          candidates << resistance_target if resistance_target
-          candidates.min
+          # Return TP2 as the final target (for backward compatibility)
+          tp2
         when :short
-          # Use MTF support levels if available
+          # Calculate TP1 and TP2 using ATR multiples (as per requirements)
+          # TP1 = Entry - (ATR × 2)
+          # TP2 = Entry - (ATR × 4)
+          tp1 = entry_price - (atr * 2.0)
+          tp2 = entry_price - (atr * 4.0)
+
+          # Use MTF support levels if available to adjust targets
           if mtf_analysis && mtf_analysis[:support_resistance][:support_levels].any?
             nearest_support = mtf_analysis[:support_resistance][:support_levels].first
             support_target = nearest_support * 1.01 # Slightly above support
+
+            # Adjust TP1 if support is reasonable
+            if support_target < entry_price && support_target >= tp1 * 0.9
+              tp1 = [tp1, support_target].max
+            end
+
+            # Adjust TP2 if support is reasonable and lower than TP1
+            if support_target < tp1 && support_target >= tp2 * 0.8
+              tp2 = [tp2, support_target].max
+            end
           end
 
-          risk = stop_loss - entry_price
-          rr_target = risk * (DEFAULT_MIN_RR * 1.5)
-          pct_target = entry_price * (1 - (profit_target_pct / 100.0))
-          atr_target = entry_price - (atr * 3.0)
-
-          candidates = [entry_price - rr_target, pct_target, atr_target]
-          candidates << support_target if support_target
-          candidates.max
+          # Return TP2 as the final target (for backward compatibility)
+          tp2
         end
       end
 
@@ -369,11 +398,19 @@ module Strategies
         [[days, 5].max, 20].min
       end
 
-      def build_metadata(entry_price, stop_loss, _take_profit, _direction, mtf_analysis = nil)
+      def build_metadata(entry_price, stop_loss, _take_profit, _direction, mtf_analysis = nil, tp1 = nil, tp2 = nil, atr = nil)
         indicators = calculate_indicators
         metadata = {
-          atr: indicators[:atr],
-          atr_pct: indicators[:atr] && indicators[:latest_close] ? (indicators[:atr] / indicators[:latest_close] * 100).round(2) : nil,
+          atr: atr || indicators[:atr],
+          atr_pct: if atr && entry_price.positive?
+                    (atr / entry_price * 100).round(2)
+                  elsif indicators[:atr] && indicators[:latest_close]
+                    (indicators[:atr] / indicators[:latest_close] * 100).round(2)
+                  else
+                    nil
+                  end,
+          tp1: tp1,
+          tp2: tp2,
           ema20: indicators[:ema20],
           ema50: indicators[:ema50],
           ema200: indicators[:ema200],
