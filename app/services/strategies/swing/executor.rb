@@ -556,6 +556,14 @@ module Strategies
         metadata = order.metadata_hash
         signal_data = metadata["signal"] || {}
 
+        # Extract ATR-based fields from signal
+        tp1 = signal_data["tp1"] || @signal[:tp1]
+        tp2 = signal_data["tp2"] || @signal[:tp2] || signal_data["tp"] || @signal[:tp]
+        atr = signal_data["atr"] || @signal[:atr]
+        atr_pct = signal_data["atr_pct"] || @signal[:atr_pct]
+        # ATR trailing multiplier: use 1.5× ATR for trailing stop (as per requirements: 1-2× ATR)
+        atr_trailing_multiplier = 1.5
+
         # Create position record for live trading
         Position.create!(
           instrument: @instrument,
@@ -570,7 +578,13 @@ module Strategies
           average_entry_price: order.average_price,
           filled_quantity: order.filled_quantity.positive? ? order.filled_quantity : order.quantity,
           stop_loss: signal_data["sl"] || @signal[:sl],
-          take_profit: signal_data["tp"] || @signal[:tp],
+          take_profit: tp2, # TP2 is the final target
+          tp1: tp1,
+          tp2: tp2,
+          atr: atr,
+          atr_pct: atr_pct,
+          atr_trailing_multiplier: atr_trailing_multiplier,
+          initial_stop_loss: signal_data["sl"] || @signal[:sl], # Store original stop loss
           status: "open",
           opened_at: order.created_at,
           metadata: {

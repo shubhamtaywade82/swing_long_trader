@@ -175,7 +175,53 @@ class Position < ApplicationRecord
     end
   end
 
+  def check_tp1_hit?
+    return false unless tp1 && open? && !tp1_hit
+
+    if long?
+      current_price >= tp1
+    else
+      current_price <= tp1
+    end
+  end
+
+  def check_tp2_hit?
+    return false unless tp2 && open?
+
+    if long?
+      current_price >= tp2
+    else
+      current_price <= tp2
+    end
+  end
+
+  def move_stop_to_breakeven!
+    return false unless open? && entry_price
+
+    breakeven_price = entry_price # For long positions, breakeven is entry price
+    # For short positions, breakeven is also entry price (no loss, no gain)
+
+    update!(
+      breakeven_stop: breakeven_price,
+      initial_stop_loss: stop_loss, # Store original stop loss
+      stop_loss: breakeven_price, # Move stop to breakeven
+    )
+
+    Rails.logger.info(
+      "[Position] Moved stop to breakeven: #{symbol} " \
+      "(Original SL: #{initial_stop_loss}, Breakeven: #{breakeven_price})",
+    )
+
+    true
+  end
+
   def check_trailing_stop?
+    # Check ATR-based trailing stop first (if available)
+    if atr_trailing_multiplier && atr && open?
+      return check_atr_trailing_stop?
+    end
+
+    # Fallback to percentage/distance-based trailing stop
     return false unless trailing_stop_distance || trailing_stop_pct
     return false unless open?
 
@@ -197,6 +243,45 @@ class Position < ApplicationRecord
                       else
                         lowest_price + trailing_stop_distance
                       end
+
+      current_price >= trailing_stop
+    end
+  end
+
+  def check_atr_trailing_stop?
+    # ATR-based trailing stop: Trail by 1-2× ATR on daily/1-hour closes
+    return false unless atr_trailing_multiplier && atr && open?
+
+    if long?
+      return false unless highest_price
+
+      # Trail by ATR multiplier (typically 1.5-2.0× ATR)
+      trailing_stop = highest_price - (atr * atr_trailing_multiplier)
+
+      # Only update stop loss if trailing stop is higher than current stop loss
+      if trailing_stop > stop_loss
+        update!(stop_loss: trailing_stop)
+        Rails.logger.debug(
+          "[Position] ATR trailing stop updated: #{symbol} " \
+          "(Highest: #{highest_price}, Trailing SL: #{trailing_stop.round(2)})",
+        )
+      end
+
+      current_price <= trailing_stop
+    else
+      return false unless lowest_price
+
+      # Trail by ATR multiplier (typically 1.5-2.0× ATR)
+      trailing_stop = lowest_price + (atr * atr_trailing_multiplier)
+
+      # Only update stop loss if trailing stop is lower than current stop loss
+      if trailing_stop < stop_loss
+        update!(stop_loss: trailing_stop)
+        Rails.logger.debug(
+          "[Position] ATR trailing stop updated: #{symbol} " \
+          "(Lowest: #{lowest_price}, Trailing SL: #{trailing_stop.round(2)})",
+        )
+      end
 
       current_price >= trailing_stop
     end

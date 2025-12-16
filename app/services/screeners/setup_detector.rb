@@ -137,6 +137,23 @@ module Screeners
         }
       end
 
+      # Check RSI recovery momentum (recovering above 45-50)
+      # This is a key requirement: take longs when RSI is recovering above 45-50
+      if rsi
+        rsi_recovery = check_rsi_recovery(rsi)
+        unless rsi_recovery[:valid]
+          return {
+            status: WAIT_PULLBACK,
+            reason: rsi_recovery[:reason],
+            entry_conditions: {
+              wait_for: "RSI recovery above 45-50 with upward momentum",
+              invalidate_if: "RSI falls below 40",
+            },
+            invalidate_if: "RSI falls below 40",
+          }
+        end
+      end
+
       # Check multi-timeframe alignment if available
       if @mtf_analysis && !@mtf_analysis[:trend_alignment][:aligned]
         return {
@@ -214,6 +231,51 @@ module Screeners
       end
 
       swing_highs.max
+    end
+
+    def check_rsi_recovery(current_rsi)
+      # Check if RSI is recovering above 45-50 (as per requirements)
+      # Need to check for upward momentum, not just static level
+      return { valid: true } if current_rsi.nil?
+
+      # Get recent candles to check momentum
+      if @daily_series.candles.size >= 14
+        recent_candles = @daily_series.candles.sort_by(&:timestamp).last(5)
+        recent_closes = recent_candles.map(&:close)
+
+        # Check if RSI is in recovery zone (45-50) or above
+        if current_rsi >= 45 && current_rsi <= 70
+          # Check for upward momentum: price should be rising or RSI should be >= 50
+          if recent_closes.size >= 2
+            price_rising = recent_closes.last > recent_closes[-2]
+            # Allow if RSI is >= 50 (already recovered) or price is rising (recovering)
+            if current_rsi >= 50 || price_rising
+              return { valid: true }
+            else
+              return {
+                valid: false,
+                reason: "RSI #{current_rsi.round(1)} in range but no clear recovery momentum",
+              }
+            end
+          else
+            # If we can't check momentum, allow if RSI >= 50 (recovered)
+            return { valid: current_rsi >= 50 }
+          end
+        elsif current_rsi < 45
+          return {
+            valid: false,
+            reason: "RSI #{current_rsi.round(1)} below 45, wait for recovery above 45-50",
+          }
+        elsif current_rsi > 70
+          return {
+            valid: false,
+            reason: "RSI #{current_rsi.round(1)} overbought, wait for pullback",
+          }
+        end
+      end
+
+      # Default: allow if RSI is between 45-70
+      { valid: current_rsi >= 45 && current_rsi <= 70 }
     end
   end
 end
