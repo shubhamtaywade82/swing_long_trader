@@ -176,6 +176,13 @@ class ScreenerResult < ApplicationRecord
     result
   end
 
+  # Convert to TradeRecommendation (if DTO feature flag enabled)
+  def to_trade_recommendation(portfolio: nil)
+    return nil unless Trading::Config.dto_enabled?
+
+    Trading::Adapters::ScreenerResultToRecommendation.call(self, portfolio: portfolio)
+  end
+
   private
 
   def deep_symbolize_keys(hash)
