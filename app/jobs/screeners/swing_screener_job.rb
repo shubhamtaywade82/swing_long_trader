@@ -79,24 +79,53 @@ module Screeners
 
         return handle_empty_results(screener_run) if layer2_candidates.empty?
 
-        # Portfolio pre-filter before AI (save costs, avoid untradable setups)
-        # Prefer paper portfolio if available, otherwise use any active portfolio
+        # Layer 2.5: Setup Classification
+        # Result: Candidates classified as READY, WAIT_PULLBACK, WAIT_BREAKOUT, or NOT_READY
+        Rails.logger.info("[Screeners::SwingScreenerJob] Layer 2.5: Setup Classification")
         portfolio = find_portfolio_for_screening
 
-        # Enhance trade plans with portfolio-aware quantity calculations
-        layer2_candidates = Screeners::TradePlanEnhancer.call(
+        layer2_5_candidates = Screeners::SetupClassifier.call(
           candidates: layer2_candidates,
+          portfolio: portfolio,
+          screener_run_id: screener_run.id,
+        )
+
+        screener_run.update_metrics!(
+          setup_classified_count: layer2_5_candidates.size,
+          layer2_5_completed_at: Time.current.iso8601,
+        )
+
+        ready_count = layer2_5_candidates.count { |c| c[:setup_status] == Screeners::SetupDetector::READY }
+        Rails.logger.info(
+          "[Screeners::SwingScreenerJob] Layer 2.5 complete: #{layer2_5_candidates.size} classified " \
+          "(#{ready_count} READY, #{layer2_5_candidates.size - ready_count} WAIT/NOT_READY)",
+        )
+
+        return handle_empty_results(screener_run) if layer2_5_candidates.empty?
+
+        # Portfolio pre-filter before AI (save costs, avoid untradable setups)
+
+        # Enhance trade plans with portfolio-aware quantity calculations (only for READY setups)
+        ready_candidates = layer2_5_candidates.select { |c| c[:setup_status] == Screeners::SetupDetector::READY }
+        enhanced_candidates = Screeners::TradePlanEnhancer.call(
+          candidates: ready_candidates,
           portfolio: portfolio,
         )
 
-        prefiltered_candidates = prefilter_for_portfolio(layer2_candidates, portfolio)
+        # Merge enhanced candidates back with non-ready candidates
+        layer2_5_candidates = layer2_5_candidates.map do |candidate|
+          enhanced = enhanced_candidates.find { |ec| ec[:instrument_id] == candidate[:instrument_id] }
+          enhanced || candidate
+        end
+
+        prefiltered_candidates = prefilter_for_portfolio(layer2_5_candidates, portfolio)
 
         screener_run.update_metrics!(
           prefiltered_count: prefiltered_candidates.size,
         )
 
         Rails.logger.info(
-          "[Screeners::SwingScreenerJob] Pre-filtered #{layer2_candidates.size} → #{prefiltered_candidates.size} " \
+          "[Screeners::SwingScreenerJob] Pre-filtered #{layer2_5_candidates.size} → #{prefiltered_candidates.size} " \
           "tradable candidates before AI evaluation",
         )
 
@@ -338,7 +367,7 @@ module Screeners
       CapitalAllocationPortfolio.active.first
     end
 
-    def has_sufficient_capital?(candidate, constraints, portfolio)
+    def has_sufficient_capital?(_candidate, constraints, portfolio)
       return true unless portfolio
 
       max_position_value = constraints[:total_equity] * (constraints[:max_capital_pct] / 100.0)

@@ -197,6 +197,31 @@ indicators:
 # NOTIFICATIONS CONFIGURATION
 # ============================================
 notifications:
+  # Trading Bot - For trading-related alerts (entries, exits, signals, screener results, PnL)
+  telegram_trading:
+    enabled: true
+    chat_id: <%= ENV['TELEGRAM_TRADING_CHAT_ID'] || ENV['TELEGRAM_CHAT_ID'] %>
+    bot_token: <%= ENV['TELEGRAM_TRADING_BOT_TOKEN'] || ENV['TELEGRAM_BOT_TOKEN'] %>
+    notify_entry: true
+    notify_exit: true
+    notify_signals: true
+    notify_screener_results: true
+    notify_pnl_milestones: true
+    pnl_milestones: [5, 10, 15, 20, 30, 50] # PnL percentage milestones
+    pnl_update_interval_seconds: 3600 # Update PnL every hour
+
+  # System Bot - For system-related alerts (errors, job failures, health checks, monitoring)
+  telegram_system:
+    enabled: true
+    chat_id: <%= ENV['TELEGRAM_SYSTEM_CHAT_ID'] || ENV['TELEGRAM_CHAT_ID'] %>
+    bot_token: <%= ENV['TELEGRAM_SYSTEM_BOT_TOKEN'] || ENV['TELEGRAM_BOT_TOKEN'] %>
+    notify_errors: true
+    notify_job_failures: true
+    notify_health_checks: true
+    notify_api_errors: true
+    notify_system_alerts: true
+
+  # Legacy support - fallback to single bot if separate bots not configured
   telegram:
     enabled: true
     chat_id: <%= ENV['TELEGRAM_CHAT_ID'] %>
@@ -238,7 +263,7 @@ execution:
   # Automatic trading - enables fully automated trading without manual approval
   auto_trading:
     enabled: true # Set to true to enable automatic trading (both paper and live)
-  
+
   # Manual approval for first N trades (only applies if auto_trading.enabled is false)
   manual_approval:
     enabled: false # Set to false to disable manual approval (ignored if auto_trading.enabled is true)

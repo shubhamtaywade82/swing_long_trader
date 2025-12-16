@@ -15,10 +15,58 @@ class ScreenerResult < ApplicationRecord
   # CRITICAL RULE: No ScreenerResult without screener_run_id (enforced in production)
   validate :must_have_screener_run_id, if: -> { Rails.env.production? }
 
+  # SCREENER CONTRACT: Enforce that screener stage only contains candidate generation data
+  validate :screener_stage_contract, if: -> { stage == "screener" }
+
   def must_have_screener_run_id
     return if screener_run_id.present?
 
     errors.add(:screener_run_id, "is required - no ScreenerResult may exist without run isolation")
+  end
+
+  def screener_stage_contract
+    metadata = metadata_hash
+
+    # Setup classification fields must be nil at screener stage
+    if metadata.dig("setup_status").present? || metadata.dig(:setup_status).present?
+      errors.add(:metadata, "must not contain setup_status at screener stage (belongs to SetupClassifier)")
+    end
+
+    if metadata.dig("setup_reason").present? || metadata.dig(:setup_reason).present?
+      errors.add(:metadata, "must not contain setup_reason at screener stage (belongs to SetupClassifier)")
+    end
+
+    if metadata.dig("invalidate_if").present? || metadata.dig(:invalidate_if).present?
+      errors.add(:metadata, "must not contain invalidate_if at screener stage (belongs to SetupClassifier)")
+    end
+
+    if metadata.dig("entry_conditions").present? || metadata.dig(:entry_conditions).present?
+      errors.add(:metadata, "must not contain entry_conditions at screener stage (belongs to SetupClassifier)")
+    end
+
+    # Trade planning fields must be nil at screener stage
+    if metadata.dig("trade_plan").present? || metadata.dig(:trade_plan).present?
+      errors.add(:metadata, "must not contain trade_plan at screener stage (belongs to TradePlanner)")
+    end
+
+    if metadata.dig("accumulation_plan").present? || metadata.dig(:accumulation_plan).present?
+      errors.add(:metadata, "must not contain accumulation_plan at screener stage (belongs to TradePlanner)")
+    end
+
+    # Recommendation must be nil at screener stage
+    if metadata.dig("recommendation").present? || metadata.dig(:recommendation).present?
+      errors.add(:metadata, "must not contain recommendation at screener stage (belongs to FinalSelector/TradePlanner)")
+    end
+
+    # AI evaluation fields must be nil at screener stage
+    if ai_confidence.present? || ai_risk.present? || ai_comment.present? || ai_avoid.present? || ai_status.present?
+      errors.add(:base, "AI evaluation fields must be nil at screener stage (belongs to AIEvaluator)")
+    end
+
+    # Trade quality fields must be nil at screener stage
+    return unless trade_quality_score.present? || trade_quality_breakdown.present?
+
+    errors.add(:base, "Trade quality fields must be nil at screener stage (belongs to TradeQualityRanker)")
   end
 
   scope :swing, -> { where(screener_type: "swing") }

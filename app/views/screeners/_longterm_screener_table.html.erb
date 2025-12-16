@@ -4,9 +4,12 @@
 <div class="card">
   <div class="card-body p-2">
     <div class="mb-2 d-flex justify-content-end">
-      <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-tech-details-lt-full" style="font-size: 0.75rem;">
-        <i class="bi bi-chevron-down" id="tech-icon-lt-full"></i> Show Technical Details
-      </button>
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" id="toggle-tech-details-lt-full" style="cursor: pointer;">
+        <label class="form-check-label" for="toggle-tech-details-lt-full" style="cursor: pointer; font-size: 0.75rem;">
+          Show Technical Details
+        </label>
+      </div>
     </div>
     <div class="table-responsive">
       <table class="table table-sm table-hover mb-0 screener-table" id="longterm-screener-results-table">
@@ -239,23 +242,15 @@
     if (!table) return;
 
     // Toggle technical details
-    const toggleBtn = document.getElementById('toggle-tech-details-lt-full');
-    if (toggleBtn) {
-      let detailsVisible = false;
-      toggleBtn.addEventListener('click', function() {
-        detailsVisible = !detailsVisible;
+    const toggleCheckbox = document.getElementById('toggle-tech-details-lt-full');
+    if (toggleCheckbox) {
+      toggleCheckbox.addEventListener('change', function() {
+        const detailsVisible = this.checked;
         const cols = table.querySelectorAll('.tech-col');
-        const icon = document.getElementById('tech-icon-lt-full');
 
         cols.forEach(col => {
           col.style.display = detailsVisible ? '' : 'none';
         });
-
-        if (icon) {
-          icon.className = detailsVisible ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
-        }
-
-        toggleBtn.innerHTML = (detailsVisible ? '<i class="bi bi-chevron-up" id="tech-icon-lt-full"></i> Hide' : '<i class="bi bi-chevron-down" id="tech-icon-lt-full"></i> Show') + ' Technical Details';
       });
     }
 

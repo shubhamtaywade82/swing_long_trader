@@ -4,9 +4,12 @@
 <div class="card">
   <div class="card-body p-2">
     <div class="mb-2 d-flex justify-content-end">
-      <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-tech-details-full" style="font-size: 0.75rem;">
-        <i class="bi bi-chevron-down" id="tech-icon-full"></i> Show Technical Details
-      </button>
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" id="toggle-tech-details-full" style="cursor: pointer;">
+        <label class="form-check-label" for="toggle-tech-details-full" style="cursor: pointer; font-size: 0.75rem;">
+          Show Technical Details
+        </label>
+      </div>
     </div>
     <div class="table-responsive">
       <table class="table table-sm table-hover mb-0 screener-table" id="screener-results-table">
@@ -17,10 +20,14 @@
             <th class="sortable text-right" data-sort="score" data-sort-type="number">Score</th>
             <th class="sortable text-right tech-col" data-sort="base_score" data-sort-type="number" style="display: none;">Base</th>
             <th class="sortable text-right tech-col" data-sort="mtf_score" data-sort-type="number" style="display: none;">MTF</th>
-            <th class="sortable" data-sort="setup_status" data-sort-type="string">Setup</th>
+            <%# SCREENER CONTRACT: Setup status only shown in Recommendations tab, not in screener candidates view %>
+            <% if show_recommendation %>
+              <th class="sortable" data-sort="setup_status" data-sort-type="string">Setup</th>
+            <% end %>
             <th class="sortable text-right" data-sort="price" data-sort-type="number">Price</th>
+            <%# SCREENER CONTRACT: Trade plan columns only shown in Recommendations tab %>
             <% has_trade_plan = candidates.any? { |c| c[:trade_plan] } %>
-            <% if has_trade_plan %>
+            <% if has_trade_plan && show_recommendation %>
               <th class="sortable text-right" data-sort="entry" data-sort-type="number">Entry</th>
               <th class="sortable text-right" data-sort="sl" data-sort-type="number">SL</th>
               <th class="sortable text-right" data-sort="tp" data-sort-type="number">TP</th>
@@ -102,18 +109,21 @@
               </td>
               <td class="text-right tech-col" style="display: none;"><%= number_with_precision(candidate[:base_score] || 0, precision: 1) %></td>
               <td class="text-right tech-col" style="display: none;"><%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></td>
-              <td>
-                <% setup_status = candidate[:setup_status] || "UNKNOWN" %>
-                <% setup_class = case setup_status
-                     when "READY" then "success"
-                     when "WAIT_PULLBACK", "WAIT_BREAKOUT" then "warning"
-                     when "IN_POSITION" then "info"
-                     else "secondary"
-                   end %>
-                <span class="badge bg-<%= setup_class %>" title="<%= candidate[:setup_reason] || '' %>">
-                  <%= setup_status.gsub('_', ' ') %>
-                </span>
-              </td>
+              <%# SCREENER CONTRACT: Setup status only shown in Recommendations tab %>
+              <% if show_recommendation %>
+                <td>
+                  <% setup_status = candidate[:setup_status] || "UNKNOWN" %>
+                  <% setup_class = case setup_status
+                       when "READY" then "success"
+                       when "WAIT_PULLBACK", "WAIT_BREAKOUT" then "warning"
+                       when "IN_POSITION" then "info"
+                       else "secondary"
+                     end %>
+                  <span class="badge bg-<%= setup_class %>" title="<%= candidate[:setup_reason] || '' %>">
+                    <%= setup_status.gsub('_', ' ') %>
+                  </span>
+                </td>
+              <% end %>
               <%
                 # Get trade plan early for validation
                 trade_plan = candidate[:trade_plan] if has_trade_plan
@@ -122,7 +132,8 @@
                 is_stale = price_gap_pct > 25.0 # More than 25% gap indicates stale plan
               %>
               <td class="text-right js-ltp-cell" data-price-cell="true" data-instrument-key="<%= instrument_key %>" data-entry-price="<%= entry_price || '' %>">₹<%= number_with_precision(latest_close, precision: 2) %></td>
-              <% if has_trade_plan %>
+              <%# SCREENER CONTRACT: Trade plan columns only shown in Recommendations tab %>
+              <% if has_trade_plan && show_recommendation %>
                 <% if trade_plan %>
                   <td class="text-right <%= 'trade-plan-stale' if is_stale %>" data-trade-plan-entry="<%= trade_plan[:entry_price] %>">
                     <% if is_stale %>
@@ -296,23 +307,15 @@
     if (!table) return;
 
     // Toggle technical details
-    const toggleBtn = document.getElementById('toggle-tech-details-full');
-    if (toggleBtn) {
-      let detailsVisible = false;
-      toggleBtn.addEventListener('click', function() {
-        detailsVisible = !detailsVisible;
+    const toggleCheckbox = document.getElementById('toggle-tech-details-full');
+    if (toggleCheckbox) {
+      toggleCheckbox.addEventListener('change', function() {
+        const detailsVisible = this.checked;
         const cols = table.querySelectorAll('.tech-col');
-        const icon = document.getElementById('tech-icon-full');
 
         cols.forEach(col => {
           col.style.display = detailsVisible ? '' : 'none';
         });
-
-        if (icon) {
-          icon.className = detailsVisible ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
-        }
-
-        toggleBtn.innerHTML = (detailsVisible ? '<i class="bi bi-chevron-up" id="tech-icon-full"></i> Hide' : '<i class="bi bi-chevron-down" id="tech-icon-full"></i> Show') + ' Technical Details';
       });
     }
 

@@ -5,6 +5,7 @@
 <div class="card">
   <div class="card-body p-2">
     <% if compact_mode && show_recommendation %>
+      <%# SCREENER CONTRACT: Recommendations tab shows actionable data (Entry, SL, TP, Qty, Risk, Setup Status) %>
       <!-- Compact mode for Recommendations tab - focused on actionable trade info -->
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0 screener-table" id="screener-results-table">
@@ -13,21 +14,19 @@
               <th class="sortable text-right" data-sort="rank" data-sort-type="number">#</th>
               <th class="sortable" data-sort="symbol" data-sort-type="string">Symbol</th>
               <th class="sortable text-right" data-sort="score" data-sort-type="number">Score</th>
-              <th class="sortable" data-sort="setup_status" data-sort-type="string">Status</th>
+              <th class="sortable" data-sort="setup_status" data-sort-type="string">Setup Status</th>
               <th class="sortable text-right" data-sort="price" data-sort-type="number">Price</th>
-              <th class="sortable text-right" data-sort="entry" data-sort-type="number">Trade Plan</th>
-              <th class="sortable text-right" data-sort="qty" data-sort-type="number">Qty</th>
-              <th class="sortable text-right" data-sort="risk" data-sort-type="number">Risk</th>
+              <th class="sortable text-right" data-sort="entry" data-sort-type="number">Entry Zone</th>
+              <th class="sortable text-right" data-sort="sl" data-sort-type="number">SL</th>
+              <th class="sortable text-right" data-sort="tp" data-sort-type="number">TP</th>
+              <th class="sortable text-right" data-sort="qty" data-sort-type="number">Quantity</th>
+              <th class="sortable text-right" data-sort="risk" data-sort-type="number">Risk ₹</th>
               <th class="sortable text-right" data-sort="rr" data-sort-type="number">RR</th>
               <% has_ai_data = candidates.any? { |c| c[:ai_score] || c[:ai_confidence] } %>
               <% if has_ai_data %>
-                <th class="sortable text-right" data-sort="ai_confidence" data-sort-type="number">AI</th>
+                <th class="sortable text-right" data-sort="ai_confidence" data-sort-type="number">AI Confidence</th>
               <% end %>
-              <th>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-tech-details" style="font-size: 0.7rem;">
-                  <i class="bi bi-chevron-down" id="tech-icon"></i> Details
-                </button>
-              </th>
+              <th class="sortable" data-sort="recommendation" data-sort-type="string">Recommendation</th>
             </tr>
           </thead>
           <tbody data-screener-results="true" data-screener-type="swing">
@@ -63,11 +62,12 @@
                     data-entry="<%= trade_plan[:entry_price] || 0 %>"
                     data-sl="<%= trade_plan[:stop_loss] || 0 %>"
                     data-tp="<%= trade_plan[:take_profit] || 0 %>"
-                    data-rr="<%= trade_plan[:risk_reward] || 0 %>"
-                    data-qty="<%= trade_plan[:quantity] || 0 %>"
-                    data-risk="<%= trade_plan[:risk_amount] || 0 %>"
+                  data-rr="<%= trade_plan[:risk_reward] || 0 %>"
+                  data-qty="<%= trade_plan[:quantity] || 0 %>"
+                  data-risk="<%= trade_plan[:risk_amount] || 0 %>"
                   <% end %>
-                  data-ai-confidence="<%= candidate[:ai_confidence] || 0 %>">
+                  data-ai-confidence="<%= candidate[:ai_confidence] || 0 %>"
+                  data-recommendation="<%= candidate[:recommendation] || '' %>">
                 <td class="text-right"><strong>#<%= index + 1 %></strong></td>
                 <td><strong><%= candidate[:symbol] %></strong></td>
                 <td class="text-right">
@@ -89,29 +89,42 @@
                 <td class="text-right js-ltp-cell" data-price-cell="true" <% if instrument_key %>data-instrument-key="<%= instrument_key %>"<% end %> data-entry-price="<%= entry_price || '' %>">
                   <strong>₹<%= number_with_precision(latest_close, precision: 2) %></strong>
                 </td>
+                <%# SCREENER CONTRACT: Recommendations tab shows actionable trade plan data %>
                 <td class="text-right">
                   <% if trade_plan %>
                     <% if is_stale %>
-                      <div style="line-height: 1.4;">
-                        <span class="badge bg-warning" title="Trade plan is stale - current price differs <%= price_gap_pct.round(1) %>% from entry">STALE</span>
-                        <div class="text-muted" style="font-size: 0.75rem; margin-top: 0.25rem;">
-                          Entry: ₹<%= number_with_precision(trade_plan[:entry_price], precision: 2) %><br>
-                          Gap: <%= price_gap_pct.round(1) %>%
-                        </div>
-                      </div>
+                      <span class="badge bg-warning" title="Trade plan is stale - current price differs <%= price_gap_pct.round(1) %>% from entry">STALE</span>
+                      <small class="text-muted d-block" style="font-size: 0.7rem;">
+                        ₹<%= number_with_precision(trade_plan[:entry_price], precision: 2) %>
+                      </small>
                     <% else %>
-                      <div style="line-height: 1.4;">
-                        <div><strong>Entry:</strong> ₹<%= number_with_precision(trade_plan[:entry_price], precision: 2) %></div>
-                        <div class="text-danger" style="font-size: 0.85rem;"><strong>SL:</strong> ₹<%= number_with_precision(trade_plan[:stop_loss], precision: 2) %></div>
-                        <div class="text-success" style="font-size: 0.85rem;"><strong>TP:</strong> ₹<%= number_with_precision(trade_plan[:take_profit], precision: 2) %></div>
-                      </div>
+                      <strong>₹<%= number_with_precision(trade_plan[:entry_price] || trade_plan[:entry_zone]&.split('-')&.first&.gsub(/[₹,\s]/, '')&.to_f || latest_close, precision: 2) %></strong>
+                      <% if trade_plan[:entry_zone] && !is_stale %>
+                        <small class="text-muted d-block" style="font-size: 0.7rem;">
+                          <%= trade_plan[:entry_zone] %>
+                        </small>
+                      <% end %>
                     <% end %>
                   <% else %>
                     <span class="text-muted">-</span>
                   <% end %>
                 </td>
                 <td class="text-right">
-                  <% if trade_plan %>
+                  <% if trade_plan && !is_stale %>
+                    <span class="badge bg-danger">₹<%= number_with_precision(trade_plan[:stop_loss], precision: 2) %></span>
+                  <% else %>
+                    <span class="text-muted">-</span>
+                  <% end %>
+                </td>
+                <td class="text-right">
+                  <% if trade_plan && !is_stale %>
+                    <span class="badge bg-success">₹<%= number_with_precision(trade_plan[:take_profit], precision: 2) %></span>
+                  <% else %>
+                    <span class="text-muted">-</span>
+                  <% end %>
+                </td>
+                <td class="text-right">
+                  <% if trade_plan && !is_stale %>
                     <strong><%= trade_plan[:quantity] %></strong>
                     <% if trade_plan[:max_capital_pct] && trade_plan[:max_capital_pct] > 0 %>
                       <small class="text-muted d-block" style="font-size: 0.7rem;">
@@ -123,17 +136,19 @@
                   <% end %>
                 </td>
                 <td class="text-right">
-                  <% if trade_plan %>
+                  <% if trade_plan && !is_stale %>
                     <strong class="text-danger">₹<%= number_with_precision(trade_plan[:risk_amount], precision: 0) %></strong>
-                    <small class="text-muted d-block" style="font-size: 0.7rem;">
-                      Cap: ₹<%= number_with_precision(trade_plan[:capital_used], precision: 0) %>
-                    </small>
+                    <% if trade_plan[:capital_used] %>
+                      <small class="text-muted d-block" style="font-size: 0.7rem;">
+                        Cap: ₹<%= number_with_precision(trade_plan[:capital_used], precision: 0) %>
+                      </small>
+                    <% end %>
                   <% else %>
                     <span class="text-muted">-</span>
                   <% end %>
                 </td>
                 <td class="text-right">
-                  <% if trade_plan %>
+                  <% if trade_plan && !is_stale %>
                     <span class="badge bg-<%= trade_plan[:risk_reward] >= 2.5 ? 'success' : 'warning' %>">
                       <%= number_with_precision(trade_plan[:risk_reward], precision: 1) %>R
                     </span>
@@ -152,20 +167,23 @@
                     <% end %>
                   </td>
                 <% end %>
-                <td class="tech-details-cell" style="display: none;">
-                  <div style="font-size: 0.75rem; line-height: 1.5;">
-                    <div><strong>Price:</strong> ₹<%= number_with_precision(latest_close, precision: 2) %></div>
-                    <% if rsi %>
-                      <div><strong>RSI:</strong> <span class="badge bg-<%= rsi > 70 ? 'danger' : rsi < 30 ? 'success' : 'info' %>" style="font-size: 0.7rem;"><%= number_with_precision(rsi, precision: 1) %></span></div>
-                    <% end %>
-                    <% if adx %>
-                      <div><strong>ADX:</strong> <span class="badge bg-<%= adx > 25 ? 'success' : 'secondary' %>" style="font-size: 0.7rem;"><%= number_with_precision(adx, precision: 1) %></span></div>
-                    <% end %>
-                    <div><strong>Base:</strong> <%= number_with_precision(candidate[:base_score] || 0, precision: 1) %> | <strong>MTF:</strong> <%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></div>
-                    <% if candidate[:setup_reason] %>
-                      <div class="text-muted" style="font-size: 0.7rem;"><%= candidate[:setup_reason] %></div>
-                    <% end %>
-                  </div>
+                <td style="max-width: 250px;">
+                  <% rec = candidate[:recommendation] || "N/A" %>
+                  <% rec_class = case rec
+                       when /BUY|ACCUMULATE/i then "success"
+                       when /WAIT/i then "warning"
+                       when /NOT READY|Avoid/i then "danger"
+                       when /Already in|Monitor/i then "info"
+                       else "secondary"
+                     end %>
+                  <span class="badge bg-<%= rec_class %>" title="<%= candidate[:setup_reason] || '' %>">
+                    <%= rec %>
+                  </span>
+                  <% if candidate[:setup_reason] && !candidate[:setup_reason].empty? %>
+                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                      <%= truncate(candidate[:setup_reason], length: 50) %>
+                    </small>
+                  <% end %>
                 </td>
               </tr>
             <% end %>
@@ -184,24 +202,7 @@
     const table = document.getElementById('screener-results-table');
     if (!table) return;
 
-    // Toggle technical details
-    const toggleBtn = document.getElementById('toggle-tech-details');
-    if (toggleBtn) {
-      let detailsVisible = false;
-      toggleBtn.addEventListener('click', function() {
-        detailsVisible = !detailsVisible;
-        const cells = table.querySelectorAll('.tech-details-cell');
-        const icon = document.getElementById('tech-icon');
-
-        cells.forEach(cell => {
-          cell.style.display = detailsVisible ? 'table-cell' : 'none';
-        });
-
-        if (icon) {
-          icon.className = detailsVisible ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
-        }
-      });
-    }
+    // Toggle functionality removed - Recommendations tab shows all actionable columns directly
 
     // Sorting functionality
     const tbody = table.querySelector('tbody');

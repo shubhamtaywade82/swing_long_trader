@@ -1,3 +1,4 @@
+<%# SCREENER CONTRACT: Compact mode for Recommendations tab - focused on actionable accumulation plan data %>
 <% show_recommendation = local_assigns.fetch(:show_recommendation, false) %>
 <% show_position = local_assigns.fetch(:show_position, false) %>
 <% compact_mode = local_assigns.fetch(:compact_mode, true) %>
@@ -13,16 +14,18 @@
               <th class="sortable text-right" data-sort="rank" data-sort-type="number">#</th>
               <th class="sortable" data-sort="symbol" data-sort-type="string">Symbol</th>
               <th class="sortable text-right" data-sort="score" data-sort-type="number">Score</th>
-              <th class="sortable" data-sort="setup_status" data-sort-type="string">Status</th>
+              <th class="sortable" data-sort="setup_status" data-sort-type="string">Setup Status</th>
               <th class="sortable text-right" data-sort="price" data-sort-type="number">Price</th>
-              <th class="sortable text-right" data-sort="buy_zone" data-sort-type="number">Accumulation Plan</th>
-              <th class="sortable text-right" data-sort="allocation" data-sort-type="number">Allocation</th>
+              <th class="sortable text-right" data-sort="buy_zone" data-sort-type="number">Buy Zone</th>
+              <th class="sortable text-right" data-sort="invalid" data-sort-type="number">Invalid Level</th>
+              <th class="sortable text-right" data-sort="allocation" data-sort-type="number">Allocation %</th>
+              <th class="sortable text-right" data-sort="allocation_amount" data-sort-type="number">Allocation ₹</th>
               <th class="sortable text-right" data-sort="horizon" data-sort-type="number">Horizon</th>
-              <th>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-tech-details-lt" style="font-size: 0.7rem;">
-                  <i class="bi bi-chevron-down" id="tech-icon-lt"></i> Details
-                </button>
-              </th>
+              <% has_ai_data = candidates.any? { |c| c[:ai_score] || c[:ai_confidence] } %>
+              <% if has_ai_data %>
+                <th class="sortable text-right" data-sort="ai_confidence" data-sort-type="number">AI Confidence</th>
+              <% end %>
+              <th class="sortable" data-sort="recommendation" data-sort-type="string">Recommendation</th>
             </tr>
           </thead>
           <tbody data-screener-results="true" data-screener-type="longterm">
@@ -50,10 +53,14 @@
                   data-setup-status="<%= setup_status %>"
                   data-price="<%= price %>"
                   <% if accumulation_plan %>
-                    data-buy-zone="<%= accumulation_plan[:buy_zone] || 0 %>"
-                    data-allocation="<%= accumulation_plan[:allocation_pct] || 0 %>"
-                    data-horizon="<%= accumulation_plan[:time_horizon] || 0 %>"
-                  <% end %>>
+                  data-buy-zone="<%= accumulation_plan[:buy_zone] || 0 %>"
+                  data-invalid="<%= accumulation_plan[:invalid_level] || 0 %>"
+                  data-allocation="<%= accumulation_plan[:allocation_pct] || 0 %>"
+                  data-allocation-amount="<%= accumulation_plan[:allocation_amount] || 0 %>"
+                  data-horizon="<%= accumulation_plan[:time_horizon] || 0 %>"
+                  <% end %>
+                  data-ai-confidence="<%= candidate[:ai_confidence] || 0 %>"
+                  data-recommendation="<%= candidate[:recommendation] || '' %>">
                 <td class="text-right"><strong>#<%= index + 1 %></strong></td>
                 <td><strong><%= candidate[:symbol] %></strong></td>
                 <td class="text-right">
@@ -75,17 +82,22 @@
                 <td class="text-right js-ltp-cell" data-price-cell="true" <% if instrument_key %>data-instrument-key="<%= instrument_key %>"<% end %>>
                   <strong>₹<%= number_with_precision(price, precision: 2) %></strong>
                 </td>
+                <%# SCREENER CONTRACT: Recommendations tab shows actionable accumulation plan data %>
                 <td class="text-right">
                   <% if accumulation_plan %>
-                    <div style="line-height: 1.4;">
-                      <div><strong>Buy Zone:</strong> ₹<%= accumulation_plan[:buy_zone] %></div>
-                      <div class="text-danger" style="font-size: 0.85rem;"><strong>Invalid:</strong> ₹<%= number_with_precision(accumulation_plan[:invalid_level], precision: 2) %></div>
-                      <% if accumulation_plan[:add_on_zones]&.any? %>
-                        <div class="text-muted" style="font-size: 0.75rem;">
-                          Add-ons: <%= accumulation_plan[:add_on_zones].map { |z| "₹#{z[:level]}" }.join(", ") %>
-                        </div>
-                      <% end %>
-                    </div>
+                    <strong>₹<%= accumulation_plan[:buy_zone] %></strong>
+                    <% if accumulation_plan[:add_on_zones]&.any? %>
+                      <small class="text-muted d-block" style="font-size: 0.7rem;">
+                        +<%= accumulation_plan[:add_on_zones].size %> add-ons
+                      </small>
+                    <% end %>
+                  <% else %>
+                    <span class="text-muted">-</span>
+                  <% end %>
+                </td>
+                <td class="text-right">
+                  <% if accumulation_plan %>
+                    <span class="badge bg-danger">₹<%= number_with_precision(accumulation_plan[:invalid_level], precision: 2) %></span>
                   <% else %>
                     <span class="text-muted">-</span>
                   <% end %>
@@ -93,11 +105,13 @@
                 <td class="text-right">
                   <% if accumulation_plan %>
                     <strong><%= number_with_precision(accumulation_plan[:allocation_pct], precision: 1) %>%</strong>
-                    <% if accumulation_plan[:allocation_amount] && accumulation_plan[:allocation_amount] > 0 %>
-                      <small class="text-muted d-block" style="font-size: 0.7rem;">
-                        ₹<%= number_with_precision(accumulation_plan[:allocation_amount], precision: 0) %>
-                      </small>
-                    <% end %>
+                  <% else %>
+                    <span class="text-muted">-</span>
+                  <% end %>
+                </td>
+                <td class="text-right">
+                  <% if accumulation_plan && accumulation_plan[:allocation_amount] && accumulation_plan[:allocation_amount] > 0 %>
+                    <strong>₹<%= number_with_precision(accumulation_plan[:allocation_amount], precision: 0) %></strong>
                   <% else %>
                     <span class="text-muted">-</span>
                   <% end %>
@@ -109,20 +123,34 @@
                     <span class="text-muted">-</span>
                   <% end %>
                 </td>
-                <td class="tech-details-cell" style="display: none;">
-                  <div style="font-size: 0.75rem; line-height: 1.5;">
-                    <div><strong>Price:</strong> ₹<%= number_with_precision(price, precision: 2) %></div>
-                    <% if weekly_adx %>
-                      <div><strong>Weekly ADX:</strong> <span class="badge bg-<%= weekly_adx > 25 ? 'success' : 'secondary' %>" style="font-size: 0.7rem;"><%= number_with_precision(weekly_adx, precision: 1) %></span></div>
+                <% if has_ai_data %>
+                  <td class="text-right">
+                    <% if candidate[:ai_confidence] %>
+                      <span class="badge bg-info" title="AI Confidence">
+                        <%= number_with_precision(candidate[:ai_confidence], precision: 0) %>
+                      </span>
+                    <% else %>
+                      <span class="text-muted">-</span>
                     <% end %>
-                    <% if daily_rsi %>
-                      <div><strong>Daily RSI:</strong> <span class="badge bg-<%= daily_rsi > 70 ? 'danger' : daily_rsi < 30 ? 'success' : 'info' %>" style="font-size: 0.7rem;"><%= number_with_precision(daily_rsi, precision: 1) %></span></div>
-                    <% end %>
-                    <div><strong>Base:</strong> <%= number_with_precision(candidate[:base_score] || 0, precision: 1) %> | <strong>MTF:</strong> <%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %></div>
-                    <% if candidate[:setup_reason] %>
-                      <div class="text-muted" style="font-size: 0.7rem;"><%= candidate[:setup_reason] %></div>
-                    <% end %>
-                  </div>
+                  </td>
+                <% end %>
+                <td style="max-width: 250px;">
+                  <% rec = candidate[:recommendation] || "N/A" %>
+                  <% rec_class = case rec
+                       when /ACCUMULATE|BUY/i then "success"
+                       when /WAIT/i then "warning"
+                       when /NOT READY|Avoid/i then "danger"
+                       when /Already in|Monitor/i then "info"
+                       else "secondary"
+                     end %>
+                  <span class="badge bg-<%= rec_class %>" title="<%= candidate[:setup_reason] || '' %>">
+                    <%= rec %>
+                  </span>
+                  <% if candidate[:setup_reason] && !candidate[:setup_reason].empty? %>
+                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                      <%= truncate(candidate[:setup_reason], length: 50) %>
+                    </small>
+                  <% end %>
                 </td>
               </tr>
             <% end %>
@@ -141,24 +169,7 @@
     const table = document.getElementById('longterm-screener-results-table');
     if (!table) return;
 
-    // Toggle technical details
-    const toggleBtn = document.getElementById('toggle-tech-details-lt');
-    if (toggleBtn) {
-      let detailsVisible = false;
-      toggleBtn.addEventListener('click', function() {
-        detailsVisible = !detailsVisible;
-        const cells = table.querySelectorAll('.tech-details-cell');
-        const icon = document.getElementById('tech-icon-lt');
-
-        cells.forEach(cell => {
-          cell.style.display = detailsVisible ? 'table-cell' : 'none';
-        });
-
-        if (icon) {
-          icon.className = detailsVisible ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
-        }
-      });
-    }
+    // Toggle functionality removed - Recommendations tab shows all actionable columns directly
 
     // Sorting functionality
     const tbody = table.querySelector('tbody');

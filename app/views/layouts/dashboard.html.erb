@@ -42,54 +42,15 @@
         </div>
 
         <ul class="sidebar-nav">
+          <!-- Primary Navigation -->
           <li class="nav-item">
             <%= link_to dashboard_path, class: "nav-link #{'active' if current_page?(dashboard_path)}", data: { tooltip: "Dashboard" } do %>
               <i class="bi bi-speedometer2"></i>
               <span class="nav-link-text">Dashboard</span>
             <% end %>
           </li>
-          <li class="nav-item">
-            <%= link_to positions_path, class: "nav-link #{'active' if current_page?(positions_path)}", data: { tooltip: "Positions" } do %>
-              <i class="bi bi-briefcase"></i>
-              <span class="nav-link-text">Positions</span>
-            <% end %>
-          </li>
-          <li class="nav-item">
-            <%= link_to portfolio_path, class: "nav-link #{'active' if current_page?(portfolio_path)}", data: { tooltip: "Portfolio" } do %>
-              <i class="bi bi-pie-chart"></i>
-              <span class="nav-link-text">Portfolio</span>
-            <% end %>
-          </li>
-          <li class="nav-item">
-            <%= link_to signals_path, class: "nav-link #{'active' if current_page?(signals_path)}", data: { tooltip: "Trading Signals" } do %>
-              <i class="bi bi-bullseye"></i>
-              <span class="nav-link-text">Trading Signals</span>
-            <% end %>
-          </li>
-          <li class="nav-item">
-            <%= link_to ai_evaluations_path, class: "nav-link #{'active' if current_page?(ai_evaluations_path)}", data: { tooltip: "AI Evaluations" } do %>
-              <i class="bi bi-robot"></i>
-              <span class="nav-link-text">AI Evaluations</span>
-            <% end %>
-          </li>
-          <li class="nav-item">
-            <%= link_to orders_path, class: "nav-link #{'active' if current_page?(orders_path)}", data: { tooltip: "Orders" } do %>
-              <i class="bi bi-list-check"></i>
-              <span class="nav-link-text">Orders</span>
-            <% end %>
-          </li>
-          <li class="nav-item">
-            <%= link_to monitoring_path, class: "nav-link #{'active' if current_page?(monitoring_path)}", data: { tooltip: "Monitoring" } do %>
-              <i class="bi bi-activity"></i>
-              <span class="nav-link-text">Monitoring</span>
-            <% end %>
-          </li>
-          <li class="nav-item">
-            <%= link_to about_path, class: "nav-link #{'active' if current_page?(about_path)}", data: { tooltip: "About" } do %>
-              <i class="bi bi-info-circle"></i>
-              <span class="nav-link-text">About</span>
-            <% end %>
-          </li>
+
+          <!-- Screeners Section - Discovery/Research -->
           <li class="nav-item nav-section-header">
             <span class="nav-section-title">Screeners</span>
           </li>
@@ -103,6 +64,54 @@
             <%= link_to longterm_screeners_path, class: "nav-link #{'active' if current_page?(longterm_screeners_path)}", data: { tooltip: "Long-Term Screener" } do %>
               <i class="bi bi-graph-up-arrow"></i>
               <span class="nav-link-text">Long-Term Screener</span>
+            <% end %>
+          </li>
+
+          <!-- Trading & Analysis -->
+          <li class="nav-item">
+            <%= link_to signals_path, class: "nav-link #{'active' if current_page?(signals_path)}", data: { tooltip: "Trading Signals" } do %>
+              <i class="bi bi-bullseye"></i>
+              <span class="nav-link-text">Trading Signals</span>
+            <% end %>
+          </li>
+          <li class="nav-item">
+            <%= link_to ai_evaluations_path, class: "nav-link #{'active' if current_page?(ai_evaluations_path)}", data: { tooltip: "AI Evaluations" } do %>
+              <i class="bi bi-robot"></i>
+              <span class="nav-link-text">AI Evaluations</span>
+            <% end %>
+          </li>
+
+          <!-- Portfolio Management -->
+          <li class="nav-item">
+            <%= link_to positions_path, class: "nav-link #{'active' if current_page?(positions_path)}", data: { tooltip: "Positions" } do %>
+              <i class="bi bi-briefcase"></i>
+              <span class="nav-link-text">Positions</span>
+            <% end %>
+          </li>
+          <li class="nav-item">
+            <%= link_to portfolio_path, class: "nav-link #{'active' if current_page?(portfolio_path)}", data: { tooltip: "Portfolio" } do %>
+              <i class="bi bi-pie-chart"></i>
+              <span class="nav-link-text">Portfolio</span>
+            <% end %>
+          </li>
+          <li class="nav-item">
+            <%= link_to orders_path, class: "nav-link #{'active' if current_page?(orders_path)}", data: { tooltip: "Orders" } do %>
+              <i class="bi bi-list-check"></i>
+              <span class="nav-link-text">Orders</span>
+            <% end %>
+          </li>
+
+          <!-- System & Info -->
+          <li class="nav-item">
+            <%= link_to monitoring_path, class: "nav-link #{'active' if current_page?(monitoring_path)}", data: { tooltip: "Monitoring" } do %>
+              <i class="bi bi-activity"></i>
+              <span class="nav-link-text">Monitoring</span>
+            <% end %>
+          </li>
+          <li class="nav-item">
+            <%= link_to about_path, class: "nav-link #{'active' if current_page?(about_path)}", data: { tooltip: "About" } do %>
+              <i class="bi bi-info-circle"></i>
+              <span class="nav-link-text">About</span>
             <% end %>
           </li>
         </ul>
