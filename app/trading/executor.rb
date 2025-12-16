@@ -71,7 +71,12 @@ module Trading
       end
 
       # All gates passed - execute based on mode
-      execute_by_mode
+      result = execute_by_mode
+
+      # Log execution to audit log
+      log_execution(result) if result
+
+      result
     end
 
     private
@@ -349,6 +354,24 @@ module Trading
 
     def self.current_mode
       Trading::Config.current_mode
+    end
+
+    def log_execution(execution_result)
+      return unless Trading::Config.dto_enabled?
+
+      system_context = @portfolio ? Trading::SystemContext.from_portfolio(@portfolio) : Trading::SystemContext.empty
+
+      audit_log = Trading::AuditLog.new(
+        trade_recommendation: @recommendation,
+        decision_result: @decision_result,
+        system_context: system_context,
+        llm_review: @decision_result[:llm_review],
+      )
+
+      audit_log.log_execution(execution_result)
+    rescue StandardError => e
+      Rails.logger.error("[Trading::Executor] Audit log failed: #{e.message}")
+      # Don't fail execution if audit log fails
     end
   end
 end

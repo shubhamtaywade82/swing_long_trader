@@ -58,7 +58,7 @@ module Trading
           llm_review = perform_llm_review
         end
 
-        {
+        decision_result = {
           approved: true,
           recommendation: @recommendation,
           decision_path: [
@@ -70,6 +70,11 @@ module Trading
           llm_review: llm_review,
           checked_at: Time.current,
         }
+
+        # Log decision to audit log
+        log_decision(decision_result, llm_review: llm_review)
+
+        decision_result
       end
 
       private
@@ -124,6 +129,22 @@ module Trading
       rescue StandardError => e
         Rails.logger.error("[Trading::DecisionEngine::Engine] LLM review failed: #{e.message}")
         nil
+      end
+
+      def log_decision(decision_result, llm_review: nil)
+        return unless Trading::Config.dto_enabled?
+
+        system_context = @system_context || Trading::SystemContext.empty
+
+        audit_log = Trading::AuditLog.new(
+          trade_recommendation: @recommendation,
+          system_context: system_context,
+        )
+
+        audit_log.log_decision(decision_result, system_context: system_context, llm_review: llm_review)
+      rescue StandardError => e
+        Rails.logger.error("[Trading::DecisionEngine::Engine] Audit log failed: #{e.message}")
+        # Don't fail decision if audit log fails
       end
     end
   end
