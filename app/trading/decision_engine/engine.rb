@@ -58,6 +58,9 @@ module Trading
           llm_review = perform_llm_review
         end
 
+        # Transition lifecycle to APPROVED
+        @recommendation.lifecycle.approve!(reason: "Approved by Decision Engine")
+
         decision_result = {
           approved: true,
           recommendation: @recommendation,
@@ -68,6 +71,7 @@ module Trading
             portfolio_check[:reason],
           ],
           llm_review: llm_review,
+          system_context: @system_context.to_hash,
           checked_at: Time.current,
         }
 

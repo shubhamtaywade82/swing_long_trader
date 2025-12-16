@@ -27,6 +27,25 @@ module Trading
     end
 
     def execute
+      # Feature flag check: Must have DTO and Decision Engine enabled
+      unless Trading::Config.dto_enabled? && Trading::Config.decision_engine_enabled?
+        return {
+          success: false,
+          error: "Trading Agent feature flags not enabled (dto_enabled: #{Trading::Config.dto_enabled?}, decision_engine_enabled: #{Trading::Config.decision_engine_enabled?})",
+          gate: "feature_flags",
+        }
+      end
+
+      # Validate decision_result structure (must be from Decision Engine)
+      validation = validate_decision_result
+      unless validation[:valid]
+        return {
+          success: false,
+          error: "Invalid decision_result: #{validation[:reason]}",
+          gate: "decision_result_validation",
+        }
+      end
+
       # Gate 1: Decision Engine must have approved
       unless @decision_result[:approved]
         return {
@@ -356,10 +375,43 @@ module Trading
       Trading::Config.current_mode
     end
 
+    def validate_decision_result
+      return { valid: false, reason: "decision_result is nil" } unless @decision_result.is_a?(Hash)
+
+      # Must have approved key
+      unless @decision_result.key?(:approved) || @decision_result.key?("approved")
+        return { valid: false, reason: "Missing :approved key" }
+      end
+
+      # Must have decision_path (indicates it came from Decision Engine)
+      unless @decision_result[:decision_path] || @decision_result["decision_path"]
+        return { valid: false, reason: "Missing :decision_path (not from Decision Engine)" }
+      end
+
+      # Must have checked_at (indicates it came from Decision Engine)
+      unless @decision_result[:checked_at] || @decision_result["checked_at"]
+        return { valid: false, reason: "Missing :checked_at (not from Decision Engine)" }
+      end
+
+      # Must have recommendation
+      unless @decision_result[:recommendation] || @decision_result["recommendation"]
+        return { valid: false, reason: "Missing :recommendation" }
+      end
+
+      { valid: true }
+    end
+
     def log_execution(execution_result)
       return unless Trading::Config.dto_enabled?
 
-      system_context = @portfolio ? Trading::SystemContext.from_portfolio(@portfolio) : Trading::SystemContext.empty
+      # Reuse system_context from decision_result if available
+      system_context = if @decision_result[:system_context]
+                        @decision_result[:system_context]
+                      elsif @portfolio
+                        Trading::SystemContext.from_portfolio(@portfolio)
+                      else
+                        Trading::SystemContext.empty
+                      end
 
       audit_log = Trading::AuditLog.new(
         trade_recommendation: @recommendation,
