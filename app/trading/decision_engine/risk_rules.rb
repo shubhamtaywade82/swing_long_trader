@@ -5,13 +5,14 @@ module Trading
     # Enforces risk management rules
     # Pure function - uses portfolio if provided, otherwise uses defaults
     class RiskRules
-      def self.call(trade_recommendation, portfolio: nil, config: {})
-        new(trade_recommendation, portfolio: portfolio, config: config).call
+      def self.call(trade_recommendation, portfolio: nil, system_context: nil, config: {})
+        new(trade_recommendation, portfolio: portfolio, system_context: system_context, config: config).call
       end
 
-      def initialize(trade_recommendation, portfolio: nil, config: {})
+      def initialize(trade_recommendation, portfolio: nil, system_context: nil, config: {})
         @recommendation = trade_recommendation
         @portfolio = portfolio
+        @system_context = system_context
         @config = config
         @max_daily_risk_pct = config[:max_daily_risk_pct] || 2.0
         @max_volatility_pct = config[:max_volatility_pct] || 8.0
@@ -27,6 +28,10 @@ module Trading
         # Check daily risk limit
         daily_risk_check = check_daily_risk_limit
         errors.concat(daily_risk_check[:errors]) unless daily_risk_check[:approved]
+
+        # Check system context constraints (drawdown, consecutive losses)
+        context_check = check_system_context
+        errors.concat(context_check[:errors]) unless context_check[:approved]
 
         # Check volatility cap (ATR %)
         volatility_check = check_volatility_cap
@@ -165,8 +170,36 @@ module Trading
               risk_per_share * quantity
             else
               0.0
-            end
           end
+        end
+      end
+
+      def check_system_context
+        return { approved: true, errors: [] } unless @system_context
+
+        errors = []
+
+        # Check significant drawdown
+        if @system_context.significant_drawdown?(threshold: 15.0)
+          errors << "Significant drawdown detected: #{@system_context.drawdown.round(2)}%"
+        end
+
+        # Check consecutive losses (if configured)
+        if @system_context.consecutive_losses >= 3
+          errors << "Too many consecutive losses: #{@system_context.consecutive_losses}"
+        end
+
+        # Check losing day (optional - could be warning not blocker)
+        # For now, just log - don't block
+
+        if errors.any?
+          {
+            approved: false,
+            errors: errors,
+          }
+        else
+          { approved: true, errors: [] }
+        end
       end
     end
   end

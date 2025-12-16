@@ -6,17 +6,19 @@ module Trading
     # Runs all validation layers in sequence
     # Pure function - no database writes, no LLM, no WebSocket
     class Engine < ApplicationService
-      def self.call(trade_recommendation:, portfolio: nil, config: {})
+      def self.call(trade_recommendation:, portfolio: nil, system_context: nil, config: {})
         new(
           trade_recommendation: trade_recommendation,
           portfolio: portfolio,
+          system_context: system_context,
           config: config,
         ).call
       end
 
-      def initialize(trade_recommendation:, portfolio: nil, config: {})
+      def initialize(trade_recommendation:, portfolio: nil, system_context: nil, config: {})
         @recommendation = trade_recommendation
         @portfolio = portfolio
+        @system_context = system_context || build_system_context
         @config = load_config.merge(config)
       end
 
@@ -32,6 +34,7 @@ module Trading
         risk_check = RiskRules.call(
           @recommendation,
           portfolio: @portfolio,
+          system_context: @system_context,
           config: @config,
         )
         return build_response(risk_check, "risk_rules") unless risk_check[:approved]
@@ -63,6 +66,14 @@ module Trading
       end
 
       private
+
+      def build_system_context
+        if @portfolio
+          Trading::SystemContext.from_portfolio(@portfolio)
+        else
+          Trading::SystemContext.empty
+        end
+      end
 
       def enabled?
         Trading::Config.decision_engine_enabled?
