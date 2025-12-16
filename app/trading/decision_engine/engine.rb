@@ -52,6 +52,12 @@ module Trading
         return build_response(portfolio_check, "portfolio_constraints") unless portfolio_check[:approved]
 
         # All checks passed
+        # Optional: LLM review (advisory only, never blocks)
+        llm_review = nil
+        if Trading::Config.llm_enabled?
+          llm_review = perform_llm_review
+        end
+
         {
           approved: true,
           recommendation: @recommendation,
@@ -61,6 +67,7 @@ module Trading
             setup_check[:reason],
             portfolio_check[:reason],
           ],
+          llm_review: llm_review,
           checked_at: Time.current,
         }
       end
@@ -110,6 +117,13 @@ module Trading
           decision_path: ["Decision Engine disabled"],
           checked_at: Time.current,
         }
+      end
+
+      def perform_llm_review
+        LLM::ReviewService.call(@recommendation)
+      rescue StandardError => e
+        Rails.logger.error("[Trading::DecisionEngine::Engine] LLM review failed: #{e.message}")
+        nil
       end
     end
   end
