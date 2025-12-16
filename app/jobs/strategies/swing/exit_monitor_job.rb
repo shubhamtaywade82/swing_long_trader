@@ -130,7 +130,39 @@ module Strategies
           return { should_exit: true, reason: "Stop loss triggered" } if stop_loss_triggered
         end
 
-        # Check take profit
+        # Check take profit (TP2 for ATR-based, or single TP for backward compatibility)
+        tp1 = metadata["tp1"]
+        tp2 = metadata["tp2"]
+        tp1_hit = metadata["tp1_hit"] || false
+
+        # Check TP1 hit - move stop to breakeven
+        if tp1 && !tp1_hit
+          tp1_triggered = (order.buy? && current_price >= tp1) ||
+                          (order.sell? && current_price <= tp1)
+          if tp1_triggered
+            # Update metadata to mark TP1 as hit
+            metadata["tp1_hit"] = true
+            metadata["breakeven_stop"] = entry_price
+            metadata["initial_stop_loss"] = stop_loss
+            metadata["stop_loss"] = entry_price # Move to breakeven
+            order.update!(metadata: metadata.to_json)
+
+            Rails.logger.info(
+              "[Strategies::Swing::ExitMonitorJob] TP1 hit for order #{order.client_order_id}, " \
+              "stop moved to breakeven",
+            )
+            # Don't exit yet, continue to TP2
+          end
+        end
+
+        # Check TP2 hit - exit position
+        if tp2
+          tp2_triggered = (order.buy? && current_price >= tp2) ||
+                          (order.sell? && current_price <= tp2)
+          return { should_exit: true, reason: "TP2 hit" } if tp2_triggered
+        end
+
+        # Check single take profit (backward compatibility)
         if take_profit
           take_profit_triggered = (order.buy? && current_price >= take_profit) ||
                                   (order.sell? && current_price <= take_profit)
@@ -189,8 +221,31 @@ module Strategies
           }
         end
 
-        # Check take profit
-        if position.check_tp_hit?
+        # Check TP1 hit (first target) - move stop to breakeven
+        if position.check_tp1_hit? && !position.tp1_hit
+          # Mark TP1 as hit and move stop to breakeven
+          position.update!(tp1_hit: true)
+          position.move_stop_to_breakeven!
+
+          Rails.logger.info(
+            "[Strategies::Swing::ExitMonitorJob] TP1 hit for #{position.symbol}, " \
+            "stop moved to breakeven at #{position.entry_price}",
+          )
+
+          # Don't exit yet, continue to TP2
+        end
+
+        # Check TP2 hit (final target) - exit position
+        if position.check_tp2_hit?
+          return {
+            should_exit: true,
+            reason: "tp2_hit",
+            exit_price: position.tp2,
+          }
+        end
+
+        # Check take profit (backward compatibility - single TP)
+        if position.take_profit && position.check_tp_hit?
           return {
             should_exit: true,
             reason: "tp_hit",
@@ -198,12 +253,33 @@ module Strategies
           }
         end
 
-        # Check trailing stop
+        # Check trailing stop (ATR-based or percentage-based)
         if position.check_trailing_stop?
-          trailing_stop = if position.long?
-                            position.highest_price * (1 - (position.trailing_stop_pct / 100.0))
+          # ATR-based trailing stop is handled in check_trailing_stop? method
+          # For percentage-based, calculate trailing stop price
+          trailing_stop = if position.atr_trailing_multiplier && position.atr
+                            # ATR-based trailing stop
+                            if position.long?
+                              position.highest_price - (position.atr * position.atr_trailing_multiplier)
+                            else
+                              position.lowest_price + (position.atr * position.atr_trailing_multiplier)
+                            end
+                          elsif position.trailing_stop_pct
+                            # Percentage-based trailing stop
+                            if position.long?
+                              position.highest_price * (1 - (position.trailing_stop_pct / 100.0))
+                            else
+                              position.lowest_price * (1 + (position.trailing_stop_pct / 100.0))
+                            end
+                          elsif position.trailing_stop_distance
+                            # Distance-based trailing stop
+                            if position.long?
+                              position.highest_price - position.trailing_stop_distance
+                            else
+                              position.lowest_price + position.trailing_stop_distance
+                            end
                           else
-                            position.lowest_price * (1 + (position.trailing_stop_pct / 100.0))
+                            position.stop_loss # Fallback to current stop loss
                           end
 
           return {
@@ -251,9 +327,7 @@ module Strategies
         )
 
         # Update position with exit order if successful
-        if result[:success] && result[:order]
-          position.update!(exit_order: result[:order])
-        end
+        position.update!(exit_order: result[:order]) if result[:success] && result[:order]
 
         result
       end

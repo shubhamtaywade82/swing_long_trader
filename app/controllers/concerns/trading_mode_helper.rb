@@ -3,10 +3,6 @@
 module TradingModeHelper
   extend ActiveSupport::Concern
 
-  included do
-    helper_method :current_trading_mode
-  end
-
   def toggle_trading_mode
     current_mode = session[:trading_mode] || "live"
     new_mode = current_mode == "live" ? "paper" : "live"

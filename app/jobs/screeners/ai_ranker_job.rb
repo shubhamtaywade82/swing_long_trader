@@ -15,7 +15,7 @@ module Screeners
     discard_on RuntimeError
 
     def perform(candidates, limit: nil)
-      ranked = AIRanker.call(candidates: candidates, limit: limit)
+      ranked = AIEvaluator.call(candidates: candidates, limit: limit)
 
       Rails.logger.info("[Screeners::AIRankerJob] Ranked #{ranked.size} candidates")
 

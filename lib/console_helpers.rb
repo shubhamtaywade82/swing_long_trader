@@ -93,7 +93,7 @@ module ConsoleHelpers
       p.peak_equity = equity
     end
 
-    Portfolio::CapitalBucketer.new(portfolio: portfolio).call
+    PortfolioServices::CapitalBucketer.new(portfolio: portfolio).call
     portfolio.reload
 
     puts "\n💰 Portfolio: #{portfolio.name}"
@@ -135,7 +135,7 @@ module ConsoleHelpers
     portfolio = CapitalAllocationPortfolio.find_by(name: portfolio_name)
     return puts "❌ Portfolio not found" unless portfolio
 
-    result = Portfolio::RiskManager.new(portfolio: portfolio).call
+    result = PortfolioServices::RiskManager.new(portfolio: portfolio).call
     puts "\n⚠️  Risk Check: #{portfolio_name}"
     puts "=" * 60
     result[:checks].each do |check, passed|
@@ -149,6 +149,7 @@ end
 # Include in console
 if defined?(Rails::Console)
   include ConsoleHelpers
+
   puts "\n✅ Console helpers loaded! Available methods:"
   puts "   - mtf_analyze(symbol)"
   puts "   - mtf_screen(limit)"

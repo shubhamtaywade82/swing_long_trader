@@ -43,7 +43,7 @@ namespace :test do
 
       # Test automatic rebalancing
       puts "\n🔄 Running Automatic Rebalancing..."
-      result = Portfolio::CapitalBucketer.new(portfolio: portfolio).call
+      result = PortfolioServices::CapitalBucketer.new(portfolio: portfolio).call
 
       portfolio.reload
       puts "\n📊 After Rebalancing:"
@@ -88,7 +88,7 @@ namespace :test do
       puts "   Total Equity: ₹#{balance.round(2)}"
 
       # Rebalance
-      result = ::Portfolio::CapitalBucketer.new(portfolio: portfolio).call
+      result = ::PortfolioServices::CapitalBucketer.new(portfolio: portfolio).call
       portfolio.reload
 
       puts "\n📊 After Allocation:"
@@ -155,7 +155,7 @@ namespace :test do
       puts "   Total Equity: ₹#{balance.round(2)}"
 
       # Rebalance
-      result = ::Portfolio::CapitalBucketer.new(portfolio: portfolio).call
+      result = ::PortfolioServices::CapitalBucketer.new(portfolio: portfolio).call
       portfolio.reload
 
       puts "\n📊 After Allocation:"
@@ -221,7 +221,7 @@ namespace :test do
         )
         portfolio.save!
 
-        result = Portfolio::CapitalBucketer.new(portfolio: portfolio).call
+        result = PortfolioServices::CapitalBucketer.new(portfolio: portfolio).call
         portfolio.reload
         bucket = portfolio.capital_bucket
 

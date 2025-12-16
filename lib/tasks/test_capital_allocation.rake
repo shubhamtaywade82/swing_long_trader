@@ -21,7 +21,7 @@ namespace :test do
       end
 
       # Rebalance capital
-      Portfolio::CapitalBucketer.new(portfolio: portfolio).call
+      PortfolioServices::CapitalBucketer.new(portfolio: portfolio).call
 
       puts "✅ Portfolio created/updated: #{portfolio.name}"
       puts "\n📊 Portfolio Details:"
@@ -71,7 +71,7 @@ namespace :test do
         p.peak_equity = 500_000
       end
 
-      Portfolio::CapitalBucketer.new(portfolio: portfolio).call
+      PortfolioServices::CapitalBucketer.new(portfolio: portfolio).call
 
       instrument = Instrument.find_by(symbol_name: symbol.upcase)
       unless instrument
@@ -136,7 +136,7 @@ namespace :test do
       puts "   Max Drawdown: #{portfolio.max_drawdown}%"
       puts "   Open Positions: #{portfolio.open_swing_positions.count}"
 
-      risk_manager = Portfolio::RiskManager.new(portfolio: portfolio)
+      risk_manager = PortfolioServices::RiskManager.new(portfolio: portfolio)
       result = risk_manager.call
 
       puts "\n🔍 Risk Checks:\n"
@@ -180,7 +180,7 @@ namespace :test do
         puts "\n💰 Updated equity to: ₹#{new_equity.round(2)}"
       end
 
-      result = Portfolio::CapitalBucketer.new(portfolio: portfolio).call
+      result = PortfolioServices::CapitalBucketer.new(portfolio: portfolio).call
 
       if result[:success]
         portfolio.reload

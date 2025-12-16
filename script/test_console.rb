@@ -74,7 +74,7 @@ class TestConsole
       p.peak_equity = equity.to_f
     end
 
-    Portfolio::CapitalBucketer.new(portfolio: portfolio).call
+    PortfolioServices::CapitalBucketer.new(portfolio: portfolio).call
     portfolio.reload
 
     puts "✅ Portfolio: #{portfolio.name}"
@@ -95,7 +95,7 @@ class TestConsole
       p.peak_equity = 500_000
     end
 
-    Portfolio::CapitalBucketer.new(portfolio: portfolio).call
+    PortfolioServices::CapitalBucketer.new(portfolio: portfolio).call
 
     instrument = Instrument.find_by(symbol_name: symbol.upcase)
     return puts "❌ Instrument not found" unless instrument

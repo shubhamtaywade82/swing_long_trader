@@ -46,7 +46,7 @@ Rails.application.config.to_prepare do
     Rails.logger.info("[LtpPubSubListener] Initialized Redis Pub/Sub listener for broker-style LTP updates")
   rescue NameError => e
     Rails.logger.error("[LtpPubSubListener] Service class not found: #{e.message}")
-    Rails.logger.error("Make sure app/services/market_hub/ltp_pubsub_listener.rb exists and MarketHub module is defined")
+    Rails.logger.error("Make sure app/services/market_hub/ltp_pub_sub_listener.rb exists and MarketHub module is defined")
   rescue StandardError => e
     Rails.logger.error("[LtpPubSubListener] Failed to initialize: #{e.message}")
     Rails.logger.error(e.backtrace.first(5).join("\n"))

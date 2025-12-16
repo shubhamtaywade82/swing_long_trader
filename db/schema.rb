@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_14_000003) do
+ActiveRecord::Schema[8.1].define(version: 2025_12_15_153533) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -341,8 +341,12 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_14_000003) do
   end
 
   create_table "positions", force: :cascade do |t|
+    t.decimal "atr", precision: 15, scale: 2
+    t.decimal "atr_pct", precision: 8, scale: 2
+    t.decimal "atr_trailing_multiplier", precision: 5, scale: 2
     t.decimal "available_capital", precision: 15, scale: 2
     t.decimal "average_entry_price", precision: 15, scale: 2
+    t.decimal "breakeven_stop", precision: 15, scale: 2
     t.datetime "closed_at"
     t.integer "closed_positions_count", default: 0
     t.decimal "closing_capital", precision: 15, scale: 2
@@ -359,6 +363,7 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_14_000003) do
     t.decimal "filled_quantity", precision: 15, scale: 2, default: "0.0"
     t.decimal "highest_price", precision: 15, scale: 2
     t.integer "holding_days", default: 0
+    t.decimal "initial_stop_loss", precision: 15, scale: 2
     t.bigint "instrument_id", null: false
     t.datetime "last_synced_at"
     t.decimal "lowest_price", precision: 15, scale: 2
@@ -382,6 +387,9 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_14_000003) do
     t.decimal "take_profit", precision: 15, scale: 2
     t.decimal "total_equity", precision: 15, scale: 2
     t.decimal "total_exposure", precision: 15, scale: 2
+    t.decimal "tp1", precision: 15, scale: 2
+    t.boolean "tp1_hit", default: false
+    t.decimal "tp2", precision: 15, scale: 2
     t.string "trading_mode", default: "live"
     t.bigint "trading_signal_id"
     t.decimal "trailing_stop_distance", precision: 15, scale: 2
@@ -402,6 +410,7 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_14_000003) do
     t.index ["status", "opened_at"], name: "index_positions_on_status_and_opened_at"
     t.index ["status"], name: "index_positions_on_status"
     t.index ["synced_with_dhan"], name: "index_positions_on_synced_with_dhan"
+    t.index ["tp1_hit"], name: "index_positions_on_tp1_hit"
     t.index ["trading_mode", "status"], name: "index_positions_on_trading_mode_and_status"
     t.index ["trading_mode"], name: "index_positions_on_trading_mode"
     t.index ["trading_signal_id"], name: "index_positions_on_trading_signal_id"
@@ -466,6 +475,16 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_14_000003) do
     t.datetime "updated_at", null: false
     t.text "value"
     t.index ["key"], name: "index_settings_on_key", unique: true
+  end
+
+  create_table "solid_cable_messages", force: :cascade do |t|
+    t.binary "channel", null: false
+    t.bigint "channel_hash", null: false
+    t.datetime "created_at", null: false
+    t.binary "payload", null: false
+    t.index ["channel"], name: "index_solid_cable_messages_on_channel"
+    t.index ["channel_hash"], name: "index_solid_cable_messages_on_channel_hash"
+    t.index ["created_at"], name: "index_solid_cable_messages_on_created_at"
   end
 
   create_table "solid_queue_blocked_executions", force: :cascade do |t|
