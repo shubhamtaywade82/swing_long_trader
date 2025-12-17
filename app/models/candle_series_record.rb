@@ -8,7 +8,7 @@ class CandleSeriesRecord < ApplicationRecord
 
   belongs_to :instrument
 
-  enum timeframe: {
+  enum :timeframe, {
     daily: 0,
     weekly: 1,
     hourly: 2
