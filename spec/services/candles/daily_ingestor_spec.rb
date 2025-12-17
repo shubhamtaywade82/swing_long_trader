@@ -44,7 +44,7 @@ RSpec.describe Candles::DailyIngestor do
       it "fetches and stores daily candles" do
         expect(@result[:success]).to eq(1) # Count of successful instruments
         expect(@result[:processed]).to eq(1)
-        expect(CandleSeriesRecord.where(instrument: instrument, timeframe: "1D").count).to eq(2)
+        expect(CandleSeriesRecord.daily.where(instrument: instrument).count).to eq(2)
       end
 
       it "returns summary with processed count" do
@@ -255,7 +255,7 @@ RSpec.describe Candles::DailyIngestor do
         latest_date = 5.days.ago.to_date
         create(:candle_series_record,
                instrument: instrument,
-               timeframe: "1D",
+               timeframe: :daily,
                timestamp: latest_date.beginning_of_day,
                open: 100.0,
                high: 105.0,
@@ -281,7 +281,7 @@ RSpec.describe Candles::DailyIngestor do
         result = described_class.call(instruments: instruments, days_back: 30)
 
         expect(result[:success]).to eq(1)
-        expect(CandleSeriesRecord.where(instrument: instrument, timeframe: "1D").count).to eq(5) # 1 existing + 4 new
+        expect(CandleSeriesRecord.daily.where(instrument: instrument).count).to eq(5) # 1 existing + 4 new
       end
 
       it "skips instrument when already up-to-date" do
@@ -289,7 +289,7 @@ RSpec.describe Candles::DailyIngestor do
         yesterday = Time.zone.today - 1
         create(:candle_series_record,
                instrument: instrument,
-               timeframe: "1D",
+               timeframe: :daily,
                timestamp: yesterday.beginning_of_day,
                open: 100.0,
                high: 105.0,
@@ -304,7 +304,7 @@ RSpec.describe Candles::DailyIngestor do
 
         expect(result[:success]).to eq(1)
         expect(result[:skipped_up_to_date]).to eq(1)
-        expect(CandleSeriesRecord.where(instrument: instrument, timeframe: "1D").count).to eq(1)
+        expect(CandleSeriesRecord.daily.where(instrument: instrument).count).to eq(1)
       end
 
       it "uses minimum range when latest candle is very old" do
@@ -312,7 +312,7 @@ RSpec.describe Candles::DailyIngestor do
         old_date = 400.days.ago.to_date
         create(:candle_series_record,
                instrument: instrument,
-               timeframe: "1D",
+               timeframe: :daily,
                timestamp: old_date.beginning_of_day,
                open: 100.0,
                high: 105.0,
@@ -344,7 +344,7 @@ RSpec.describe Candles::DailyIngestor do
         recent_date = 10.days.ago.to_date
         create(:candle_series_record,
                instrument: instrument,
-               timeframe: "1D",
+               timeframe: :daily,
                timestamp: recent_date.beginning_of_day,
                open: 100.0,
                high: 105.0,
@@ -376,7 +376,7 @@ RSpec.describe Candles::DailyIngestor do
         gap_date = 50.days.ago.to_date
         create(:candle_series_record,
                instrument: instrument,
-               timeframe: "1D",
+               timeframe: :daily,
                timestamp: gap_date.beginning_of_day,
                open: 100.0,
                high: 105.0,
@@ -465,6 +465,201 @@ RSpec.describe Candles::DailyIngestor do
 
         expect(result[:failed]).to eq(1)
         expect(result[:errors]).not_to be_empty
+      end
+    end
+
+    context "with minimum 365 candles requirement" do
+      it "fetches at least 365 days of candles when days_back is 365" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        # Mock API to return 365 candles
+        candles_365 = (0..364).map do |i|
+          {
+            timestamp: (Time.zone.today - 1 - i.days).to_i,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000,
+          }
+        end
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return(candles_365)
+
+        result = described_class.call(instruments: instruments, days_back: 365)
+
+        expect(result[:success]).to eq(1)
+        expect(CandleSeriesRecord.daily.where(instrument: instrument).count).to eq(365)
+      end
+
+      it "uses default days_back of 365 when not specified" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        expected_from_date = (Time.zone.today - 1) - 365.days
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc) do |_inst, from_date:, to_date:, oi:|
+          expect(from_date).to eq(expected_from_date)
+          expect(to_date).to eq(Time.zone.today - 1)
+          [{ timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 }]
+        end
+
+        described_class.call(instruments: instruments)
+      end
+
+      it "handles instruments with insufficient candles (< 365)" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        # Mock API to return only 100 candles (insufficient)
+        candles_100 = (0..99).map do |i|
+          {
+            timestamp: (Time.zone.today - 1 - i.days).to_i,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000,
+          }
+        end
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return(candles_100)
+
+        result = described_class.call(instruments: instruments, days_back: 365)
+
+        expect(result[:success]).to eq(1)
+        count = CandleSeriesRecord.daily.where(instrument: instrument).count
+        expect(count).to eq(100)
+        expect(count).to be < 365
+      end
+    end
+
+    context "with missing data handling" do
+      it "detects gaps in candle data" do
+        # Create candles with a gap
+        create(:candle_series_record, instrument: instrument, timeframe: :daily, timestamp: 10.days.ago.beginning_of_day)
+        create(:candle_series_record, instrument: instrument, timeframe: :daily, timestamp: 5.days.ago.beginning_of_day)
+        # Gap: missing candles for days 9, 8, 7, 6
+
+        # Mock API to fill the gap
+        gap_candles = (6..9).map do |i|
+          {
+            timestamp: i.days.ago.to_i,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000,
+          }
+        end
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return(gap_candles)
+
+        result = described_class.call(instruments: instruments, days_back: 30)
+
+        expect(result[:success]).to eq(1)
+        # Should have filled the gap
+        dates = CandleSeriesRecord.daily.where(instrument: instrument).order(:timestamp).pluck(:timestamp).map(&:to_date)
+        expect(dates).to include(9.days.ago.to_date, 8.days.ago.to_date, 7.days.ago.to_date, 6.days.ago.to_date)
+      end
+
+      it "handles instruments with no existing candles" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        candles = [
+          { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+        ]
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return(candles)
+
+        result = described_class.call(instruments: instruments, days_back: 365)
+
+        expect(result[:success]).to eq(1)
+        expect(CandleSeriesRecord.daily.where(instrument: instrument).count).to be > 0
+      end
+
+      it "re-ingests with extended date range to fill gaps" do
+        # Create old candle from 400 days ago
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: :daily,
+               timestamp: 400.days.ago.beginning_of_day)
+
+        # Mock API to return candles filling the gap
+        gap_candles = (1..365).map do |i|
+          {
+            timestamp: (Time.zone.today - 1 - i.days).to_i,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000,
+          }
+        end
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return(gap_candles)
+
+        result = described_class.call(instruments: instruments, days_back: 365)
+
+        expect(result[:success]).to eq(1)
+        # Should have candles from the gap fill
+        count = CandleSeriesRecord.daily.where(instrument: instrument).count
+        expect(count).to be >= 365
+      end
+    end
+
+    context "with daily sync scenarios" do
+      it "fetches only new candles during daily sync" do
+        # Create candle from yesterday (already up-to-date)
+        yesterday = Time.zone.today - 1
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: :daily,
+               timestamp: yesterday.beginning_of_day)
+
+        # Mock API should not be called (already up-to-date)
+        expect_any_instance_of(Instrument).not_to receive(:historical_ohlc)
+
+        result = described_class.call(instruments: instruments, days_back: 365)
+
+        expect(result[:success]).to eq(1)
+        expect(result[:skipped_up_to_date]).to eq(1)
+      end
+
+      it "fetches incremental updates during daily sync" do
+        # Create candle from 3 days ago
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: :daily,
+               timestamp: 3.days.ago.beginning_of_day)
+
+        # Mock API to return only new candles (2 days ago and yesterday)
+        new_candles = [
+          { timestamp: 2.days.ago.to_i, open: 101.0, high: 106.0, low: 100.0, close: 104.0, volume: 1_100_000 },
+          { timestamp: 1.day.ago.to_i, open: 102.0, high: 107.0, low: 101.0, close: 105.0, volume: 1_200_000 },
+        ]
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_return(new_candles)
+
+        result = described_class.call(instruments: instruments, days_back: 365)
+
+        expect(result[:success]).to eq(1)
+        expect(CandleSeriesRecord.daily.where(instrument: instrument).count).to eq(3) # 1 existing + 2 new
+      end
+
+      it "handles multiple instruments during daily sync" do
+        instrument2 = create(:instrument, symbol_name: "TEST2", security_id: "12346")
+        instruments = Instrument.where(id: [instrument.id, instrument2.id])
+
+        # Both instruments have candles from yesterday
+        create(:candle_series_record, instrument: instrument, timeframe: :daily, timestamp: 1.day.ago.beginning_of_day)
+        create(:candle_series_record, instrument: instrument2, timeframe: :daily, timestamp: 1.day.ago.beginning_of_day)
+
+        # Both should be skipped (already up-to-date)
+        expect_any_instance_of(Instrument).not_to receive(:historical_ohlc)
+
+        result = described_class.call(instruments: instruments, days_back: 365)
+
+        expect(result[:success]).to eq(2)
+        expect(result[:skipped_up_to_date]).to eq(2)
       end
     end
   end

@@ -64,29 +64,45 @@ class MonitorJob < ApplicationJob
   end
 
   def check_candle_freshness
-    # Check latest daily candle specifically (1D timeframe) - this is what matters for trading
-    # Weekly candles (1W) can be much older and shouldn't affect this check
-    # Note: timestamp field represents the trading date, not when the candle was ingested
-    latest_daily = CandleSeriesRecord
-                   .for_timeframe("1D")
-                   .order(timestamp: :desc)
-                   .first
+      # Check latest daily candle specifically (:daily timeframe) - this is what matters for trading
+      # Weekly candles (:weekly) can be much older and shouldn't affect this check
+      # Note: timestamp field represents the trading date, not when the candle was ingested
+      #
+      # Strategy: Prioritize recent candles (last 30 days) for freshness check.
+      # If no recent candles exist, fall back to the global latest to detect stale data.
+    #
+    # First, check if there are any recent candles (by trading date)
+    # If recent candles exist, use the latest of those for freshness check
+    # This prevents false alarms when old historical data exists alongside recent data
+    recent_candles_count = CandleSeriesRecord
+                          .daily
+                          .where("timestamp >= ?", 30.days.ago)
+                          .count
+
+    # Get the latest candle - prioritize recent candles if they exist
+    latest_daily = if recent_candles_count.positive?
+                     # If we have recent candles, use the latest of those
+                     CandleSeriesRecord
+                       .daily
+                       .where("timestamp >= ?", 30.days.ago)
+                       .order(timestamp: :desc)
+                       .first
+                   else
+                     # Fall back to global maximum if no recent candles
+                     CandleSeriesRecord
+                       .daily
+                       .order(timestamp: :desc)
+                       .first
+                   end
 
     return { healthy: false, message: "No daily candles - Run: rails runner 'Candles::DailyIngestor.call'" } unless latest_daily
 
     days_old = (Time.zone.today - latest_daily.timestamp.to_date).to_i
 
-    # Sanity check: Check if there are any recent candles (by trading date) at all
-    # This helps identify if only old historical data was ingested
-    recent_candles_count = CandleSeriesRecord
-                          .for_timeframe("1D")
-                          .where("timestamp >= ?", 30.days.ago)
-                          .count
-
     # Also check when candles were last created/updated (ingestion time)
     # This helps identify if ingestion happened recently but only old data was fetched
     latest_created = CandleSeriesRecord
-                    .for_timeframe("1D")
+                    .daily
                     .order(created_at: :desc)
                     .first&.created_at
 

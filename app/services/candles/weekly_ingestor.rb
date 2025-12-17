@@ -74,7 +74,7 @@ module Candles
       to_date = Time.zone.today - 1 # Yesterday
 
       # Check for existing weekly candles to optimize date range
-      latest_weekly_candle = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1W")
+      latest_weekly_candle = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: :weekly)
 
       if latest_weekly_candle
         # Start from the week after the latest weekly candle
@@ -147,7 +147,7 @@ module Candles
       # Upsert weekly candles to database (will skip existing ones)
       result = Ingestor.upsert_candles(
         instrument: instrument,
-        timeframe: "1W",
+        timeframe: :weekly,
         candles_data: weekly_candles,
       )
 

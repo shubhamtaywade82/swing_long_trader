@@ -41,7 +41,7 @@ module Backtesting
       # Load historical data
       daily_data = DataLoader.load_for_instruments(
         instruments: @instruments,
-        timeframe: "1D",
+        timeframe: :daily,
         from_date: @from_date,
         to_date: @to_date,
       )

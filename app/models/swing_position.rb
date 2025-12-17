@@ -50,7 +50,7 @@ class SwingPosition < ApplicationRecord
     # Update current_price from latest candle if available
     # Try daily timeframe first, then intraday
     latest_candle = CandleSeriesRecord.where(instrument_id: instrument.id)
-                                       .where(timeframe: "1D")
+                                       .where(timeframe: :daily)
                                        .order(timestamp: :desc)
                                        .first
 

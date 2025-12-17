@@ -8,6 +8,8 @@ class CandleSeries
 
   def initialize(symbol:, interval: "5")
     @symbol = symbol
+    # Store interval as-is (enum symbol or string)
+    # Accepts enum symbols (:daily, :weekly, :hourly) or legacy strings ("1D", "1W", "15", "60", etc.)
     @interval = interval
     @candles = []
   end

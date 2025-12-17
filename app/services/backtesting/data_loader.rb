@@ -34,7 +34,7 @@ module Backtesting
       # Load candles from database
       records = CandleSeriesRecord
                 .for_instrument(instrument)
-                .for_timeframe(timeframe)
+                .public_send(timeframe)
                 .between_dates(from_date, to_date)
                 .ordered
                 .to_a
@@ -62,7 +62,7 @@ module Backtesting
       end
 
       # Fill missing dates if interpolation is enabled
-      if interpolate_missing && timeframe == "1D"
+      if interpolate_missing && timeframe == :daily
         fill_missing_daily_candles(series, existing_candles, from_date, to_date, interpolate_missing)
       else
         # Just add existing candles in order

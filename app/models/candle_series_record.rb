@@ -8,6 +8,16 @@ class CandleSeriesRecord < ApplicationRecord
 
   belongs_to :instrument
 
+  # Enum for candle timeframes
+  # - daily (0): End-of-day candles, typically 1D
+  # - weekly (1): Weekly aggregated candles, typically 1W
+  # - hourly (2): Hourly candles, typically 1H or 60-minute intervals
+  enum :timeframe, {
+    daily: 0,
+    weekly: 1,
+    hourly: 2
+  }
+
   validates :timeframe, presence: true
   validates :timestamp, presence: true
   validates :open, :high, :low, :close, presence: true, numericality: true
@@ -22,7 +32,6 @@ class CandleSeriesRecord < ApplicationRecord
   default_scope { order(timestamp: :asc) }
 
   scope :for_instrument, ->(instrument) { where(instrument_id: instrument.id) }
-  scope :for_timeframe, ->(timeframe) { where(timeframe: timeframe) }
   scope :recent, ->(limit = 100) { order(timestamp: :desc).limit(limit) }
   # Note: This scope is redundant with default_scope but kept for explicit clarity
   # when reading code that uses .ordered
@@ -34,11 +43,22 @@ class CandleSeriesRecord < ApplicationRecord
   }
 
   # Get latest candle for an instrument and timeframe
+  # Uses .last since default_scope orders by timestamp: :asc (oldest to newest)
+  #
+  # @param instrument [Instrument] The instrument to query
+  # @param timeframe [Symbol] The timeframe enum key (:daily, :weekly, :hourly)
+  # @return [CandleSeriesRecord, nil] The latest candle record or nil if none exists
+  # @raise [ArgumentError] if timeframe is not a valid enum key
   def self.latest_for(instrument:, timeframe:)
+    unless timeframes.key?(timeframe)
+      raise ArgumentError, "Invalid timeframe: #{timeframe}. Must be one of: #{timeframes.keys.join(', ')}"
+    end
+
     for_instrument(instrument)
-      .for_timeframe(timeframe)
+      .public_send(timeframe)
       .last
   end
+
 
   # Convert to CandleSeries format (for compatibility with existing code)
   def to_candle

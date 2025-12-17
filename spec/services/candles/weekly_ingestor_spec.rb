@@ -15,7 +15,7 @@ RSpec.describe Candles::WeeklyIngestor do
         7.times do |i|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: i.days.ago.beginning_of_day,
                  open: 100.0 + i,
                  high: 105.0 + i,
@@ -31,7 +31,7 @@ RSpec.describe Candles::WeeklyIngestor do
 
       it "creates weekly candles" do
         result
-        expect(CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").count).to be > 0
+        expect(CandleSeriesRecord.weekly.where(instrument: instrument).count).to be > 0
       end
 
       describe "weekly candle attributes" do
@@ -55,7 +55,7 @@ RSpec.describe Candles::WeeklyIngestor do
 
       it "aggregates from Monday to Sunday" do
         result
-        weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W")
+        weekly_candles = CandleSeriesRecord.weekly.where(instrument: instrument)
 
         expect(weekly_candles).to be_any
         weekly_candles.each do |candle|
@@ -72,7 +72,7 @@ RSpec.describe Candles::WeeklyIngestor do
         28.times do |i|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: i.days.ago.beginning_of_day,
                  open: 100.0 + i,
                  high: 105.0 + i,
@@ -128,7 +128,7 @@ RSpec.describe Candles::WeeklyIngestor do
         7.times do |i|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: i.days.ago.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -137,7 +137,7 @@ RSpec.describe Candles::WeeklyIngestor do
                  volume: 1_000_000)
           create(:candle_series_record,
                  instrument: instrument2,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: i.days.ago.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -176,7 +176,7 @@ RSpec.describe Candles::WeeklyIngestor do
         14.times do |i|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: i.days.ago.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -205,7 +205,7 @@ RSpec.describe Candles::WeeklyIngestor do
           7.times do |i|
             create(:candle_series_record,
                    instrument: inst,
-                   timeframe: "1D",
+                   timeframe: :daily,
                    timestamp: i.days.ago.beginning_of_day,
                    open: 100.0,
                    high: 105.0,
@@ -227,7 +227,7 @@ RSpec.describe Candles::WeeklyIngestor do
         7.times do |i|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: i.days.ago.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -252,7 +252,7 @@ RSpec.describe Candles::WeeklyIngestor do
         7.times do |i|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: i.days.ago.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -276,7 +276,7 @@ RSpec.describe Candles::WeeklyIngestor do
         latest_week_start = 3.weeks.ago.beginning_of_week
         create(:candle_series_record,
                instrument: instrument,
-               timeframe: "1W",
+                 timeframe: :weekly,
                timestamp: latest_week_start,
                open: 100.0,
                high: 105.0,
@@ -291,7 +291,7 @@ RSpec.describe Candles::WeeklyIngestor do
         daily_dates.each do |date|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: date.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -315,7 +315,7 @@ RSpec.describe Candles::WeeklyIngestor do
         current_week_start = Time.zone.today.beginning_of_week
         create(:candle_series_record,
                instrument: instrument,
-               timeframe: "1W",
+                 timeframe: :weekly,
                timestamp: current_week_start,
                open: 100.0,
                high: 105.0,
@@ -338,7 +338,7 @@ RSpec.describe Candles::WeeklyIngestor do
         old_week_start = 60.weeks.ago.beginning_of_week
         create(:candle_series_record,
                instrument: instrument,
-               timeframe: "1W",
+                 timeframe: :weekly,
                timestamp: old_week_start,
                open: 100.0,
                high: 105.0,
@@ -354,7 +354,7 @@ RSpec.describe Candles::WeeklyIngestor do
         daily_dates.each do |date|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: date.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -367,7 +367,7 @@ RSpec.describe Candles::WeeklyIngestor do
 
         expect(result[:success]).to eq(1)
         # Should create weekly candles from min_from_date
-        weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").order(timestamp: :asc)
+        weekly_candles = CandleSeriesRecord.weekly.where(instrument: instrument).order(timestamp: :asc)
         expect(weekly_candles.first.timestamp.to_date).to be <= min_from_date.beginning_of_week
       end
 
@@ -376,7 +376,7 @@ RSpec.describe Candles::WeeklyIngestor do
         recent_week_start = 2.weeks.ago.beginning_of_week
         create(:candle_series_record,
                instrument: instrument,
-               timeframe: "1W",
+                 timeframe: :weekly,
                timestamp: recent_week_start,
                open: 100.0,
                high: 105.0,
@@ -392,7 +392,7 @@ RSpec.describe Candles::WeeklyIngestor do
         daily_dates.each do |date|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: date.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -416,7 +416,7 @@ RSpec.describe Candles::WeeklyIngestor do
         gap_week_start = 10.weeks.ago.beginning_of_week
         create(:candle_series_record,
                instrument: instrument,
-               timeframe: "1W",
+                 timeframe: :weekly,
                timestamp: gap_week_start,
                open: 100.0,
                high: 105.0,
@@ -432,7 +432,7 @@ RSpec.describe Candles::WeeklyIngestor do
         daily_dates.each do |date|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: date.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -445,7 +445,7 @@ RSpec.describe Candles::WeeklyIngestor do
 
         expect(result[:success]).to eq(1)
         # Should create weekly candles from min_from_date to fill the gap
-        weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").order(timestamp: :asc)
+        weekly_candles = CandleSeriesRecord.weekly.where(instrument: instrument).order(timestamp: :asc)
         expect(weekly_candles.last.timestamp.to_date).to be >= (Time.zone.today - 1).beginning_of_week
       end
     end
@@ -453,7 +453,7 @@ RSpec.describe Candles::WeeklyIngestor do
     context "with no existing weekly candles" do
       it "fetches full range when no weekly candles exist" do
         # Ensure no existing weekly candles
-        CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").delete_all
+        CandleSeriesRecord.weekly.where(instrument: instrument).delete_all
 
         weeks_back = 4
         min_from_date = (Time.zone.today - 1) - (weeks_back * 7).days
@@ -463,7 +463,7 @@ RSpec.describe Candles::WeeklyIngestor do
         daily_dates.each do |date|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: date.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -476,7 +476,7 @@ RSpec.describe Candles::WeeklyIngestor do
 
         expect(result[:success]).to eq(1)
         # Should create weekly candles for the full range
-        weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W")
+        weekly_candles = CandleSeriesRecord.weekly.where(instrument: instrument)
         expect(weekly_candles.count).to be > 0
         expect(weekly_candles.minimum(:timestamp).to_date).to be <= min_from_date.beginning_of_week
       end
@@ -491,7 +491,7 @@ RSpec.describe Candles::WeeklyIngestor do
         (min_from_date - 7.days..min_from_date - 1.day).each do |date|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: date.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -504,7 +504,7 @@ RSpec.describe Candles::WeeklyIngestor do
         (min_from_date..(Time.zone.today - 1)).each do |date|
           create(:candle_series_record,
                  instrument: instrument,
-                 timeframe: "1D",
+                 timeframe: :daily,
                  timestamp: date.beginning_of_day,
                  open: 100.0,
                  high: 105.0,
@@ -517,8 +517,179 @@ RSpec.describe Candles::WeeklyIngestor do
 
         expect(result[:success]).to eq(1)
         # Should only create weekly candles from the specified range
-        weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").order(timestamp: :asc)
+        weekly_candles = CandleSeriesRecord.weekly.where(instrument: instrument).order(timestamp: :asc)
         expect(weekly_candles.first.timestamp.to_date).to be >= min_from_date.beginning_of_week
+      end
+    end
+
+    context "with minimum 52 weeks requirement" do
+      it "creates at least 52 weekly candles when weeks_back is 52" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        # Create 365 days of daily candles (enough for 52 weeks)
+        (0..364).each do |i|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: :daily,
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        result = described_class.call(instruments: instruments, weeks_back: 52)
+
+        expect(result[:success]).to eq(1)
+        weekly_count = CandleSeriesRecord.weekly.where(instrument: instrument).count
+        expect(weekly_count).to be >= 52
+      end
+
+      it "uses default weeks_back of 52 when not specified" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        # Create 365 days of daily candles
+        (0..364).each do |i|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: :daily,
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        result = described_class.call(instruments: instruments)
+
+        expect(result[:success]).to eq(1)
+        weekly_count = CandleSeriesRecord.weekly.where(instrument: instrument).count
+        expect(weekly_count).to be >= 52
+      end
+
+      it "handles instruments with insufficient weekly candles (< 52)" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        # Create only 100 days of daily candles (insufficient for 52 weeks)
+        (0..99).each do |i|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: :daily,
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        result = described_class.call(instruments: instruments, weeks_back: 52)
+
+        expect(result[:success]).to eq(1)
+        weekly_count = CandleSeriesRecord.weekly.where(instrument: instrument).count
+        expect(weekly_count).to be < 52
+      end
+    end
+
+    context "with missing data handling" do
+      it "handles instruments with no daily candles" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        result = described_class.call(instruments: instruments, weeks_back: 52)
+
+        expect(result[:failed]).to eq(1)
+        expect(CandleSeriesRecord.weekly.where(instrument: instrument).count).to eq(0)
+      end
+
+      it "handles gaps in daily candles when aggregating weekly" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        # Create daily candles with gaps
+        # Week 1: Monday, Tuesday, Friday (missing Wed, Thu)
+        week1_start = 2.weeks.ago.beginning_of_week
+        create(:candle_series_record, instrument: instrument, timeframe: :daily, timestamp: week1_start)
+        create(:candle_series_record, instrument: instrument, timeframe: :daily, timestamp: week1_start + 1.day)
+        create(:candle_series_record, instrument: instrument, timeframe: :daily, timestamp: week1_start + 4.days)
+
+        # Week 2: Complete week
+        week2_start = 1.week.ago.beginning_of_week
+        (0..4).each do |i|
+          create(:candle_series_record, instrument: instrument, timeframe: :daily, timestamp: week2_start + i.days)
+        end
+
+        result = described_class.call(instruments: instruments, weeks_back: 2)
+
+        expect(result[:success]).to eq(1)
+        # Should create weekly candles even with gaps
+        weekly_count = CandleSeriesRecord.weekly.where(instrument: instrument).count
+        expect(weekly_count).to be >= 2
+      end
+    end
+
+    context "with daily sync scenarios" do
+      it "skips instrument when weekly candles are already up-to-date" do
+        # Create weekly candle from current week
+        current_week_start = Time.zone.today.beginning_of_week
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: :weekly,
+               timestamp: current_week_start)
+
+        initial_count = CandleSeriesRecord.weekly.where(instrument: instrument).count
+
+        result = described_class.call(instruments: instruments, weeks_back: 52)
+
+        expect(result[:success]).to eq(1)
+        expect(result[:skipped_up_to_date]).to eq(1)
+        expect(CandleSeriesRecord.weekly.where(instrument: instrument).count).to eq(initial_count)
+      end
+
+      it "aggregates only new daily candles during daily sync" do
+        # Create weekly candle from 2 weeks ago
+        old_week_start = 2.weeks.ago.beginning_of_week
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: :weekly,
+               timestamp: old_week_start)
+
+        # Create new daily candles for last 2 weeks
+        (0..13).each do |i|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: :daily,
+                 timestamp: i.days.ago.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        initial_count = CandleSeriesRecord.weekly.where(instrument: instrument).count
+
+        result = described_class.call(instruments: instruments, weeks_back: 52)
+
+        expect(result[:success]).to eq(1)
+        # Should create new weekly candles for the new weeks
+        final_count = CandleSeriesRecord.weekly.where(instrument: instrument).count
+        expect(final_count).to be > initial_count
+      end
+
+      it "handles multiple instruments during daily sync" do
+        instrument2 = create(:instrument, symbol_name: "TEST2", security_id: "12346")
+        instruments = Instrument.where(id: [instrument.id, instrument2.id])
+
+        # Both instruments have weekly candles from current week
+        current_week_start = Time.zone.today.beginning_of_week
+        create(:candle_series_record, instrument: instrument, timeframe: :weekly, timestamp: current_week_start)
+        create(:candle_series_record, instrument: instrument2, timeframe: :weekly, timestamp: current_week_start)
+
+        result = described_class.call(instruments: instruments, weeks_back: 52)
+
+        expect(result[:success]).to eq(2)
+        expect(result[:skipped_up_to_date]).to eq(2)
       end
     end
   end

@@ -63,7 +63,7 @@ module Positions
       open_positions.find_each do |position|
         # Update current price from latest candle
         latest_candle = CandleSeriesRecord
-                        .where(instrument_id: position.instrument_id, timeframe: "1D")
+                        .where(instrument_id: position.instrument_id, timeframe: :daily)
                         .order(timestamp: :desc)
                         .first
 

@@ -51,14 +51,14 @@ module Backtesting
       # Load historical data (daily and weekly)
       daily_data = DataLoader.load_for_instruments(
         instruments: @instruments,
-        timeframe: "1D",
+        timeframe: :daily,
         from_date: @from_date,
         to_date: @to_date,
       )
 
       weekly_data = DataLoader.load_for_instruments(
         instruments: @instruments,
-        timeframe: "1W",
+        timeframe: :weekly,
         from_date: @from_date,
         to_date: @to_date,
       )
@@ -245,10 +245,10 @@ module Backtesting
       instrument = candidate[:instrument]
 
       # Create temporary series for signal generation
-      temp_daily = CandleSeries.new(symbol: instrument.symbol_name, interval: "1D")
+      temp_daily = CandleSeries.new(symbol: instrument.symbol_name, interval: :daily)
       candidate[:daily_series].each { |c| temp_daily.add_candle(c) }
 
-      temp_weekly = CandleSeries.new(symbol: instrument.symbol_name, interval: "1W")
+      temp_weekly = CandleSeries.new(symbol: instrument.symbol_name, interval: :weekly)
       candidate[:weekly_series].each { |c| temp_weekly.add_candle(c) }
 
       # Use long-term strategy evaluator

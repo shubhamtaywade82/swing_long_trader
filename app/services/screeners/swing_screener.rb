@@ -25,7 +25,7 @@ module Screeners
       # Ensure candles are fresh before screening
       # This checks if daily candles are up-to-date and triggers ingestion if stale
       freshness_result = Candles::FreshnessChecker.ensure_fresh(
-        timeframe: "1D",
+        timeframe: :daily,
         auto_ingest: !Rails.env.test?, # Auto-ingest in production, skip in tests
       )
       unless freshness_result[:fresh]
@@ -233,7 +233,7 @@ module Screeners
       # Use distinct to avoid duplicates from joins
       # NO LIMIT - Screen the complete universe
       base_scope.joins(:candle_series_records)
-                .where(candle_series_records: { timeframe: "1D" })
+                .where(candle_series_records: { timeframe: :daily })
                 .distinct
                 .includes(:candle_series_records) # Eager load to reduce queries
     end
@@ -246,7 +246,7 @@ module Screeners
 
       # Load all daily candles in one query
       candle_records = CandleSeriesRecord
-                       .for_timeframe("1D")
+                       .daily
                        .where(instrument_id: instrument_ids)
                        .recent(100) # Get last 100 candles per instrument
                        .order(instrument_id: :asc, timestamp: :desc)
@@ -263,7 +263,7 @@ module Screeners
         # Convert to CandleSeries format
         series = CandleSeries.new(
           symbol: instrument.symbol_name,
-          interval: "1D",
+          interval: :daily,
         )
 
         # Sort by timestamp (oldest first) and convert to Candle objects
@@ -283,7 +283,7 @@ module Screeners
         series.candles.sort_by!(&:timestamp)
 
         @candle_cache[instrument.id] ||= {}
-        @candle_cache[instrument.id]["1D"] = series
+        @candle_cache[instrument.id][:daily] = series
       end
 
       Rails.logger.info("[Screeners::SwingScreener] Preloaded candles for #{@candle_cache.size} instruments")
@@ -376,7 +376,7 @@ module Screeners
 
     def analyze_instrument(instrument)
       # Use cached candles to avoid N+1 queries
-      daily_series = get_cached_candles(instrument, "1D")
+      daily_series = get_cached_candles(instrument, :daily)
       return nil unless daily_series&.candles&.any?
 
       # Multi-timeframe analysis (DISABLE intraday by default for performance)
