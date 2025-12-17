@@ -172,28 +172,53 @@ The system logs freshness status:
 The freshness checker uses **trading days** instead of calendar days:
 
 - ✅ **Weekends**: Automatically skipped (Saturday/Sunday not counted)
-- ⚠️ **Holidays**: Currently not detected (only weekdays are considered trading days)
+- ✅ **Holidays**: Detected via `MarketHoliday` model (fetched from NSE website)
+  - Holidays are stored in database and checked automatically
   - On market holidays, candles from the previous trading day are still considered fresh
   - Example: If Monday is a holiday, Friday's candles are still fresh on Tuesday
 
-### Future Enhancement: Holiday Calendar
+### Setting Up Holiday Calendar
 
-For more accurate holiday detection, consider adding a holiday calendar:
+1. **Fetch holidays from NSE**:
+   ```bash
+   # Fetch for current year
+   rails market_holidays:fetch
+
+   # Fetch for specific year
+   rails market_holidays:fetch[2024]
+
+   # Fetch for multiple years
+   rails market_holidays:fetch_multiple[2024,2025]
+   ```
+
+2. **List stored holidays**:
+   ```bash
+   rails market_holidays:list
+   YEAR=2024 rails market_holidays:list
+   ```
+
+3. **Check if today is a holiday**:
+   ```bash
+   rails market_holidays:check_today
+   ```
+
+### Manual Holiday Management
+
+If NSE API is unavailable, you can manually add holidays:
 
 ```ruby
-# Future enhancement
-class MarketHolidayCalendar
-  HOLIDAYS_2024 = [
-    Date.new(2024, 1, 26), # Republic Day
-    Date.new(2024, 3, 29), # Good Friday
-    # ... more holidays
-  ].freeze
+# Add a holiday
+MarketHoliday.create!(
+  date: Date.new(2024, 1, 26),
+  description: "Republic Day",
+  year: 2024
+)
 
-  def self.trading_day?(date)
-    return false if HOLIDAYS_2024.include?(date.to_date)
-    (1..5).include?(date.wday) # Weekdays only
-  end
-end
+# Check if a date is a holiday
+MarketHoliday.holiday?(Date.new(2024, 1, 26)) # => true
+
+# Get all holidays for a year
+MarketHoliday.for_year(2024)
 ```
 
 ## Troubleshooting

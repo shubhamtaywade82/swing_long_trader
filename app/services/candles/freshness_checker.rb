@@ -109,8 +109,6 @@ module Candles
 
     # Calculate the date that is N trading days ago
     # Accounts for weekends and market holidays
-    # Note: MarketHours.trading_day? only checks weekdays, not holidays
-    # For a more accurate check, consider adding a holiday calendar
     def last_trading_day_ago(trading_days_ago)
       return Time.zone.today if trading_days_ago.zero?
 
@@ -123,11 +121,8 @@ module Candles
       max_lookback = 1.year.ago.to_date
 
       while trading_days_found < trading_days_ago && date >= max_lookback
-        # Check if this is a trading day (weekday, not weekend)
-        # MarketHours.trading_day? checks current time, so we check weekday directly
-        is_weekday = (1..5).include?(date.wday) # Monday = 1, Friday = 5
-
-        if is_weekday
+        # Check if this is a trading day (weekday and not a holiday)
+        if trading_day?(date)
           trading_days_found += 1
           # If we've found enough trading days, return this date
           return date if trading_days_found == trading_days_ago
@@ -139,6 +134,17 @@ module Candles
       # If we couldn't find enough trading days (e.g., near holidays),
       # return the date we found (which might be older than requested)
       date + 1.day # Add back the last decrement
+    end
+
+    # Check if a date is a trading day (weekday and not a holiday)
+    def trading_day?(date)
+      # Must be a weekday (Monday = 1, Friday = 5)
+      return false unless (1..5).include?(date.wday)
+
+      # Must not be a market holiday
+      return false if MarketHoliday.holiday?(date)
+
+      true
     end
 
     def trigger_ingestion
