@@ -11,6 +11,7 @@ Complete guide for importing instruments and ingesting candles for daily, weekly
 5. [Handling Missing Data](#handling-missing-data)
 6. [Verification & Monitoring](#verification--monitoring)
 7. [Troubleshooting](#troubleshooting)
+8. [Technical Details](#technical-details)
 
 ---
 
@@ -28,6 +29,16 @@ This guide covers the complete data pipeline:
 - **Daily (`:daily`)** - End-of-day candles, minimum 365 days
 - **Weekly (`:weekly`)** - Weekly aggregated candles, minimum 52 weeks (~365 days)
 - **Hourly (`:hourly`)** - Hourly candles, minimum 365 hours (~15 days of trading hours)
+
+### Key Features
+
+- ✅ **Bulk Import Performance** - Uses `activerecord-import` for 10-100x faster ingestion
+- ✅ **Transaction Safety** - All imports wrapped in transactions for atomicity
+- ✅ **Automatic Deduplication** - Database-level unique constraints handle duplicates
+- ✅ **Enum-Based Timeframes** - Type-safe enum values (`:daily`, `:weekly`, `:hourly`)
+- ✅ **Comprehensive Error Handling** - Graceful fallback to individual inserts if bulk import fails
+- ✅ **Enhanced Logging** - Detailed progress and error tracking
+- ✅ **Input Validation** - Validates instruments and timeframes before processing
 
 ---
 
@@ -99,6 +110,8 @@ Candles::DailyIngestorJob.perform_later
 - Skips instruments already up-to-date
 - Handles rate limiting with exponential backoff
 - Progress logging every 10 instruments
+- Uses bulk import (`activerecord-import`) for optimal performance
+- Wrapped in transactions for data consistency
 
 **Expected Output:**
 ```
@@ -162,6 +175,8 @@ Candles::WeeklyIngestorJob.perform_later
 - Default: 52 weeks back (~365 days)
 - Skips instruments already up-to-date
 - No API calls (uses existing daily candles)
+- Uses bulk import (`activerecord-import`) for optimal performance
+- Wrapped in transactions for data consistency
 
 **Expected Output:**
 ```
@@ -228,6 +243,30 @@ end
 - Aggregates to hourly candles
 - Stores with `:hourly` timeframe enum
 - Handles rate limiting
+- Uses bulk import (`activerecord-import`) for optimal performance
+- Wrapped in transactions for data consistency
+
+**Note:** For bulk hourly ingestion, you can use `IntradayFetcher` with `interval: '60'` and store results using `Ingestor.upsert_candles`:
+
+```ruby
+# Bulk fetch hourly candles for multiple instruments
+instruments = Instrument.where(segment: %w[equity index]).limit(100)
+instruments.each do |instrument|
+  result = Candles::IntradayFetcher.call(
+    instrument: instrument,
+    interval: '60',  # 60 minutes = 1 hour
+    days: 15
+  )
+  
+  if result[:success] && result[:candles].any?
+    Candles::Ingestor.upsert_candles(
+      instrument: instrument,
+      timeframe: :hourly,
+      candles_data: result[:candles]
+    )
+  end
+end
+```
 
 **Verify Hourly Candles:**
 ```ruby
@@ -442,7 +481,7 @@ Candles::FreshnessChecker.ensure_fresh(timeframe: :weekly, auto_ingest: true)
 
 ### 5.3 Monitor via Health Checks
 
-The `MonitorJob` automatically checks candle freshness:
+The `MonitorJob` automatically checks candle freshness with improved logic:
 
 ```ruby
 # Run health check
@@ -452,6 +491,12 @@ MonitorJob.perform_now
 result = MonitorJob.perform_now
 puts result[:candle_freshness]
 ```
+
+**Freshness Check Strategy:**
+- Prioritizes recent candles (last 30 days) for freshness calculation
+- Falls back to global latest if no recent candles exist
+- Prevents false alarms when old historical data exists alongside recent data
+- Checks both trading date (`timestamp`) and ingestion time (`created_at`)
 
 ---
 
@@ -509,6 +554,44 @@ Candles::DailyIngestor.call
 
 # Then update weekly candles
 Candles::WeeklyIngestor.call
+```
+
+### 6.5 Bulk Import Failures
+
+If bulk import fails, the system automatically falls back to individual inserts:
+
+```ruby
+# Check logs for bulk import errors
+# Look for: "[Candles::Ingestor] Bulk import failed"
+
+# Common causes:
+# - Database connection issues
+# - Unique constraint violations (shouldn't happen with on_duplicate_key_update)
+# - Memory issues with very large batches
+
+# The fallback ensures data is still imported, just slower
+# Check logs to see if fallback was used:
+# "[Candles::Ingestor] Bulk import failed, falling back to individual inserts"
+```
+
+### 6.6 Enum Migration Issues
+
+If you're upgrading from string timeframes to enum timeframes:
+
+```ruby
+# Check migration status
+ActiveRecord::Base.connection.column_exists?(:candle_series, :timeframe, :integer)
+
+# Verify enum values
+CandleSeriesRecord.timeframes
+# Should return: { daily: 0, weekly: 1, hourly: 2 }
+
+# Check for any records with invalid enum values (shouldn't happen after migration)
+CandleSeriesRecord.where.not(timeframe: [0, 1, 2]).count
+# Should return: 0
+
+# If migration failed, check logs for:
+# "[ConvertTimeframeToEnum] Found unknown timeframe values"
 ```
 
 ---
@@ -571,6 +654,79 @@ end
 
 ---
 
+## Technical Details
+
+### Bulk Import Performance
+
+The ingestion system uses `activerecord-import` for bulk operations, providing significant performance improvements:
+
+- **10-100x faster** than individual inserts
+- **Database-level deduplication** via `ON DUPLICATE KEY UPDATE`
+- **Transaction-wrapped** for atomicity (all-or-nothing)
+- **Automatic fallback** to individual inserts if bulk import fails
+
+### Timeframe Enum System
+
+Timeframes are stored as integer-backed enums for type safety and performance:
+
+```ruby
+# Enum values
+CandleSeriesRecord.timeframes
+# => { daily: 0, weekly: 1, hourly: 2 }
+
+# Auto-generated scopes
+CandleSeriesRecord.daily   # => scope for daily candles
+CandleSeriesRecord.weekly  # => scope for weekly candles
+CandleSeriesRecord.hourly  # => scope for hourly candles
+
+# Usage
+CandleSeriesRecord.latest_for(instrument: instrument, timeframe: :daily)
+```
+
+**Migration Note:** If upgrading from an older version with string timeframes (`"1D"`, `"1W"`, `"1H"`), the migration automatically converts them to enum values.
+
+### Error Handling & Validation
+
+The ingestion system includes comprehensive error handling:
+
+1. **Input Validation**
+   - Validates instrument exists and is persisted
+   - Validates timeframe is a valid enum key
+   - Validates candles data is present
+
+2. **Bulk Import Errors**
+   - Catches `ActiveRecord::StatementInvalid` (database errors) separately
+   - Falls back to individual inserts if bulk import fails
+   - Logs detailed error information with backtrace
+
+3. **Transaction Safety**
+   - All bulk imports wrapped in `ActiveRecord::Base.transaction`
+   - Ensures atomicity - either all candles imported or none
+   - Prevents partial data corruption
+
+### Logging & Monitoring
+
+Enhanced logging provides visibility into the ingestion process:
+
+- **Info logs** for successful bulk imports (includes instrument symbol, counts)
+- **Error logs** with error class and partial backtrace for failures
+- **Debug logs** for incremental updates and skipped instruments
+- **Progress logs** every 10 instruments during bulk ingestion
+
+Example log output:
+```
+[Candles::Ingestor] Bulk import completed for RELIANCE: total=365, upserted=365, failed=0
+```
+
+### Performance Considerations
+
+1. **Batch Size**: `activerecord-import` handles large batches efficiently internally
+2. **Memory**: No need to chunk unless memory becomes an issue
+3. **Rate Limiting**: Configurable delays between API requests
+4. **Retry Logic**: Exponential backoff for rate limit errors
+
+---
+
 ## Summary
 
 1. **Import Instruments**: `InstrumentsImporter.import_from_url`
@@ -587,3 +743,7 @@ All services handle:
 - ✅ Missing data detection
 - ✅ Progress logging
 - ✅ Error handling
+- ✅ Bulk import performance (10-100x faster)
+- ✅ Transaction safety (atomic operations)
+- ✅ Type-safe enum timeframes
+- ✅ Comprehensive validation
