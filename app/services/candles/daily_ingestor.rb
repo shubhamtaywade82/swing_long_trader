@@ -112,9 +112,10 @@ module Candles
         end
 
         # Ensure we don't fetch less than minimum required days (for initial gaps)
-        # But if latest candle is very old, use the configured days_back
+        # If latest candle is very old (older than min_from_date), fetch from min_from_date to fill gaps
+        # Otherwise, fetch from the day after latest candle (incremental update)
         min_from_date = to_date - @days_back.days
-        from_date = [from_date, min_from_date].min
+        from_date = [from_date, min_from_date].max
       else
         # No existing candles - fetch full range
         from_date = to_date - @days_back.days

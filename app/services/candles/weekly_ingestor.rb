@@ -104,8 +104,10 @@ module Candles
         end
 
         # Ensure we don't fetch less than minimum required weeks (for initial gaps)
+        # If latest weekly candle is very old (older than min_from_date), fetch from min_from_date to fill gaps
+        # Otherwise, fetch from the week after latest weekly candle (incremental update)
         min_from_date = to_date - (@weeks_back * 7).days
-        from_date = [from_date, min_from_date].min
+        from_date = [from_date, min_from_date].max
       else
         # No existing weekly candles - fetch full range
         from_date = to_date - (@weeks_back * 7).days
