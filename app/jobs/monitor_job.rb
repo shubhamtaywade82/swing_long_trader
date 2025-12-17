@@ -65,7 +65,7 @@ class MonitorJob < ApplicationJob
 
   def check_candle_freshness
     latest = CandleSeriesRecord.order(timestamp: :desc).first
-    return { healthy: false, message: "No candles" } unless latest
+    return { healthy: false, message: "No candles - Run: rails runner 'Candles::DailyIngestor.call'" } unless latest
 
     days_old = (Time.zone.today - latest.timestamp.to_date).to_i
 
@@ -78,7 +78,15 @@ class MonitorJob < ApplicationJob
     message = if healthy
                 "OK (#{days_old} calendar days, #{trading_days_old} trading days)"
               else
-                "Candles #{days_old} days old (#{trading_days_old} trading days)"
+                # Add actionable suggestions for stale candles
+                suggestion = if days_old > 365
+                                " - CRITICAL: Candles >1yr old. Check ingestion jobs or run: rails runner 'Candles::DailyIngestor.call(days_back: 800)'"
+                              elsif days_old > 30
+                                " - Check scheduled jobs or run: rails runner 'Candles::DailyIngestorJob.perform_later'"
+                              else
+                                " - Run: rails runner 'Candles::DailyIngestor.call'"
+                              end
+                "Candles #{days_old} days old (#{trading_days_old} trading days)#{suggestion}"
               end
 
     { healthy: healthy, message: message }
@@ -129,20 +137,50 @@ class MonitorJob < ApplicationJob
 
     return { healthy: true, message: "No recent jobs" } if recent_jobs.empty?
 
-    durations = recent_jobs.filter_map do |job|
+    # Group durations by job class to identify problematic jobs
+    job_durations = {}
+    recent_jobs.each do |job|
       next unless job.created_at && job.finished_at
 
-      (job.finished_at - job.created_at).to_f
+      duration = (job.finished_at - job.created_at).to_f
+      class_name = job.class_name || "Unknown"
+      job_durations[class_name] ||= []
+      job_durations[class_name] << duration
     end
 
-    return { healthy: true, message: "No duration data" } if durations.empty?
+    return { healthy: true, message: "No duration data" } if job_durations.empty?
 
-    avg_duration = durations.sum / durations.size
-    max_duration = durations.max
+    # Calculate overall stats
+    all_durations = job_durations.values.flatten
+    avg_duration = all_durations.sum / all_durations.size
+    max_duration = all_durations.max
+
+    # Find slow jobs (max > 10 minutes or avg > 5 minutes for that class)
+    slow_jobs = job_durations.select do |class_name, durations|
+      class_avg = durations.sum / durations.size
+      class_max = durations.max
+      class_max > 600 || class_avg > 300
+    end
 
     # Alert if average > 5 minutes or max > 10 minutes
     healthy = avg_duration < 300 && max_duration < 600
-    message = "Avg: #{avg_duration.round(1)}s, Max: #{max_duration.round(1)}s"
+
+    message = if healthy
+                "Avg: #{avg_duration.round(1)}s, Max: #{max_duration.round(1)}s"
+              else
+                # Limit to top 3 slowest jobs to keep message concise
+                slow_job_info = slow_jobs.sort_by do |_class_name, durations|
+                  durations.max
+                end.reverse.first(3).map do |class_name, durations|
+                  class_avg = durations.sum / durations.size
+                  class_max = durations.max
+                  "#{class_name.split('::').last}: avg=#{class_avg.round(1)}s, max=#{class_max.round(1)}s"
+                end.join(", ")
+                more_count = slow_jobs.size - 3
+                more_text = more_count.positive? ? " (+#{more_count} more)" : ""
+                "Avg: #{avg_duration.round(1)}s, Max: #{max_duration.round(1)}s" \
+                  " (Slow: #{slow_job_info}#{more_text})"
+              end
 
     { healthy: healthy, message: message }
   rescue StandardError => e
