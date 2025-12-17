@@ -48,21 +48,6 @@ class CandleSeriesRecord < ApplicationRecord
       .first
   end
 
-  # Convert enum symbol to string interval for CandleSeries
-  # @param timeframe [Symbol] Enum symbol (:daily, :weekly, :hourly)
-  # @return [String] String interval ("1D", "1W", "1H")
-  def self.timeframe_to_interval(timeframe)
-    case timeframe
-    when :daily
-      "1D"
-    when :weekly
-      "1W"
-    when :hourly
-      "1H"
-    else
-      "1D" # Default fallback
-    end
-  end
 
   # Convert to CandleSeries format (for compatibility with existing code)
   def to_candle

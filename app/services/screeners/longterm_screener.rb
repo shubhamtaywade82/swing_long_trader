@@ -314,7 +314,7 @@ module Screeners
 
         # Build daily series
         if daily_records.any?
-          daily_series = CandleSeries.new(symbol: instrument.symbol_name, interval: CandleSeriesRecord.timeframe_to_interval(:daily))
+          daily_series = CandleSeries.new(symbol: instrument.symbol_name, interval: :daily)
           daily_records.sort_by(&:timestamp).each do |record|
             candle = Candle.new(
               timestamp: record.timestamp,
@@ -336,7 +336,7 @@ module Screeners
         # Build weekly series
         next unless weekly_records.any?
 
-        weekly_series = CandleSeries.new(symbol: instrument.symbol_name, interval: CandleSeriesRecord.timeframe_to_interval(:weekly))
+        weekly_series = CandleSeries.new(symbol: instrument.symbol_name, interval: :weekly)
         weekly_records.sort_by(&:timestamp).each do |record|
           candle = Candle.new(
             timestamp: record.timestamp,

@@ -245,10 +245,10 @@ module Backtesting
       instrument = candidate[:instrument]
 
       # Create temporary series for signal generation
-      temp_daily = CandleSeries.new(symbol: instrument.symbol_name, interval: CandleSeriesRecord.timeframe_to_interval(:daily))
+      temp_daily = CandleSeries.new(symbol: instrument.symbol_name, interval: :daily)
       candidate[:daily_series].each { |c| temp_daily.add_candle(c) }
 
-      temp_weekly = CandleSeries.new(symbol: instrument.symbol_name, interval: CandleSeriesRecord.timeframe_to_interval(:weekly))
+      temp_weekly = CandleSeries.new(symbol: instrument.symbol_name, interval: :weekly)
       candidate[:weekly_series].each { |c| temp_weekly.add_candle(c) }
 
       # Use long-term strategy evaluator

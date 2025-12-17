@@ -263,7 +263,7 @@ module Screeners
         # Convert to CandleSeries format
         series = CandleSeries.new(
           symbol: instrument.symbol_name,
-          interval: CandleSeriesRecord.timeframe_to_interval(:daily),
+          interval: :daily,
         )
 
         # Sort by timestamp (oldest first) and convert to Candle objects

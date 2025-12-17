@@ -8,8 +8,25 @@ class CandleSeries
 
   def initialize(symbol:, interval: "5")
     @symbol = symbol
-    @interval = interval
+    # Accept both enum symbols (:daily, :weekly, :hourly) and legacy strings ("1D", "1W", etc.)
+    # Store as string for backward compatibility with existing code that reads interval
+    @interval = interval.is_a?(Symbol) ? timeframe_to_interval_string(interval) : interval.to_s
     @candles = []
+  end
+
+  private
+
+  def timeframe_to_interval_string(timeframe)
+    case timeframe
+    when :daily
+      "1D"
+    when :weekly
+      "1W"
+    when :hourly
+      "1H"
+    else
+      timeframe.to_s
+    end
   end
 
   def each(&) = candles.each(&)
