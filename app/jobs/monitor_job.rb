@@ -64,15 +64,28 @@ class MonitorJob < ApplicationJob
   end
 
   def check_candle_freshness
-    latest = CandleSeriesRecord.order(timestamp: :desc).first
-    return { healthy: false, message: "No candles - Run: rails runner 'Candles::DailyIngestor.call'" } unless latest
+    # Check latest daily candle specifically (1D timeframe) - this is what matters for trading
+    # Weekly candles (1W) can be much older and shouldn't affect this check
+    latest_daily = CandleSeriesRecord
+                   .for_timeframe("1D")
+                   .order(timestamp: :desc)
+                   .first
 
-    days_old = (Time.zone.today - latest.timestamp.to_date).to_i
+    return { healthy: false, message: "No daily candles - Run: rails runner 'Candles::DailyIngestor.call'" } unless latest_daily
+
+    days_old = (Time.zone.today - latest_daily.timestamp.to_date).to_i
+
+    # Sanity check: if candles are extremely old, there might be a data issue
+    # Check if there are any recent candles at all (within last 30 days)
+    recent_candles_count = CandleSeriesRecord
+                          .for_timeframe("1D")
+                          .where("timestamp >= ?", 30.days.ago)
+                          .count
 
     # Account for weekends and holidays - markets are closed on weekends
     # Allow up to 4 days (which could be Thu -> Mon = 4 days including weekend)
     # But flag if > 5 days (likely a real issue)
-    trading_days_old = count_trading_days_since(latest.timestamp.to_date)
+    trading_days_old = count_trading_days_since(latest_daily.timestamp.to_date)
     healthy = days_old <= 4 && trading_days_old <= 2
 
     message = if healthy
@@ -80,13 +93,17 @@ class MonitorJob < ApplicationJob
               else
                 # Add actionable suggestions for stale candles
                 suggestion = if days_old > 365
-                                " - CRITICAL: Candles >1yr old. Check ingestion jobs or run: rails runner 'Candles::DailyIngestor.call(days_back: 800)'"
+                                if recent_candles_count.zero?
+                                  " - DATA ISSUE: Latest candle is #{days_old} days old but no recent candles found. Check for data corruption or timestamp issues."
+                                else
+                                  " - CRITICAL: Latest daily candle is #{days_old} days old (#{recent_candles_count} candles in last 30 days). Check ingestion jobs or run: rails runner 'Candles::DailyIngestor.call(days_back: 800)'"
+                                end
                               elsif days_old > 30
                                 " - Check scheduled jobs or run: rails runner 'Candles::DailyIngestorJob.perform_later'"
                               else
                                 " - Run: rails runner 'Candles::DailyIngestor.call'"
                               end
-                "Candles #{days_old} days old (#{trading_days_old} trading days)#{suggestion}"
+                "Daily candles #{days_old} days old (#{trading_days_old} trading days)#{suggestion}"
               end
 
     { healthy: healthy, message: message }
