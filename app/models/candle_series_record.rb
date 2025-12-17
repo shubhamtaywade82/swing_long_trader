@@ -14,11 +14,18 @@ class CandleSeriesRecord < ApplicationRecord
   validates :volume, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :timestamp, uniqueness: { scope: %i[instrument_id timeframe], case_sensitive: true }
 
+  # Default scope orders by timestamp ascending to match technical analysis gem requirements.
+  # Both ruby-technical-analysis and technical-analysis gems expect chronological order
+  # (oldest to newest). This ensures consistent data ordering across the application.
+  # Note: Queries needing descending order should explicitly use .order(timestamp: :desc)
+  # which will override this default scope.
   default_scope { order(timestamp: :asc) }
 
   scope :for_instrument, ->(instrument) { where(instrument_id: instrument.id) }
   scope :for_timeframe, ->(timeframe) { where(timeframe: timeframe) }
   scope :recent, ->(limit = 100) { order(timestamp: :desc).limit(limit) }
+  # Note: This scope is redundant with default_scope but kept for explicit clarity
+  # when reading code that uses .ordered
   scope :ordered, -> { order(timestamp: :asc) }
 
   # Find candles for a date range

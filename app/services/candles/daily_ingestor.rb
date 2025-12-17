@@ -111,11 +111,28 @@ module Candles
           }
         end
 
-        # Ensure we don't fetch less than minimum required days (for initial gaps)
-        # If latest candle is very old (older than min_from_date), fetch from min_from_date to fill gaps
-        # Otherwise, fetch from the day after latest candle (incremental update)
+        # Calculate minimum required date range
         min_from_date = to_date - @days_back.days
-        from_date = [from_date, min_from_date].max
+
+        # Determine fetch strategy:
+        # - If latest candle is within days_back window: incremental update (fetch from latest + 1 day)
+        # - If latest candle is older than days_back: gap fill (fetch from min_from_date)
+        if latest_date >= min_from_date
+          # Incremental update: latest candle is recent, fetch only new data
+          from_date = latest_date + 1.day
+          Rails.logger.debug do
+            "[Candles::DailyIngestor] #{instrument.symbol_name}: " \
+              "Incremental update (latest: #{latest_date}, fetching from: #{from_date})"
+          end
+        else
+          # Gap fill: latest candle is very old, fetch from minimum required date
+          from_date = min_from_date
+          gap_days = (to_date - latest_date).to_i
+          Rails.logger.info do
+            "[Candles::DailyIngestor] #{instrument.symbol_name}: " \
+              "Gap detected (latest: #{latest_date}, gap: #{gap_days} days, fetching from: #{from_date})"
+          end
+        end
       else
         # No existing candles - fetch full range
         from_date = to_date - @days_back.days
