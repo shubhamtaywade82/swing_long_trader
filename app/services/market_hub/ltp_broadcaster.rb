@@ -53,19 +53,19 @@ module MarketHub
       ltp_data = {}
       instruments.in_batches(of: BATCH_SIZE) do |batch|
         batch.each do |instrument|
-          begin
-            ltp = instrument.ltp
-            next unless ltp.present? && ltp.to_f.positive?
+          ltp = instrument.ltp
+          next unless ltp.present? && ltp.to_f.positive?
 
-            ltp_data[instrument.id] = {
-              instrument_id: instrument.id,
-              symbol: instrument.symbol_name,
-              ltp: ltp.to_f,
-              timestamp: Time.current,
-            }
-          rescue StandardError => e
-            Rails.logger.warn("[MarketHub::LtpBroadcaster] Failed to fetch LTP for #{instrument.symbol_name}: #{e.message}")
-          end
+          instrument_key = "#{instrument.exchange_segment}:#{instrument.security_id}"
+          ltp_data[instrument.id] = {
+            instrument_id: instrument.id,
+            symbol: instrument.symbol_name,
+            instrument_key: instrument_key, # Format: "NSE_EQ:1333" - matches data-instrument-key attribute
+            ltp: ltp.to_f,
+            timestamp: Time.current,
+          }
+        rescue StandardError => e
+          Rails.logger.warn("[MarketHub::LtpBroadcaster] Failed to fetch LTP for #{instrument.symbol_name}: #{e.message}")
         end
 
         # Small delay between batches to avoid rate limiting

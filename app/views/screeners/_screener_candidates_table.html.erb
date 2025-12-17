@@ -54,7 +54,11 @@
               instrument_key = nil
               if candidate[:instrument_id]
                 instrument = Instrument.find_by(id: candidate[:instrument_id])
-                instrument_key = instrument ? "#{instrument.exchange_segment}:#{instrument.security_id}" : nil
+                if instrument && instrument.exchange_segment.present? && instrument.security_id.present?
+                  instrument_key = "#{instrument.exchange_segment}:#{instrument.security_id}"
+                else
+                  Rails.logger.warn("[Screener] Missing exchange_segment or security_id for instrument_id=#{candidate[:instrument_id]}, symbol=#{candidate[:symbol]}")
+                end
               end
             %>
             <tr data-screener-symbol="<%= candidate[:symbol] %>"
@@ -89,7 +93,7 @@
               <td class="text-right tech-col" style="display: none;">
                 <%= number_with_precision(candidate[:mtf_score] || 0, precision: 1) %>
               </td>
-              <td class="text-right js-ltp-cell" data-price-cell="true" data-instrument-key="<%= instrument_key %>">
+              <td class="text-right js-ltp-cell" data-price-cell="true" <% if instrument_key %>data-instrument-key="<%= instrument_key %>"<% end %>>
                 ₹<%= number_with_precision(latest_close, precision: 2) %>
               </td>
               <td class="text-right tech-col" style="display: none;">

@@ -247,10 +247,12 @@ module MarketHub
 
       # Publish to Redis Pub/Sub channel for broker-style architecture
       # This allows multiple Rails instances to subscribe and broadcast via ActionCable
+      instrument_key = "#{instrument.exchange_segment}:#{instrument.security_id}"
       broadcast_data = {
         type: "screener_ltp_update",
         symbol: instrument.symbol_name,
         instrument_id: instrument.id,
+        instrument_key: instrument_key, # Format: "NSE_EQ:1333" - matches data-instrument-key attribute
         ltp: ltp.to_f,
         timestamp: Time.current.iso8601,
         source: "websocket", # Indicate this is real-time, not polled

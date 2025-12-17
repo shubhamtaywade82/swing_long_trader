@@ -155,7 +155,12 @@ export default class extends Controller {
         console.log("[DashboardController] Sample row IDs:", sampleIds);
       }
 
-      this.updateScreenerLtp(data.symbol, data.instrument_id, data.ltp);
+      this.updateScreenerLtp(
+        data.symbol,
+        data.instrument_id,
+        data.ltp,
+        data.instrument_key || null
+      );
     } else if (data.type === "screener_ltp_batch_update") {
       // Update multiple LTPs at once
       if (data.updates && Array.isArray(data.updates)) {
@@ -163,7 +168,8 @@ export default class extends Controller {
           this.updateScreenerLtp(
             update.symbol,
             update.instrument_id,
-            update.ltp
+            update.ltp,
+            update.instrument_key || null
           );
         });
       }
@@ -839,12 +845,12 @@ export default class extends Controller {
     }
   }
 
-  updateScreenerLtp(symbol, instrumentId, ltp) {
+  updateScreenerLtp(symbol, instrumentId, ltp, instrumentKey = null) {
     // Enhanced validation and logging
     if (!symbol || !ltp) {
       console.warn(
         "[DashboardController] updateScreenerLtp: Missing symbol or ltp",
-        { symbol, instrumentId, ltp, type: typeof ltp }
+        { symbol, instrumentId, instrumentKey, ltp, type: typeof ltp }
       );
       return;
     }
@@ -854,15 +860,33 @@ export default class extends Controller {
     if (isNaN(ltpNum) || ltpNum <= 0) {
       console.warn(
         "[DashboardController] updateScreenerLtp: Invalid LTP value",
-        { symbol, instrumentId, ltp, parsed: ltpNum }
+        { symbol, instrumentId, instrumentKey, ltp, parsed: ltpNum }
       );
       return;
     }
 
-    // Try to find rows by instrument_id first (more reliable)
-    // Convert to string since HTML attributes are always strings
+    // Try to find rows by instrument_key first (most reliable - matches data-instrument-key attribute)
     let rows = [];
-    if (instrumentId) {
+    if (instrumentKey) {
+      // Match price cells directly by instrument_key (format: "NSE_EQ:1333")
+      const priceCells = document.querySelectorAll(
+        `.js-ltp-cell[data-instrument-key="${instrumentKey}"]`
+      );
+      if (priceCells.length > 0) {
+        // Get parent rows from price cells
+        rows = Array.from(priceCells)
+          .map((cell) => cell.closest("tr"))
+          .filter(Boolean);
+        console.log("[DashboardController] ✅ Found rows by instrument_key", {
+          instrumentKey,
+          rowCount: rows.length,
+        });
+      }
+    }
+
+    // Fallback: Try to find rows by instrument_id (more reliable)
+    // Convert to string since HTML attributes are always strings
+    if (rows.length === 0 && instrumentId) {
       const instrumentIdStr = String(instrumentId);
       rows = document.querySelectorAll(
         `tr[data-screener-instrument-id="${instrumentIdStr}"]`
@@ -885,7 +909,7 @@ export default class extends Controller {
       }
     }
 
-    // Fallback to symbol matching if no rows found by instrument_id
+    // Fallback to symbol matching if no rows found by instrument_id or instrument_key
     if (rows.length === 0 && symbol) {
       // Try exact match first
       rows = document.querySelectorAll(`tr[data-screener-symbol="${symbol}"]`);
@@ -919,7 +943,7 @@ export default class extends Controller {
       console.error(
         "[DashboardController] ❌ updateScreenerLtp: No rows found",
         {
-          searchingFor: { symbol, instrumentId },
+          searchingFor: { symbol, instrumentId, instrumentKey },
           availableRows: allRows.length,
           allRowData: allRowData.slice(0, 10), // Show first 10 for debugging
         }
@@ -930,10 +954,14 @@ export default class extends Controller {
     console.log("[DashboardController] ✅ updateScreenerLtp: Found rows", {
       symbol,
       instrumentId,
+      instrumentKey,
       ltp,
       rowCount: rows.length,
       firstRowId: rows[0]?.getAttribute("data-screener-instrument-id"),
       firstRowSymbol: rows[0]?.getAttribute("data-screener-symbol"),
+      firstRowKey: rows[0]
+        ?.querySelector(".js-ltp-cell")
+        ?.getAttribute("data-instrument-key"),
     });
 
     rows.forEach((row) => {
@@ -1041,14 +1069,15 @@ export default class extends Controller {
   }
 
   // Test function to manually trigger price update (for debugging)
-  // Usage in console: testPriceUpdate(symbol, instrumentId, price)
-  testPriceUpdate(symbol, instrumentId, price) {
+  // Usage in console: testPriceUpdate(symbol, instrumentId, price, instrumentKey)
+  testPriceUpdate(symbol, instrumentId, price, instrumentKey = null) {
     console.log("[DashboardController] Testing price update manually", {
       symbol,
       instrumentId,
+      instrumentKey,
       price,
     });
-    this.updateScreenerLtp(symbol, instrumentId, price);
+    this.updateScreenerLtp(symbol, instrumentId, price, instrumentKey);
   }
 }
 

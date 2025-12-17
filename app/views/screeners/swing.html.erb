@@ -621,7 +621,8 @@
     window.addEventListener('actioncable:connected', function() {
       actionCableConnected = true;
       console.log('[LTP] ActionCable connected, using real-time updates');
-      stopLtpPollingFallback();
+      // Keep polling as backup - don't stop it, just log that ActionCable is primary
+      console.log('[LTP] ActionCable is primary, polling continues as backup');
     });
 
     window.addEventListener('actioncable:disconnected', function() {
@@ -631,17 +632,31 @@
     });
 
     // Check initial connection status after a delay
+    // Always start polling fallback as backup, even if ActionCable appears connected
     setTimeout(() => {
-      if (!actionCableConnected) {
-        console.log('[LTP] ActionCable not detected, starting polling fallback');
-        startLtpPollingFallback();
+      // Check if we have price cells to update
+      const activeTabPane = document.querySelector('.tab-pane.active, .tab-pane.show');
+      const priceCells = activeTabPane?.querySelectorAll('.js-ltp-cell[data-instrument-key]') || [];
+
+      if (priceCells.length > 0) {
+        if (!actionCableConnected) {
+          console.log('[LTP] ActionCable not detected, starting polling fallback');
+          startLtpPollingFallback();
+        } else {
+          // Even if ActionCable is connected, start polling as backup (will be stopped if ActionCable works)
+          console.log('[LTP] ActionCable connected, but starting polling fallback as backup');
+          startLtpPollingFallback();
+        }
+      } else {
+        console.warn('[LTP] No price cells found with data-instrument-key attribute');
       }
     }, 3000);
 
-    // Fallback polling (only starts if ActionCable disconnects)
+    // Fallback polling (runs as backup even if ActionCable is connected)
     function startLtpPollingFallback() {
-      if (actionCableConnected) {
-        console.log('[LTP] ActionCable connected, skipping polling fallback');
+      // Don't start multiple intervals
+      if (ltpPollingInterval) {
+        console.log('[LTP Fallback] Polling already running, skipping');
         return;
       }
 
@@ -671,9 +686,10 @@
       }
 
       console.log(`[LTP Fallback] Starting polling fallback for ${instrumentKeys.length} instruments`);
+      console.log('[LTP Fallback] Sample instrument keys:', instrumentKeys.slice(0, 5));
 
-      // Poll every 1.5 seconds (fallback only)
-      const pollInterval = 1500;
+      // Poll every 2 seconds (fallback only) - increased from 1.5s to reduce load
+      const pollInterval = 2000;
       ltpPollingInterval = setInterval(() => {
         const currentActiveTabPane = document.querySelector('.tab-pane.active, .tab-pane.show');
         if (currentActiveTabPane) {
@@ -684,8 +700,13 @@
             .filter((key, index, self) => self.indexOf(key) === index);
 
           if (currentKeys.length > 0) {
+            console.log(`[LTP Fallback] Polling ${currentKeys.length} instruments`);
             fetchLtpUpdates(currentKeys);
+          } else {
+            console.warn('[LTP Fallback] No instrument keys found in active tab');
           }
+        } else {
+          console.warn('[LTP Fallback] No active tab pane found');
         }
       }, pollInterval);
     }
@@ -693,10 +714,19 @@
     // One-time initial price fetch for page load
     function fetchInitialPrices() {
       const activeTabPane = document.querySelector('.tab-pane.active, .tab-pane.show');
-      if (!activeTabPane) return;
+      if (!activeTabPane) {
+        console.warn('[LTP] No active tab pane found for initial price fetch');
+        return;
+      }
 
       const priceCells = activeTabPane.querySelectorAll('.js-ltp-cell[data-instrument-key]');
-      if (priceCells.length === 0) return;
+      if (priceCells.length === 0) {
+        console.warn('[LTP] No price cells with data-instrument-key found in active tab');
+        // Try to find cells without the attribute requirement
+        const allPriceCells = activeTabPane.querySelectorAll('.js-ltp-cell[data-price-cell="true"]');
+        console.log(`[LTP] Found ${allPriceCells.length} price cells total (some may be missing instrument_key)`);
+        return;
+      }
 
       const instrumentKeys = Array.from(priceCells)
         .map(cell => cell.getAttribute('data-instrument-key'))
@@ -705,9 +735,42 @@
 
       if (instrumentKeys.length > 0) {
         console.log(`[LTP] Fetching initial prices for ${instrumentKeys.length} instruments`);
+        console.log('[LTP] Sample instrument keys:', instrumentKeys.slice(0, 5));
         fetchLtpUpdates(instrumentKeys);
+      } else {
+        console.warn('[LTP] No valid instrument keys found for initial price fetch');
       }
     }
+
+    // Expose function for manual testing
+    window.manualFetchPrices = function() {
+      console.log('[LTP] Manual price fetch triggered');
+      fetchInitialPrices();
+    };
+
+    // Expose function to check price cells
+    window.checkPriceCells = function() {
+      const activeTabPane = document.querySelector('.tab-pane.active, .tab-pane.show');
+      const priceCells = activeTabPane?.querySelectorAll('.js-ltp-cell[data-instrument-key]') || [];
+      const cellsWithoutKey = activeTabPane?.querySelectorAll('.js-ltp-cell:not([data-instrument-key])') || [];
+
+      console.log('[LTP] Price cell check:', {
+        totalCells: priceCells.length + cellsWithoutKey.length,
+        cellsWithKey: priceCells.length,
+        cellsWithoutKey: cellsWithoutKey.length,
+        sampleKeys: Array.from(priceCells).slice(0, 5).map(c => c.getAttribute('data-instrument-key')),
+        sampleCellsWithoutKey: Array.from(cellsWithoutKey).slice(0, 3).map(c => ({
+          symbol: c.closest('tr')?.getAttribute('data-screener-symbol'),
+          instrumentId: c.closest('tr')?.getAttribute('data-screener-instrument-id'),
+        })),
+      });
+
+      return {
+        totalCells: priceCells.length + cellsWithoutKey.length,
+        cellsWithKey: priceCells.length,
+        cellsWithoutKey: cellsWithoutKey.length,
+      };
+    };
 
     function fetchLtpUpdates(instrumentKeys) {
       if (instrumentKeys.length === 0) return;
@@ -752,7 +815,10 @@
       })
       .then(data => {
         if (data.prices) {
+          console.log(`[LTP Polling] Received ${Object.keys(data.prices).length} prices`);
           updatePrices(data.prices);
+        } else {
+          console.warn('[LTP Polling] No prices in response:', data);
         }
       })
       .catch(error => {
@@ -761,6 +827,9 @@
     }
 
     function updatePrices(prices) {
+      let updatedCount = 0;
+      let notFoundCount = 0;
+
       Object.keys(prices).forEach(instrumentKey => {
         const price = prices[instrumentKey];
         if (price === null || price === undefined) return;
@@ -770,13 +839,25 @@
           `.js-ltp-cell[data-instrument-key="${instrumentKey}"]`
         );
 
+        if (cells.length === 0) {
+          notFoundCount++;
+          console.warn(`[LTP Polling] No cells found for instrument_key: ${instrumentKey}`);
+          return;
+        }
+
         cells.forEach(cell => {
           const currentPrice = parseFloat(cell.textContent.replace(/[₹,\s]/g, '')) || 0;
           const newPrice = parseFloat(price);
 
           if (newPrice && newPrice !== currentPrice) {
-            // Update price
-            cell.textContent = `₹${newPrice.toFixed(2)}`;
+            // Update price - preserve the <strong> tag if present (matches ActionCable update behavior)
+            if (cell.querySelector('strong')) {
+              const strongTag = cell.querySelector('strong');
+              strongTag.textContent = `₹${newPrice.toFixed(2)}`;
+            } else {
+              cell.textContent = `₹${newPrice.toFixed(2)}`;
+            }
+            updatedCount++;
 
             // Add visual feedback
             const row = cell.closest('tr');
@@ -809,6 +890,13 @@
           }
         });
       });
+
+      if (updatedCount > 0) {
+        console.log(`[LTP Polling] Updated ${updatedCount} prices`);
+      }
+      if (notFoundCount > 0) {
+        console.warn(`[LTP Polling] ${notFoundCount} instrument keys not found in DOM`);
+      }
     }
 
     function stopLtpPollingFallback() {
