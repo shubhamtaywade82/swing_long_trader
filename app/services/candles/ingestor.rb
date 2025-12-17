@@ -48,9 +48,17 @@ module Candles
         )
 
         # activerecord-import returns result with failed_instances
-        # Count successful imports
-        upserted_count = normalized_candles.size - (result.failed_instances&.size || 0)
-        skipped_count = result.failed_instances&.size || 0
+        # Note: With on_duplicate_key_update, duplicates are handled by the database
+        # and don't appear in failed_instances. All successful operations (inserts + updates)
+        # are counted as upserted.
+        failed_count = result.failed_instances&.size || 0
+        upserted_count = normalized_candles.size - failed_count
+        skipped_count = failed_count
+
+        Rails.logger.debug(
+          "[Candles::Ingestor] Bulk import completed: " \
+          "total=#{normalized_candles.size}, upserted=#{upserted_count}, failed=#{failed_count}"
+        )
       rescue StandardError => e
         Rails.logger.error("[Candles::Ingestor] Bulk import failed: #{e.message}, falling back to individual inserts")
         # Fallback to individual inserts if bulk import fails

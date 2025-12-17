@@ -19,12 +19,22 @@ class ConvertTimeframeToEnum < ActiveRecord::Migration[8.0]
       END
     SQL
 
-    # Step 3: Set default for any NULL values (shouldn't happen, but safety check)
-    execute <<-SQL
-      UPDATE candle_series
-      SET timeframe_enum = 0
-      WHERE timeframe_enum IS NULL
-    SQL
+    # Step 3: Check for NULL values and log warning (shouldn't happen, but safety check)
+    null_count_result = execute("SELECT COUNT(*) FROM candle_series WHERE timeframe_enum IS NULL")
+    null_count = null_count_result.first[0] if null_count_result.respond_to?(:first)
+
+    if null_count&.positive?
+      Rails.logger.warn(
+        "[ConvertTimeframeToEnum] Found #{null_count} records with NULL timeframe_enum. " \
+        "These will be set to daily (0). Unknown timeframes may have been converted."
+      )
+      # Set default for any NULL values
+      execute <<-SQL
+        UPDATE candle_series
+        SET timeframe_enum = 0
+        WHERE timeframe_enum IS NULL
+      SQL
+    end
 
     # Step 4: Make the column non-nullable
     change_column_null :candle_series, :timeframe_enum, false
