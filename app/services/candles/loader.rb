@@ -14,6 +14,14 @@ module Candles
       )
     end
 
+    def self.load_latest(instrument:, timeframe:, count: 100)
+      new.load_latest(
+        instrument: instrument,
+        timeframe: timeframe,
+        count: count,
+      )
+    end
+
     def load_for_instrument(instrument:, timeframe:, limit: nil, from_date: nil, to_date: nil)
       # Load candles from database
       scope = CandleSeriesRecord

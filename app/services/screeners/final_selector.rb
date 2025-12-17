@@ -113,6 +113,12 @@ module Screeners
           next
         end
 
+        # Filter based on AI entry_timing (if "wait", skip unless very high confidence)
+        if candidate[:ai_entry_timing] == "wait" && candidate[:ai_confidence] && candidate[:ai_confidence] < 7.5
+          Rails.logger.debug("[Screeners::FinalSelector] Skipping #{candidate[:symbol]} - AI recommends waiting (confidence: #{candidate[:ai_confidence]})")
+          next
+        end
+
         # Passed all filters
         selected << candidate.merge(
           tier: determine_tier(candidate, selected.size),
@@ -212,18 +218,64 @@ module Screeners
         quality_score = candidate[:trade_quality_score] || 0
         ai_confidence = candidate[:ai_confidence] || 0
 
+        # Apply AI-based penalties/adjustments
+        ai_adjustment = calculate_ai_adjustment(candidate)
+
         # Weighted combination:
         # - 30% screener score (technical eligibility)
         # - 40% trade quality score (Layer 2)
         # - 30% AI confidence (Layer 3)
-        combined_score = (
+        base_score = (
           (screener_score * 0.3) +
           (quality_score * 0.4) +
           (ai_confidence * 10.0 * 0.3) # Convert 0-10 scale to 0-100
-        ).round(2)
+        )
+
+        # Apply AI adjustment
+        combined_score = (base_score * ai_adjustment).round(2)
 
         candidate.merge(combined_score: combined_score)
       end.sort_by { |c| -c[:combined_score] }
+    end
+
+    def calculate_ai_adjustment(candidate)
+      adjustment = 1.0
+
+      # Penalize if entry_timing is "wait"
+      if candidate[:ai_entry_timing] == "wait"
+        adjustment *= 0.7 # 30% penalty
+      end
+
+      # Penalize if confidence < 6.0 (auto downgrade rule)
+      if candidate[:ai_confidence] && candidate[:ai_confidence] < 6.0
+        adjustment *= 0.5 # 50% penalty
+      end
+
+      # Adjust based on stage
+      case candidate[:ai_stage]
+      when "early"
+        adjustment *= 1.1 # 10% boost for early stage
+      when "late"
+        adjustment *= 0.8 # 20% penalty for late stage
+      end
+
+      # Adjust based on momentum trend
+      case candidate[:ai_momentum_trend]
+      when "strengthening"
+        adjustment *= 1.05 # 5% boost
+      when "weakening"
+        adjustment *= 0.9 # 10% penalty
+      end
+
+      # Adjust based on continuation bias
+      case candidate[:ai_continuation_bias]
+      when "high"
+        adjustment *= 1.05 # 5% boost
+      when "low"
+        adjustment *= 0.95 # 5% penalty
+      end
+
+      adjustment
     end
 
     def get_portfolio_constraints

@@ -92,9 +92,17 @@ module Screeners
           if result[:avoid] != true && result[:confidence] >= @min_confidence
             evaluated_candidate = candidate.merge(
               ai_confidence: result[:confidence],
+              ai_stage: result[:stage],
+              ai_momentum_trend: result[:momentum_trend],
+              ai_price_position: result[:price_position],
+              ai_entry_timing: result[:entry_timing],
+              ai_continuation_bias: result[:continuation_bias],
+              ai_holding_days: result[:holding_period_days] || result[:holding_days],
+              ai_primary_risk: result[:primary_risk],
+              ai_invalidate_if: result[:invalidate_if],
+              # Legacy fields
               ai_risk: result[:risk],
-              ai_holding_days: result[:holding_days],
-              ai_comment: result[:comment],
+              ai_comment: result[:comment] || result[:primary_risk],
               ai_avoid: result[:avoid] || false,
               ai_eval_id: ai_eval_id,
             )
@@ -183,23 +191,36 @@ module Screeners
       cached = Rails.cache.read(cache_key)
       return cached if cached
 
-      # Build structured input
-      structured_input = build_structured_input(candidate)
+      # Only evaluate READY setups
+      setup_status = candidate[:setup_status] || candidate.dig(:metadata, :setup_status)
+      unless setup_status == "READY"
+        Rails.logger.debug("[Screeners::AIEvaluator] Skipping #{candidate[:symbol]} - setup_status is #{setup_status}, not READY")
+        return nil
+      end
 
-      # Build prompt
-      prompt = build_prompt(structured_input)
+      # Get ScreenerResult for indicator context
+      screener_result = find_screener_result(candidate)
+      return nil unless screener_result
 
-      # Call AI service
-      ai_result = AI::UnifiedService.call(
-        prompt: prompt,
-        provider: @config[:provider] || "auto",
-        model: @model,
-        temperature: @temperature,
+      # Build indicator context
+      indicator_context = Screeners::IndicatorContextBuilder.call(screener_result: screener_result)
+      unless indicator_context
+        Rails.logger.warn("[Screeners::AIEvaluator] Failed to build indicator context for #{candidate[:symbol]}")
+        return nil
+      end
+
+      # Build prompt using new PromptBuilder
+      prompt_data = Screeners::PromptBuilder.call(
+        screener_result: screener_result,
+        indicator_context: indicator_context,
       )
+
+      # Call AI service with system and user messages
+      ai_result = call_ai_with_prompt(prompt_data)
 
       return nil unless ai_result[:success]
 
-      # Parse response
+      # Parse response (new JSON format)
       result = parse_response(ai_result[:content])
       return nil unless result
 
@@ -215,6 +236,7 @@ module Screeners
       result
     rescue StandardError => e
       Rails.logger.error("[Screeners::AIEvaluator] Failed to evaluate candidate #{candidate[:symbol]}: #{e.message}")
+      Rails.logger.debug { "[Screeners::AIEvaluator] Backtrace: #{e.backtrace.first(5).join("\n")}" }
       nil
     end
 
@@ -329,49 +351,22 @@ module Screeners
       reward / risk
     end
 
-    def build_prompt(structured_input)
-      <<~PROMPT
-        You are a professional swing trading analyst evaluating trade setups.
+    def call_ai_with_prompt(prompt_data)
+      # Use Ollama service directly for deterministic prompts
+      # Ollama supports system/user message format
+      system_message = prompt_data[:system_message]
+      user_message = prompt_data[:user_message]
 
-        Analyze this candidate using structured data and provide judgment on:
-        1. Market context (sector momentum, overall market phase)
-        2. Overcrowding (too many similar setups = lower edge)
-        3. Late-stage trend warnings (extended moves, exhaustion signals)
-        4. Risk narratives (what could go wrong)
-        5. Holding period estimation (realistic timeframe)
-        6. Confidence scoring (0-10 scale)
+      # Combine into single prompt for AI::UnifiedService (if it doesn't support system messages)
+      # Otherwise, pass both separately
+      combined_prompt = "#{system_message}\n\n#{user_message}"
 
-        Structured Input:
-        {
-          "symbol": "#{structured_input[:symbol]}",
-          "weekly_trend": "#{structured_input[:weekly_trend]}",
-          "daily_structure": "#{structured_input[:daily_structure]}",
-          "distance_from_breakout": "#{structured_input[:distance_from_breakout]}",
-          "atr_percent": "#{structured_input[:atr_percent]}",
-          "rr_potential": "#{structured_input[:rr_potential]}",
-          "volume_trend": "#{structured_input[:volume_trend]}",
-          "sector_trend": "#{structured_input[:sector_trend]}",
-          "recent_runup": "#{structured_input[:recent_runup]}",
-          "trade_quality_score": #{structured_input[:trade_quality_score]},
-          "mtf_score": #{structured_input[:mtf_score]}
-        }
-
-        Provide ONLY valid JSON in this exact format:
-        {
-          "confidence": 8.2,
-          "risk": "low",
-          "holding_days": "7-15",
-          "comment": "Fresh continuation setup with good structure and not extended. Sector momentum supports further upside.",
-          "avoid": false
-        }
-
-        Rules:
-        - confidence: 0-10 scale (6.5+ required to pass)
-        - risk: "low", "medium", or "high"
-        - holding_days: realistic range like "7-15" or "10-20"
-        - comment: 1-2 sentence explanation
-        - avoid: true if setup should be skipped (overcrowded, late-stage, high risk)
-      PROMPT
+      AI::UnifiedService.call(
+        prompt: combined_prompt,
+        provider: @config[:provider] || "ollama",
+        model: @model,
+        temperature: @temperature,
+      )
     end
 
     def parse_response(response)
@@ -382,12 +377,42 @@ module Screeners
       json_text = json_text.gsub(/```json\s*/, "").gsub(/```\s*$/, "") if json_text.include?("```")
 
       parsed = JSON.parse(json_text)
+
+      # Validate confidence range (0.0 to 10.0)
+      confidence = parsed["confidence"]&.to_f || 0
+      confidence = [[confidence, 0.0].max, 10.0].min
+
+      # Validate enum values
+      stage = parsed["stage"]
+      stage = "middle" unless %w[early middle late].include?(stage)
+
+      momentum_trend = parsed["momentum_trend"]
+      momentum_trend = "stable" unless %w[strengthening stable weakening].include?(momentum_trend)
+
+      price_position = parsed["price_position"]
+      price_position = "slightly_extended" unless %w[near_value slightly_extended extended].include?(price_position)
+
+      entry_timing = parsed["entry_timing"]
+      entry_timing = "wait" unless %w[immediate wait].include?(entry_timing)
+
+      continuation_bias = parsed["continuation_bias"]
+      continuation_bias = "medium" unless %w[high medium low].include?(continuation_bias)
+
       {
-        confidence: parsed["confidence"]&.to_f || 0,
-        risk: parsed["risk"]&.downcase || "medium",
-        holding_days: parsed["holding_days"] || "10-15",
-        comment: parsed["comment"] || "",
-        avoid: parsed["avoid"] == true,
+        confidence: confidence,
+        stage: stage,
+        momentum_trend: momentum_trend,
+        price_position: price_position,
+        entry_timing: entry_timing,
+        continuation_bias: continuation_bias,
+        holding_period_days: parsed["holding_period_days"] || "7-14",
+        primary_risk: parsed["primary_risk"] || "",
+        invalidate_if: parsed["invalidate_if"] || "",
+        # Legacy fields for backward compatibility
+        risk: map_risk_from_stage(stage, momentum_trend),
+        holding_days: parsed["holding_period_days"] || "7-14",
+        comment: parsed["primary_risk"] || "",
+        avoid: entry_timing == "wait" || confidence < 6.0,
       }
     rescue JSON::ParserError => e
       Rails.logger.error("[Screeners::AIEvaluator] Failed to parse JSON response: #{e.message}")
@@ -396,6 +421,28 @@ module Screeners
     rescue StandardError => e
       Rails.logger.error("[Screeners::AIEvaluator] Error parsing response: #{e.message}")
       nil
+    end
+
+    def map_risk_from_stage(stage, momentum_trend)
+      return "high" if stage == "late" || momentum_trend == "weakening"
+      return "low" if stage == "early" && momentum_trend == "strengthening"
+
+      "medium"
+    end
+
+    def find_screener_result(candidate)
+      if @screener_run_id && candidate[:instrument_id]
+        ScreenerResult.find_by(
+          screener_run_id: @screener_run_id,
+          instrument_id: candidate[:instrument_id],
+          screener_type: "swing",
+        )
+      elsif candidate[:instrument_id]
+        ScreenerResult.where(
+          instrument_id: candidate[:instrument_id],
+          screener_type: "swing",
+        ).order(analyzed_at: :desc).first
+      end
     end
 
     def rate_limit_exceeded?
@@ -514,8 +561,16 @@ module Screeners
       # Update with AI evaluation fields
       screener_result.update_columns(
         ai_confidence: candidate[:ai_confidence],
-        ai_risk: candidate[:ai_risk],
+        ai_stage: candidate[:ai_stage],
+        ai_momentum_trend: candidate[:ai_momentum_trend],
+        ai_price_position: candidate[:ai_price_position],
+        ai_entry_timing: candidate[:ai_entry_timing],
+        ai_continuation_bias: candidate[:ai_continuation_bias],
         ai_holding_days: candidate[:ai_holding_days],
+        ai_primary_risk: candidate[:ai_primary_risk],
+        ai_invalidate_if: candidate[:ai_invalidate_if],
+        # Legacy fields
+        ai_risk: candidate[:ai_risk],
         ai_comment: candidate[:ai_comment],
         ai_avoid: candidate[:ai_avoid] || false,
         ai_eval_id: candidate[:ai_eval_id],
