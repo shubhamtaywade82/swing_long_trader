@@ -179,7 +179,7 @@ The freshness checker uses **trading days** instead of calendar days:
 
 ### Setting Up Holiday Calendar
 
-1. **Fetch holidays from NSE**:
+1. **Fetch holidays from NSE** (parses HTML from NSE website):
    ```bash
    # Fetch for current year
    rails market_holidays:fetch
@@ -190,6 +190,11 @@ The freshness checker uses **trading days** instead of calendar days:
    # Fetch for multiple years
    rails market_holidays:fetch_multiple[2024,2025]
    ```
+
+   The fetcher automatically:
+   - Parses HTML tables from https://www.nseindia.com/resources/exchange-communication-holidays
+   - Falls back to NSE API if HTML parsing fails
+   - Falls back to common holidays if both fail
 
 2. **List stored holidays**:
    ```bash
