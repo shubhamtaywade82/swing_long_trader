@@ -14,6 +14,8 @@ class CandleSeriesRecord < ApplicationRecord
   validates :volume, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :timestamp, uniqueness: { scope: %i[instrument_id timeframe], case_sensitive: true }
 
+  default_scope { order(timestamp: :asc) }
+
   scope :for_instrument, ->(instrument) { where(instrument_id: instrument.id) }
   scope :for_timeframe, ->(timeframe) { where(timeframe: timeframe) }
   scope :recent, ->(limit = 100) { order(timestamp: :desc).limit(limit) }
