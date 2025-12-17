@@ -5,7 +5,7 @@
   <div class="card-body p-2">
     <div class="mb-2 d-flex justify-content-end">
       <div class="form-check form-check-inline">
-        <input class="form-check-input" type="checkbox" id="toggle-tech-details-lt-full" style="cursor: pointer;">
+        <input class="form-check-input" type="checkbox" id="toggle-tech-details-lt-full" style="cursor: pointer;" checked>
         <label class="form-check-label" for="toggle-tech-details-lt-full" style="cursor: pointer; font-size: 0.75rem;">
           Show Technical Details
         </label>
@@ -244,6 +244,13 @@
     // Toggle technical details
     const toggleCheckbox = document.getElementById('toggle-tech-details-lt-full');
     if (toggleCheckbox) {
+      // Show columns by default if checkbox is checked
+      const showByDefault = toggleCheckbox.checked;
+      const cols = table.querySelectorAll('.tech-col');
+      cols.forEach(col => {
+        col.style.display = showByDefault ? '' : 'none';
+      });
+
       toggleCheckbox.addEventListener('change', function() {
         const detailsVisible = this.checked;
         const cols = table.querySelectorAll('.tech-col');
