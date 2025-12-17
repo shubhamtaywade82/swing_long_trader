@@ -270,6 +270,259 @@ RSpec.describe Candles::WeeklyIngestor do
       end
     end
 
+    context "with incremental updates" do
+      it "fetches only new weekly candles when latest weekly candle exists" do
+        # Create existing weekly candle from 3 weeks ago
+        latest_week_start = 3.weeks.ago.beginning_of_week
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: "1W",
+               timestamp: latest_week_start,
+               open: 100.0,
+               high: 105.0,
+               low: 99.0,
+               close: 103.0,
+               volume: 7_000_000)
+
+        # Create daily candles for the new weeks (from 2 weeks ago to current week)
+        next_week_start = latest_week_start + 1.week
+        daily_dates = (next_week_start.to_date..(Time.zone.today - 1)).to_a
+
+        daily_dates.each do |date|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: date.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        initial_weekly_count = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").count
+
+        result = described_class.call(instruments: instruments, weeks_back: 52)
+
+        expect(result[:success]).to eq(1)
+        # Should have created new weekly candles for the new weeks
+        final_weekly_count = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").count
+        expect(final_weekly_count).to be > initial_weekly_count
+      end
+
+      it "skips instrument when already up-to-date" do
+        # Create weekly candle from current week
+        current_week_start = Time.zone.today.beginning_of_week
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: "1W",
+               timestamp: current_week_start,
+               open: 100.0,
+               high: 105.0,
+               low: 99.0,
+               close: 103.0,
+               volume: 7_000_000)
+
+        initial_weekly_count = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").count
+
+        result = described_class.call(instruments: instruments, weeks_back: 52)
+
+        expect(result[:success]).to eq(1)
+        expect(result[:skipped_up_to_date]).to eq(1)
+        # Should not create new weekly candles
+        expect(CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").count).to eq(initial_weekly_count)
+      end
+
+      it "uses minimum range when latest weekly candle is very old" do
+        # Create weekly candle from 60 weeks ago (older than weeks_back of 4)
+        old_week_start = 60.weeks.ago.beginning_of_week
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: "1W",
+               timestamp: old_week_start,
+               open: 100.0,
+               high: 105.0,
+               low: 99.0,
+               close: 103.0,
+               volume: 7_000_000)
+
+        weeks_back = 4
+        min_from_date = (Time.zone.today - 1) - (weeks_back * 7).days
+
+        # Create daily candles from min_from_date to today
+        daily_dates = (min_from_date..(Time.zone.today - 1)).to_a
+        daily_dates.each do |date|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: date.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        result = described_class.call(instruments: instruments, weeks_back: weeks_back)
+
+        expect(result[:success]).to eq(1)
+        # Should create weekly candles from min_from_date
+        weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").order(timestamp: :asc)
+        expect(weekly_candles.first.timestamp.to_date).to be <= min_from_date.beginning_of_week
+      end
+
+      it "fetches from next week when latest weekly candle is recent" do
+        # Create weekly candle from 2 weeks ago (recent, within weeks_back of 4)
+        recent_week_start = 2.weeks.ago.beginning_of_week
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: "1W",
+               timestamp: recent_week_start,
+               open: 100.0,
+               high: 105.0,
+               low: 99.0,
+               close: 103.0,
+               volume: 7_000_000)
+
+        weeks_back = 4
+        expected_from_date = (recent_week_start + 1.week).to_date
+
+        # Create daily candles from next week to today
+        daily_dates = (expected_from_date..(Time.zone.today - 1)).to_a
+        daily_dates.each do |date|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: date.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        initial_weekly_count = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").count
+
+        result = described_class.call(instruments: instruments, weeks_back: weeks_back)
+
+        expect(result[:success]).to eq(1)
+        # Should create weekly candles only for new weeks
+        final_weekly_count = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").count
+        expect(final_weekly_count).to be > initial_weekly_count
+      end
+
+      it "handles gap between latest weekly candle and today" do
+        # Create weekly candle from 10 weeks ago (gap exists)
+        gap_week_start = 10.weeks.ago.beginning_of_week
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: "1W",
+               timestamp: gap_week_start,
+               open: 100.0,
+               high: 105.0,
+               low: 99.0,
+               close: 103.0,
+               volume: 7_000_000)
+
+        weeks_back = 4
+        min_from_date = (Time.zone.today - 1) - (weeks_back * 7).days
+
+        # Create daily candles from min_from_date to today
+        daily_dates = (min_from_date..(Time.zone.today - 1)).to_a
+        daily_dates.each do |date|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: date.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        result = described_class.call(instruments: instruments, weeks_back: weeks_back)
+
+        expect(result[:success]).to eq(1)
+        # Should create weekly candles from min_from_date to fill the gap
+        weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").order(timestamp: :asc)
+        expect(weekly_candles.last.timestamp.to_date).to be >= (Time.zone.today - 1).beginning_of_week
+      end
+    end
+
+    context "with no existing weekly candles" do
+      it "fetches full range when no weekly candles exist" do
+        # Ensure no existing weekly candles
+        CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").delete_all
+
+        weeks_back = 4
+        min_from_date = (Time.zone.today - 1) - (weeks_back * 7).days
+
+        # Create daily candles for the full range
+        daily_dates = (min_from_date..(Time.zone.today - 1)).to_a
+        daily_dates.each do |date|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: date.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        result = described_class.call(instruments: instruments, weeks_back: weeks_back)
+
+        expect(result[:success]).to eq(1)
+        # Should create weekly candles for the full range
+        weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W")
+        expect(weekly_candles.count).to be > 0
+        expect(weekly_candles.minimum(:timestamp).to_date).to be <= min_from_date.beginning_of_week
+      end
+    end
+
+    context "with date range filtering" do
+      it "loads only daily candles in the specified date range" do
+        weeks_back = 2
+        min_from_date = (Time.zone.today - 1) - (weeks_back * 7).days
+
+        # Create daily candles both before and after the range
+        (min_from_date - 7.days..min_from_date - 1.day).each do |date|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: date.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        # Create daily candles within the range
+        (min_from_date..(Time.zone.today - 1)).each do |date|
+          create(:candle_series_record,
+                 instrument: instrument,
+                 timeframe: "1D",
+                 timestamp: date.beginning_of_day,
+                 open: 100.0,
+                 high: 105.0,
+                 low: 99.0,
+                 close: 103.0,
+                 volume: 1_000_000)
+        end
+
+        result = described_class.call(instruments: instruments, weeks_back: weeks_back)
+
+        expect(result[:success]).to eq(1)
+        # Should only create weekly candles from the specified range
+        weekly_candles = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").order(timestamp: :asc)
+        expect(weekly_candles.first.timestamp.to_date).to be >= min_from_date.beginning_of_week
+      end
+    end
+  end
+
     describe "private methods" do
       let(:service) { described_class.new(instruments: instruments, weeks_back: 1) }
 

@@ -37,43 +37,33 @@ RSpec.describe Candles::Ingestor, type: :service do
       expect(CandleSeriesRecord.count).to eq(2)
     end
 
-    it "skips duplicate candles", skip: "Duplicate detection query needs investigation - existing candle not found by range query" do
+    it "skips duplicate candles with same data" do
       # Create existing candle with normalized timestamp (beginning of day)
-      # Use a fixed time to avoid timezone issues
       base_time = Time.zone.parse("2024-12-10 14:30:00")
       normalized_timestamp = base_time.beginning_of_day
 
-      # Create the existing candle with exact values
-      existing_candle = create(:daily_candle,
+      # Create the existing candle
+      existing_candle = create(:candle_series_record,
                                instrument: instrument,
+                               timeframe: "1D",
                                timestamp: normalized_timestamp,
-                               close: 100.0,
                                open: 100.0,
                                high: 105.0,
                                low: 99.0,
+                               close: 103.0,
                                volume: 1_000_000)
 
-      # Reload to ensure we have the exact database values
-      existing_candle.reload
+      initial_count = CandleSeriesRecord.count
 
-      # Verify the candle exists and can be found by the query
-      day_start = normalized_timestamp.beginning_of_day
-      day_end = normalized_timestamp.end_of_day
-      found_candle = CandleSeriesRecord.where(
-        instrument_id: instrument.id,
-        timeframe: "1D",
-      ).where(timestamp: day_start..day_end).first
-      expect(found_candle).to be_present, "Expected to find existing candle with query. Day start: #{day_start}, Day end: #{day_end}, Existing timestamp: #{existing_candle.timestamp}"
-
-      # Use integer timestamp (as API would return) which will be normalized
+      # Use same timestamp (will be normalized to beginning_of_day) and same data
       candles_data = [
         {
-          timestamp: base_time.to_i, # Pass as integer timestamp, will be normalized to beginning_of_day
-          open: existing_candle.open, # Use exact same values from database
-          high: existing_candle.high,
-          low: existing_candle.low,
-          close: existing_candle.close,
-          volume: existing_candle.volume,
+          timestamp: base_time, # Will be normalized to beginning_of_day
+          open: 100.0,
+          high: 105.0,
+          low: 99.0,
+          close: 103.0,
+          volume: 1_000_000,
         },
       ]
 
@@ -84,8 +74,51 @@ RSpec.describe Candles::Ingestor, type: :service do
       )
 
       expect(result[:success]).to be true
-      expect(result[:skipped]).to eq(1), "Expected 1 skipped, got #{result.inspect}. Existing candle: #{existing_candle.inspect}"
-      expect(CandleSeriesRecord.count).to eq(1) # Still only 1
+      expect(result[:skipped]).to eq(1)
+      expect(CandleSeriesRecord.count).to eq(initial_count) # No new records
+    end
+
+    it "updates duplicate candles when data differs" do
+      # Create existing candle
+      base_time = Time.zone.parse("2024-12-10 14:30:00")
+      normalized_timestamp = base_time.beginning_of_day
+
+      existing_candle = create(:candle_series_record,
+                               instrument: instrument,
+                               timeframe: "1D",
+                               timestamp: normalized_timestamp,
+                               open: 100.0,
+                               high: 105.0,
+                               low: 99.0,
+                               close: 103.0,
+                               volume: 1_000_000)
+
+      initial_count = CandleSeriesRecord.count
+
+      # Same timestamp but different data
+      candles_data = [
+        {
+          timestamp: base_time,
+          open: 100.0,
+          high: 108.0, # Changed
+          low: 99.0,
+          close: 103.0,
+          volume: 1_200_000, # Changed
+        },
+      ]
+
+      result = described_class.upsert_candles(
+        instrument: instrument,
+        timeframe: "1D",
+        candles_data: candles_data,
+      )
+
+      expect(result[:success]).to be true
+      expect(result[:upserted]).to eq(1)
+      expect(CandleSeriesRecord.count).to eq(initial_count) # Still same count (updated, not created)
+      existing_candle.reload
+      expect(existing_candle.high).to eq(108.0)
+      expect(existing_candle.volume).to eq(1_200_000)
     end
 
     it "updates candle if data changed" do
