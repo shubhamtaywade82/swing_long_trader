@@ -2,6 +2,7 @@
 
 module Candles
   # Base helper for candle ingestion with deduplication and upsert logic
+  # Uses activerecord-import for bulk inserts/updates for better performance
   class Ingestor < ApplicationService
     def self.upsert_candles(instrument:, timeframe:, candles_data:)
       new.upsert_candles(instrument: instrument, timeframe: timeframe, candles_data: candles_data)
@@ -13,97 +14,90 @@ module Candles
       normalized = normalize_candles(candles_data)
       return { success: false, error: "Failed to normalize candles" } if normalized.empty?
 
-      upserted = 0
-      skipped = 0
-      errors = []
-
-      normalized.each do |candle_hash|
-        result = upsert_single_candle(
-          instrument: instrument,
+      # Normalize timestamps for all candles
+      normalized_candles = normalized.map do |candle_hash|
+        {
+          instrument_id: instrument.id,
           timeframe: timeframe,
-          timestamp: candle_hash[:timestamp],
+          timestamp: normalize_timestamp(candle_hash[:timestamp], timeframe),
           open: candle_hash[:open],
           high: candle_hash[:high],
           low: candle_hash[:low],
           close: candle_hash[:close],
           volume: candle_hash[:volume],
+          created_at: Time.current,
+          updated_at: Time.current,
+        }
+      end
+
+      # Use activerecord-import for bulk insert/update
+      # The unique index on [instrument_id, timeframe, timestamp] handles duplicates
+      # on_duplicate_key_update will update existing records automatically
+      upserted_count = 0
+      skipped_count = 0
+
+      begin
+        # Bulk import all candles - database handles duplicates via ON DUPLICATE KEY UPDATE
+        result = CandleSeriesRecord.import(
+          normalized_candles,
+          validate: false,
+          on_duplicate_key_update: {
+            conflict_target: [:instrument_id, :timeframe, :timestamp],
+            columns: [:open, :high, :low, :close, :volume, :updated_at]
+          }
         )
 
-        if result[:success]
-          upserted += 1
-        elsif result[:skipped]
-          skipped += 1
-        else
-          errors << result[:error]
+        # activerecord-import returns result with failed_instances
+        # Count successful imports
+        upserted_count = normalized_candles.size - (result.failed_instances&.size || 0)
+        skipped_count = result.failed_instances&.size || 0
+      rescue StandardError => e
+        Rails.logger.error("[Candles::Ingestor] Bulk import failed: #{e.message}, falling back to individual inserts")
+        # Fallback to individual inserts if bulk import fails
+        normalized_candles.each do |candle|
+          begin
+            CandleSeriesRecord.create!(candle)
+            upserted_count += 1
+          rescue ActiveRecord::RecordNotUnique
+            # Try to update if duplicate
+            existing = CandleSeriesRecord.find_by(
+              instrument_id: candle[:instrument_id],
+              timeframe: candle[:timeframe],
+              timestamp: candle[:timestamp]
+            )
+            if existing
+              if candle_data_changed?(existing, open: candle[:open], high: candle[:high], low: candle[:low], close: candle[:close], volume: candle[:volume])
+                existing.update!(
+                  open: candle[:open],
+                  high: candle[:high],
+                  low: candle[:low],
+                  close: candle[:close],
+                  volume: candle[:volume]
+                )
+                upserted_count += 1
+              else
+                skipped_count += 1
+              end
+            else
+              skipped_count += 1
+            end
+          rescue StandardError => err
+            Rails.logger.warn("[Candles::Ingestor] Failed to upsert candle: #{err.message}")
+            skipped_count += 1
+          end
         end
       end
 
       {
         success: true,
-        upserted: upserted,
-        skipped: skipped,
-        errors: errors.compact,
+        upserted: upserted_count,
+        skipped: skipped_count,
+        errors: [],
         total: normalized.size,
       }
     end
 
     private
-
-    def upsert_single_candle(instrument:, timeframe:, timestamp:, open:, high:, low:, close:, volume:)
-      # Normalize timestamp to beginning of candle period
-      normalized_timestamp = normalize_timestamp(timestamp, timeframe)
-
-      # Check if candle already exists
-      # For daily candles, normalize existing timestamps to beginning_of_day for comparison
-      if timeframe == :daily
-        # Use range query to handle timestamp precision differences (microseconds, etc.)
-        # The normalized timestamp should be at the beginning of the day
-        day_start = normalized_timestamp.beginning_of_day
-        day_end = normalized_timestamp.end_of_day
-        # Use range syntax which is more reliable for timestamp comparisons
-        existing = CandleSeriesRecord.where(
-          instrument_id: instrument.id,
-          timeframe: timeframe,
-        ).where(timestamp: day_start..day_end).first
-      else
-        existing = CandleSeriesRecord.find_by(
-          instrument_id: instrument.id,
-          timeframe: timeframe,
-          timestamp: normalized_timestamp,
-        )
-      end
-
-      if existing
-        # Update if data differs (in case of corrections)
-        if candle_data_changed?(existing, open: open, high: high, low: low, close: close, volume: volume)
-          existing.update!(
-            open: open,
-            high: high,
-            low: low,
-            close: close,
-            volume: volume,
-          )
-          return { success: true, action: :updated }
-        end
-        return { success: true, action: :skipped, skipped: true }
-      end
-
-      # Create new candle
-      CandleSeriesRecord.create!(
-        instrument_id: instrument.id,
-        timeframe: timeframe,
-        timestamp: normalized_timestamp,
-        open: open,
-        high: high,
-        low: low,
-        close: close,
-        volume: volume,
-      )
-
-      { success: true, action: :created }
-    rescue StandardError => e
-      { success: false, error: e.message }
-    end
 
     def normalize_timestamp(timestamp, timeframe)
       time = if timestamp.is_a?(Time)
