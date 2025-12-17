@@ -15,7 +15,7 @@ module CandleLoader
   def load_daily_candles(limit: nil, from_date: nil, to_date: nil)
     Candles::Loader.load_for_instrument(
       instrument: self,
-      timeframe: "1D",
+      timeframe: :daily,
       limit: limit,
       from_date: from_date,
       to_date: to_date,
@@ -30,7 +30,7 @@ module CandleLoader
   def load_weekly_candles(limit: nil, from_date: nil, to_date: nil)
     Candles::Loader.load_for_instrument(
       instrument: self,
-      timeframe: "1W",
+      timeframe: :weekly,
       limit: limit,
       from_date: from_date,
       to_date: to_date,

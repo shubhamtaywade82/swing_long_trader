@@ -21,7 +21,7 @@ module Screeners
       # Load daily candles (last 20 to ensure we have enough for indicators)
       daily_series = Candles::Loader.load_latest(
         instrument: @instrument,
-        timeframe: "1D",
+        timeframe: :daily,
         count: 20,
       )
 

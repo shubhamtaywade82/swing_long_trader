@@ -22,11 +22,11 @@ module Screeners
       # Ensure candles are fresh before screening
       # Check both daily and weekly candles (weekly depends on daily)
       daily_freshness = Candles::FreshnessChecker.ensure_fresh(
-        timeframe: "1D",
+        timeframe: :daily,
         auto_ingest: !Rails.env.test?,
       )
       weekly_freshness = Candles::FreshnessChecker.ensure_fresh(
-        timeframe: "1W",
+        timeframe: :weekly,
         auto_ingest: !Rails.env.test?,
       )
       unless daily_freshness[:fresh] && weekly_freshness[:fresh]

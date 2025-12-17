@@ -40,7 +40,7 @@ RSpec.describe MonitorJob do
 
     it "reports healthy when fresh candles exist" do
       instrument = create(:instrument)
-      create(:candle_series_record, instrument: instrument, timeframe: "1D", timestamp: Time.current)
+      create(:candle_series_record, instrument: instrument, timeframe: :daily, timestamp: Time.current)
 
       result = described_class.new.send(:check_candle_freshness)
       expect(result[:healthy]).to be true
@@ -49,9 +49,9 @@ RSpec.describe MonitorJob do
     it "prioritizes recent candles over old historical data" do
       instrument = create(:instrument)
       # Create old historical candle (805 days ago)
-      create(:candle_series_record, instrument: instrument, timeframe: "1D", timestamp: 805.days.ago)
+      create(:candle_series_record, instrument: instrument, timeframe: :daily, timestamp: 805.days.ago)
       # Create recent candle (2 days ago)
-      create(:candle_series_record, instrument: instrument, timeframe: "1D", timestamp: 2.days.ago)
+      create(:candle_series_record, instrument: instrument, timeframe: :daily, timestamp: 2.days.ago)
 
       result = described_class.new.send(:check_candle_freshness)
       # Should use the recent candle (2 days old), not the old one (805 days old)

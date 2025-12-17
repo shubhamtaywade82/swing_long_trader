@@ -25,7 +25,7 @@ module Screeners
       # Ensure candles are fresh before screening
       # This checks if daily candles are up-to-date and triggers ingestion if stale
       freshness_result = Candles::FreshnessChecker.ensure_fresh(
-        timeframe: "1D",
+        timeframe: :daily,
         auto_ingest: !Rails.env.test?, # Auto-ingest in production, skip in tests
       )
       unless freshness_result[:fresh]
@@ -233,7 +233,7 @@ module Screeners
       # Use distinct to avoid duplicates from joins
       # NO LIMIT - Screen the complete universe
       base_scope.joins(:candle_series_records)
-                .where(candle_series_records: { timeframe: "1D" })
+                .where(candle_series_records: { timeframe: :daily })
                 .distinct
                 .includes(:candle_series_records) # Eager load to reduce queries
     end
@@ -246,7 +246,7 @@ module Screeners
 
       # Load all daily candles in one query
       candle_records = CandleSeriesRecord
-                       .for_timeframe("1D")
+                       .for_timeframe(:daily)
                        .where(instrument_id: instrument_ids)
                        .recent(100) # Get last 100 candles per instrument
                        .order(instrument_id: :asc, timestamp: :desc)

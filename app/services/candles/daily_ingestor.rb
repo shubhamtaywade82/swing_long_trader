@@ -89,7 +89,7 @@ module Candles
       to_date = Time.zone.today - 1 # Yesterday (today's data may not be complete)
 
       # Check for existing candles to optimize date range
-      latest_candle = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1D")
+      latest_candle = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: :daily)
 
       if latest_candle
         # Start from the day after the latest candle (optimization: only fetch new data)
@@ -150,7 +150,7 @@ module Candles
       # Upsert candles to database (will skip existing ones)
       result = Ingestor.upsert_candles(
         instrument: instrument,
-        timeframe: "1D",
+        timeframe: :daily,
         candles_data: candles_data,
       )
 

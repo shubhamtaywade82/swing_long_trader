@@ -15,7 +15,7 @@ class LongTermHolding < ApplicationRecord
 
     # Get latest price from candle data
     latest_candle = CandleSeriesRecord.where(instrument_id: instrument.id)
-                                       .where(timeframe: "1D")
+                                       .where(timeframe: :daily)
                                        .order(timestamp: :desc)
                                        .first
 

@@ -8,6 +8,12 @@ class CandleSeriesRecord < ApplicationRecord
 
   belongs_to :instrument
 
+  enum timeframe: {
+    daily: 0,
+    weekly: 1,
+    hourly: 2
+  }
+
   validates :timeframe, presence: true
   validates :timestamp, presence: true
   validates :open, :high, :low, :close, presence: true, numericality: true
@@ -22,7 +28,30 @@ class CandleSeriesRecord < ApplicationRecord
   default_scope { order(timestamp: :asc) }
 
   scope :for_instrument, ->(instrument) { where(instrument_id: instrument.id) }
-  scope :for_timeframe, ->(timeframe) { where(timeframe: timeframe) }
+  scope :for_timeframe, ->(timeframe) do
+    # Handle both enum symbols and legacy string values
+    enum_value = if timeframe.is_a?(Symbol)
+                   timeframe
+                 else
+                   timeframe_from_string(timeframe)
+                 end
+    where(timeframe: enum_value)
+  end
+
+  # Helper method to convert legacy string values to enum
+  def self.timeframe_from_string(value)
+    case value.to_s.upcase
+    when "1D", "DAILY"
+      :daily
+    when "1W", "WEEKLY"
+      :weekly
+    when "1H", "1HOUR", "60", "HOURLY"
+      :hourly
+    else
+      # Default to daily if unknown
+      :daily
+    end
+  end
   scope :recent, ->(limit = 100) { order(timestamp: :desc).limit(limit) }
   # Note: This scope is redundant with default_scope but kept for explicit clarity
   # when reading code that uses .ordered
@@ -34,9 +63,11 @@ class CandleSeriesRecord < ApplicationRecord
   }
 
   # Get latest candle for an instrument and timeframe
+  # Accepts both enum symbols (:daily, :weekly, :hourly) and legacy strings ("1D", "1W", "1H")
   def self.latest_for(instrument:, timeframe:)
+    enum_value = timeframe.is_a?(Symbol) ? timeframe : timeframe_from_string(timeframe)
     for_instrument(instrument)
-      .for_timeframe(timeframe)
+      .for_timeframe(enum_value)
       .order(timestamp: :desc)
       .first
   end

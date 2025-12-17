@@ -13,7 +13,7 @@ module Candles
     # Default: 80% (allows for some instruments to be missing data)
     DEFAULT_MIN_FRESHNESS_PERCENTAGE = 80.0
 
-    def self.ensure_fresh(timeframe: "1D", max_trading_days: nil, min_freshness_percentage: nil, auto_ingest: true)
+    def self.ensure_fresh(timeframe: :daily, max_trading_days: nil, min_freshness_percentage: nil, auto_ingest: true)
       new(
         timeframe: timeframe,
         max_trading_days: max_trading_days,
@@ -22,7 +22,7 @@ module Candles
       ).ensure_fresh
     end
 
-    def initialize(timeframe: "1D", max_trading_days: nil, min_freshness_percentage: nil, auto_ingest: true)
+    def initialize(timeframe: :daily, max_trading_days: nil, min_freshness_percentage: nil, auto_ingest: true)
       @timeframe = timeframe
       @max_trading_days = max_trading_days || DEFAULT_MAX_TRADING_DAYS
       @min_freshness_percentage = min_freshness_percentage || DEFAULT_MIN_FRESHNESS_PERCENTAGE
@@ -96,7 +96,7 @@ module Candles
       }
     end
 
-    def self.check_freshness(timeframe: "1D", max_trading_days: nil, min_freshness_percentage: nil, auto_ingest: false)
+    def self.check_freshness(timeframe: :daily, max_trading_days: nil, min_freshness_percentage: nil, auto_ingest: false)
       new(
         timeframe: timeframe,
         max_trading_days: max_trading_days,
@@ -149,7 +149,7 @@ module Candles
 
     def trigger_ingestion
       case @timeframe
-      when "1D"
+      when :daily, "1D"
         Rails.logger.info("[Candles::FreshnessChecker] Triggering daily candle ingestion...")
         result = DailyIngestor.call
         {
@@ -157,7 +157,7 @@ module Candles
           processed: result[:processed],
           total_candles: result[:total_candles],
         }
-      when "1W"
+      when :weekly, "1W"
         Rails.logger.info("[Candles::FreshnessChecker] Triggering weekly candle ingestion...")
         result = WeeklyIngestor.call
         {
