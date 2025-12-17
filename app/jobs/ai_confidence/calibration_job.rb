@@ -20,7 +20,7 @@ module AIConfidence
       if total_outcomes < min_outcomes
         Rails.logger.warn(
           "[AIConfidence::CalibrationJob] Insufficient data: #{total_outcomes} outcomes " \
-          "(need #{min_outcomes})"
+          "(need #{min_outcomes})",
         )
         return {
           success: false,
@@ -38,7 +38,7 @@ module AIConfidence
           "[AIConfidence::CalibrationJob] Calibration complete: " \
           "Win rate: #{result.dig(:calibration, :overall_win_rate)}%, " \
           "Expectancy: #{result.dig(:calibration, :overall_expectancy)}, " \
-          "Correlation: #{result.dig(:calibration, :confidence_correlation)}"
+          "Correlation: #{result.dig(:calibration, :confidence_correlation)}",
         )
 
         # Generate threshold optimization recommendations
@@ -83,7 +83,8 @@ module AIConfidence
         end
       end
 
-      Telegram::Notifier.send_message(message, parse_mode: "HTML")
+      # Calibration results are system-related, use System Bot
+      Telegram::Notifier.send_message(message, bot_type: :system)
     rescue StandardError => e
       Rails.logger.error("[AIConfidence::CalibrationJob] Failed to send summary: #{e.message}")
     end

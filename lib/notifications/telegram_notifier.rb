@@ -118,10 +118,12 @@ module Notifications
 
     private
 
-    def send_message(text)
+    def send_message(text, bot_type: :trading)
       return unless enabled? && text.present?
 
-      ::TelegramNotifier.send_message(text, parse_mode: "HTML")
+      # This wrapper is for trading-related notifications (entry, exit, PnL)
+      # Use Trading Bot by default
+      ::TelegramNotifier.send_message(text, bot_type: bot_type, parse_mode: "HTML")
     end
 
     def format_entry_message(tracker, entry_data)

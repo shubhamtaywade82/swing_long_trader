@@ -66,8 +66,8 @@ module DhanhqErrorHandler
         **Note:** This notification will be sent again after #{NOTIFICATION_COOLDOWN.inspect} if issue persists.
       MSG
 
-      # Send notification
-      result = TelegramNotifier.send_message(message, parse_mode: "Markdown")
+      # Send notification (use System Bot for error alerts)
+      result = TelegramNotifier.send_message(message, bot_type: :system, parse_mode: "Markdown")
       if result
         Rails.cache.write(cache_key, Time.current, expires_in: NOTIFICATION_COOLDOWN)
         Rails.logger.warn("[DhanhqErrorHandler] Token expiry notification sent to Telegram")

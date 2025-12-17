@@ -28,7 +28,9 @@ class NotifierJob < ApplicationJob
     when :portfolio_snapshot
       Telegram::Notifier.send_portfolio_snapshot(payload[:portfolio] || {})
     when :message
-      Telegram::Notifier.send_message(payload[:message] || "")
+      # Generic message - default to System Bot, but allow override via payload
+      bot_type = payload[:bot_type]&.to_sym || :system
+      Telegram::Notifier.send_message(payload[:message] || "", bot_type: bot_type)
     else
       Rails.logger.warn("[NotifierJob] Unknown notification type: #{notification_type}")
     end

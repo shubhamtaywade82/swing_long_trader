@@ -45,13 +45,13 @@ class ApplicationJob < ActiveJob::Base
     log_error("Job failed: #{self.class.name} - #{error.class}: #{error.message}")
     log_error("Backtrace: #{error.backtrace.first(5).join("\n")}")
 
-    # Alert to Telegram if enabled
-    if TelegramNotifier.enabled?
+    # Alert to Telegram if enabled (use System Bot for job failures)
+    if TelegramNotifier.enabled?(bot_type: :system)
       message = "❌ Job Failed: #{self.class.name}\n\n" \
                 "Error: #{error.class}\n" \
                 "Message: #{error.message}\n\n" \
                 "Retries remaining: #{executions}"
-      TelegramNotifier.send_message(message)
+      TelegramNotifier.send_message(message, bot_type: :system)
     end
 
     # Re-raise to trigger retry mechanism

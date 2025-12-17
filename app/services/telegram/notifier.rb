@@ -26,6 +26,10 @@ module Telegram
       new.send_error_alert(error_message, context: context)
     end
 
+    def self.send_message(message, bot_type: :system, parse_mode: "HTML")
+      new.send_message(message, bot_type: bot_type, parse_mode: parse_mode)
+    end
+
     def self.enabled?
       ::TelegramNotifier.enabled?
     end
@@ -90,11 +94,11 @@ module Telegram
       ::TelegramNotifier.enabled?(bot_type: bot_type)
     end
 
-    def send_message(text, bot_type: nil)
+    def send_message(text, bot_type: nil, parse_mode: "HTML")
       return unless text.present?
       return unless enabled?(bot_type)
 
-      ::TelegramNotifier.send_message(text, bot_type: bot_type, parse_mode: "HTML")
+      ::TelegramNotifier.send_message(text, bot_type: bot_type, parse_mode: parse_mode)
     end
   end
 end
