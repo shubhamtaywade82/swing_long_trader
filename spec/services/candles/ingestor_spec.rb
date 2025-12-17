@@ -28,7 +28,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
       result = described_class.upsert_candles(
         instrument: instrument,
-        timeframe: "1D",
+        timeframe: :daily,
         candles_data: candles_data,
       )
 
@@ -45,7 +45,7 @@ RSpec.describe Candles::Ingestor, type: :service do
       # Create the existing candle
       existing_candle = create(:candle_series_record,
                                instrument: instrument,
-                               timeframe: "1D",
+                               timeframe: :daily,
                                timestamp: normalized_timestamp,
                                open: 100.0,
                                high: 105.0,
@@ -69,7 +69,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
       result = described_class.upsert_candles(
         instrument: instrument,
-        timeframe: "1D",
+        timeframe: :daily,
         candles_data: candles_data,
       )
 
@@ -85,7 +85,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
       existing_candle = create(:candle_series_record,
                                instrument: instrument,
-                               timeframe: "1D",
+                               timeframe: :daily,
                                timestamp: normalized_timestamp,
                                open: 100.0,
                                high: 105.0,
@@ -109,7 +109,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
       result = described_class.upsert_candles(
         instrument: instrument,
-        timeframe: "1D",
+        timeframe: :daily,
         candles_data: candles_data,
       )
 
@@ -138,7 +138,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
       result = described_class.upsert_candles(
         instrument: instrument,
-        timeframe: "1D",
+        timeframe: :daily,
         candles_data: candles_data,
       )
 
@@ -151,7 +151,7 @@ RSpec.describe Candles::Ingestor, type: :service do
       it "returns error" do
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: [],
         )
 
@@ -164,7 +164,7 @@ RSpec.describe Candles::Ingestor, type: :service do
       it "returns error" do
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: nil,
         )
 
@@ -179,7 +179,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: candles_data,
         )
 
@@ -207,7 +207,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: candles_data,
         )
 
@@ -231,7 +231,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1W",
+          timeframe: :weekly,
           candles_data: candles_data,
         )
 
@@ -271,7 +271,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: candles_data,
         )
 
@@ -296,7 +296,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: candles_data,
         )
 
@@ -318,7 +318,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: candles_data,
         )
 
@@ -340,7 +340,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: candles_data,
         )
 
@@ -364,7 +364,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: candles_data,
         )
 
@@ -387,7 +387,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: candles_data,
         )
 
@@ -409,7 +409,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: candles_data,
         )
 
@@ -442,7 +442,7 @@ RSpec.describe Candles::Ingestor, type: :service do
 
         result = described_class.upsert_candles(
           instrument: instrument,
-          timeframe: "1D",
+          timeframe: :daily,
           candles_data: candles_data,
         )
 
@@ -484,21 +484,21 @@ RSpec.describe Candles::Ingestor, type: :service do
     describe "#normalize_timestamp" do
       it "normalizes to beginning of day for daily timeframe" do
         timestamp = Time.zone.parse("2024-12-10 14:30:00")
-        normalized = service.send(:normalize_timestamp, timestamp, "1D")
+        normalized = service.send(:normalize_timestamp, timestamp, :daily)
 
         expect(normalized).to eq(timestamp.beginning_of_day)
       end
 
       it "handles integer timestamps" do
         timestamp = Time.current.to_i
-        normalized = service.send(:normalize_timestamp, timestamp, "1D")
+        normalized = service.send(:normalize_timestamp, timestamp, :daily)
 
         expect(normalized).to be_a(Time)
       end
 
       it "handles string timestamps" do
         timestamp = Time.current.iso8601
-        normalized = service.send(:normalize_timestamp, timestamp, "1D")
+        normalized = service.send(:normalize_timestamp, timestamp, :daily)
 
         expect(normalized).to be_a(Time)
       end

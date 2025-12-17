@@ -14,7 +14,7 @@ namespace :test do
       end
 
       puts "📊 Testing with instrument: #{instrument.symbol_name} (#{instrument.security_id})"
-      puts "   Current candles in DB: #{CandleSeriesRecord.where(instrument: instrument, timeframe: '1D').count}\n"
+      puts "   Current candles in DB: #{CandleSeriesRecord.where(instrument: instrument).daily.count}\n"
 
       # Test daily ingestor
       puts "🔄 Running DailyIngestor with 30 days back..."
@@ -31,11 +31,11 @@ namespace :test do
       puts "   Duration: #{result[:duration_minutes]&.round(2)} minutes"
 
       # Check candles in DB
-      candle_count = CandleSeriesRecord.where(instrument: instrument, timeframe: "1D").count
+      candle_count = CandleSeriesRecord.where(instrument: instrument).daily.count
       puts "\n📈 Candles in database: #{candle_count}"
 
       if candle_count > 0
-        latest_candle = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1D")
+        latest_candle = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: :daily)
         if latest_candle
           puts "   Latest candle date: #{latest_candle.timestamp.to_date}"
           puts "   Latest close: ₹#{latest_candle.close}"
@@ -57,20 +57,19 @@ namespace :test do
       end
 
       # Ensure we have daily candles first
-      daily_count = CandleSeriesRecord.where(instrument: instrument, timeframe: "1D").count
+      daily_count = CandleSeriesRecord.where(instrument: instrument).daily.count
       if daily_count < 7
         puts "⚠️  Not enough daily candles (#{daily_count}). Fetching daily candles first..."
         Candles::DailyIngestor.call(
           instruments: Instrument.where(id: instrument.id),
           days_back: 30,
         )
-        daily_count = CandleSeriesRecord.where(instrument: instrument, timeframe: "1D").count
+        daily_count = CandleSeriesRecord.where(instrument: instrument).daily.count
       end
 
       puts "📊 Testing with instrument: #{instrument.symbol_name} (#{instrument.security_id})"
       puts "   Daily candles available: #{daily_count}"
-      puts "   Current weekly candles in DB: #{CandleSeriesRecord.where(instrument: instrument,
-                                                                        timeframe: '1W').count}\n"
+      puts "   Current weekly candles in DB: #{CandleSeriesRecord.where(instrument: instrument).weekly.count}\n"
 
       # Test weekly ingestor
       puts "🔄 Running WeeklyIngestor with 4 weeks back..."
@@ -87,11 +86,11 @@ namespace :test do
       puts "   Duration: #{result[:duration_minutes]&.round(2)} minutes"
 
       # Check candles in DB
-      weekly_count = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W").count
+      weekly_count = CandleSeriesRecord.where(instrument: instrument).weekly.count
       puts "\n📈 Weekly candles in database: #{weekly_count}"
 
       if weekly_count > 0
-        latest_weekly = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1W")
+        latest_weekly = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: :weekly)
         if latest_weekly
           puts "   Latest weekly candle date: #{latest_weekly.timestamp.to_date}"
           puts "   Latest close: ₹#{latest_weekly.close}"
@@ -108,7 +107,7 @@ namespace :test do
       # Test daily freshness
       puts "🔄 Checking daily candle freshness..."
       daily_result = Candles::FreshnessChecker.ensure_fresh(
-        timeframe: "1D",
+        timeframe: :daily,
         auto_ingest: false, # Don't auto-ingest in test
       )
 
@@ -121,8 +120,8 @@ namespace :test do
 
       # Diagnostic: Check how many instruments have candles at all
       instruments_with_candles = Instrument.where(segment: %w[equity index])
-                                           .joins("INNER JOIN candle_series ON candle_series.instrument_id = instruments.id")
-                                           .where("candle_series.timeframe = ?", "1D")
+                                           .joins(:candle_series_records)
+                                           .merge(CandleSeriesRecord.daily)
                                            .distinct
                                            .count
       puts "   Instruments with candles: #{instruments_with_candles}/#{daily_result[:total_count]}"
@@ -130,13 +129,13 @@ namespace :test do
       # Show sample of latest candle dates
       if instruments_with_candles.positive?
         sample_instruments = Instrument.where(segment: %w[equity index])
-                                       .joins("INNER JOIN candle_series ON candle_series.instrument_id = instruments.id")
-                                       .where("candle_series.timeframe = ?", "1D")
+                                       .joins(:candle_series_records)
+                                       .merge(CandleSeriesRecord.daily)
                                        .distinct
                                        .limit(5)
         puts "   Sample latest candle dates:"
         sample_instruments.each do |instrument|
-          latest = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1D")
+          latest = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: :daily)
           next unless latest
 
           is_fresh = latest.timestamp.to_date >= daily_result[:cutoff_date]
@@ -150,7 +149,7 @@ namespace :test do
       # Test weekly freshness
       puts "\n🔄 Checking weekly candle freshness..."
       weekly_result = Candles::FreshnessChecker.ensure_fresh(
-        timeframe: "1W",
+        timeframe: :weekly,
         auto_ingest: false, # Don't auto-ingest in test
       )
 
@@ -163,8 +162,8 @@ namespace :test do
 
       # Diagnostic: Check how many instruments have candles at all
       instruments_with_weekly = Instrument.where(segment: %w[equity index])
-                                          .joins("INNER JOIN candle_series ON candle_series.instrument_id = instruments.id")
-                                          .where("candle_series.timeframe = ?", "1W")
+                                          .joins(:candle_series_records)
+                                          .merge(CandleSeriesRecord.weekly)
                                           .distinct
                                           .count
       puts "   Instruments with candles: #{instruments_with_weekly}/#{weekly_result[:total_count]}"
@@ -172,13 +171,13 @@ namespace :test do
       # Show sample of latest candle dates
       if instruments_with_weekly.positive?
         sample_instruments = Instrument.where(segment: %w[equity index])
-                                       .joins("INNER JOIN candle_series ON candle_series.instrument_id = instruments.id")
-                                       .where("candle_series.timeframe = ?", "1W")
+                                       .joins(:candle_series_records)
+                                       .merge(CandleSeriesRecord.weekly)
                                        .distinct
                                        .limit(5)
         puts "   Sample latest candle dates:"
         sample_instruments.each do |instrument|
-          latest = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1W")
+          latest = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: :weekly)
           next unless latest
 
           is_fresh = latest.timestamp.to_date >= weekly_result[:cutoff_date]

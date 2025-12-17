@@ -15,7 +15,7 @@ class CandleSeriesRecord < ApplicationRecord
   enum :timeframe, {
     daily: 0,
     weekly: 1,
-    hourly: 2
+    hourly: 2,
   }
 
   validates :timeframe, presence: true
@@ -33,7 +33,7 @@ class CandleSeriesRecord < ApplicationRecord
 
   scope :for_instrument, ->(instrument) { where(instrument_id: instrument.id) }
   scope :recent, ->(limit = 100) { order(timestamp: :desc).limit(limit) }
-  # Note: This scope is redundant with default_scope but kept for explicit clarity
+  # NOTE: This scope is redundant with default_scope but kept for explicit clarity
   # when reading code that uses .ordered
   scope :ordered, -> { order(timestamp: :asc) }
 
@@ -58,7 +58,6 @@ class CandleSeriesRecord < ApplicationRecord
       .public_send(timeframe)
       .last
   end
-
 
   # Convert to CandleSeries format (for compatibility with existing code)
   def to_candle
