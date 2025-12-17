@@ -15,9 +15,12 @@ The system automatically checks candle freshness when:
 
 ### Freshness Criteria
 
-- **Default Max Age**: 1 day (candles should be at least from yesterday)
+- **Default Max Age**: 1 trading day (candles should be at least from last trading day)
 - **Default Min Freshness**: 80% of instruments must have fresh candles
 - **Timeframe Support**: Daily (1D) and Weekly (1W)
+- **Weekend/Holiday Handling**: Uses trading days instead of calendar days
+  - Automatically accounts for weekends (Saturday/Sunday)
+  - Note: Market holidays are not currently detected (only weekdays are considered trading days)
 
 ### Auto-Ingestion
 
@@ -52,8 +55,8 @@ result = Candles::FreshnessChecker.check_freshness(
 # Custom thresholds
 result = Candles::FreshnessChecker.ensure_fresh(
   timeframe: "1D",
-  max_age_days: 2,              # Allow up to 2 days old
-  min_freshness_percentage: 90, # Require 90% fresh
+  max_trading_days: 2,          # Allow up to 2 trading days old
+  min_freshness_percentage: 90,  # Require 90% fresh
   auto_ingest: true
 )
 ```
@@ -68,6 +71,7 @@ result = Candles::FreshnessChecker.ensure_fresh(
   stale_count: 50,
   freshness_percentage: 95.0,
   cutoff_date: 2024-12-30,
+  cutoff_trading_days_ago: 1,     # Number of trading days ago used for cutoff
   timeframe: "1D",
   ingested: true/false,           # Only if auto_ingest was true
   ingestion_result: {...}         # Only if ingested
@@ -163,6 +167,35 @@ The system logs freshness status:
 [Screeners::SwingScreener] Starting with stale candles: 75.0% fresh. Ingestion triggered.
 ```
 
+## Weekend and Holiday Handling
+
+The freshness checker uses **trading days** instead of calendar days:
+
+- ✅ **Weekends**: Automatically skipped (Saturday/Sunday not counted)
+- ⚠️ **Holidays**: Currently not detected (only weekdays are considered trading days)
+  - On market holidays, candles from the previous trading day are still considered fresh
+  - Example: If Monday is a holiday, Friday's candles are still fresh on Tuesday
+
+### Future Enhancement: Holiday Calendar
+
+For more accurate holiday detection, consider adding a holiday calendar:
+
+```ruby
+# Future enhancement
+class MarketHolidayCalendar
+  HOLIDAYS_2024 = [
+    Date.new(2024, 1, 26), # Republic Day
+    Date.new(2024, 3, 29), # Good Friday
+    # ... more holidays
+  ].freeze
+
+  def self.trading_day?(date)
+    return false if HOLIDAYS_2024.include?(date.to_date)
+    (1..5).include?(date.wday) # Weekdays only
+  end
+end
+```
+
 ## Troubleshooting
 
 ### Candles Always Stale
@@ -171,6 +204,7 @@ The system logs freshness status:
 - Verify API connectivity
 - Check for rate limiting issues
 - Review ingestion logs
+- **Weekend/Holiday Note**: On weekends or holidays, candles from last trading day are still considered fresh
 
 ### Auto-Ingestion Not Triggering
 

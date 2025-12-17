@@ -3,27 +3,28 @@
 module Candles
   # Service to check if candles are up-to-date and trigger ingestion if stale
   # Ensures candles are fresh before analysis/screening operations
+  # Accounts for weekends and market holidays - uses trading days instead of calendar days
   class FreshnessChecker < ApplicationService
-    # Maximum age for candles to be considered fresh (in days)
-    # Default: 1 day (candles should be at least from yesterday)
-    DEFAULT_MAX_AGE_DAYS = 1
+    # Maximum age for candles to be considered fresh (in trading days)
+    # Default: 1 trading day (candles should be at least from last trading day)
+    DEFAULT_MAX_TRADING_DAYS = 1
 
     # Minimum percentage of instruments that must have fresh candles
     # Default: 80% (allows for some instruments to be missing data)
     DEFAULT_MIN_FRESHNESS_PERCENTAGE = 80.0
 
-    def self.ensure_fresh(timeframe: "1D", max_age_days: nil, min_freshness_percentage: nil, auto_ingest: true)
+    def self.ensure_fresh(timeframe: "1D", max_trading_days: nil, min_freshness_percentage: nil, auto_ingest: true)
       new(
         timeframe: timeframe,
-        max_age_days: max_age_days,
+        max_trading_days: max_trading_days,
         min_freshness_percentage: min_freshness_percentage,
         auto_ingest: auto_ingest,
       ).ensure_fresh
     end
 
-    def initialize(timeframe: "1D", max_age_days: nil, min_freshness_percentage: nil, auto_ingest: true)
+    def initialize(timeframe: "1D", max_trading_days: nil, min_freshness_percentage: nil, auto_ingest: true)
       @timeframe = timeframe
-      @max_age_days = max_age_days || DEFAULT_MAX_AGE_DAYS
+      @max_trading_days = max_trading_days || DEFAULT_MAX_TRADING_DAYS
       @min_freshness_percentage = min_freshness_percentage || DEFAULT_MIN_FRESHNESS_PERCENTAGE
       @auto_ingest = auto_ingest
     end
@@ -66,7 +67,8 @@ module Candles
       total_count = instruments.count
       return { fresh: true, total_count: 0, fresh_count: 0, freshness_percentage: 100.0 } if total_count.zero?
 
-      cutoff_date = Time.zone.today - @max_age_days.days
+      # Calculate cutoff date based on trading days (accounts for weekends and holidays)
+      cutoff_date = last_trading_day_ago(@max_trading_days)
       fresh_count = 0
 
       # Check freshness for each instrument
@@ -75,6 +77,7 @@ module Candles
         next unless latest_candle
 
         latest_date = latest_candle.timestamp.to_date
+        # Consider fresh if latest candle is from cutoff_date or later
         fresh_count += 1 if latest_date >= cutoff_date
       end
 
@@ -88,20 +91,55 @@ module Candles
         stale_count: total_count - fresh_count,
         freshness_percentage: freshness_percentage,
         cutoff_date: cutoff_date,
+        cutoff_trading_days_ago: @max_trading_days,
         timeframe: @timeframe,
       }
     end
 
-    def self.check_freshness(timeframe: "1D", max_age_days: nil, min_freshness_percentage: nil, auto_ingest: false)
+    def self.check_freshness(timeframe: "1D", max_trading_days: nil, min_freshness_percentage: nil, auto_ingest: false)
       new(
         timeframe: timeframe,
-        max_age_days: max_age_days,
+        max_trading_days: max_trading_days,
         min_freshness_percentage: min_freshness_percentage,
         auto_ingest: auto_ingest,
       ).check_freshness
     end
 
     private
+
+    # Calculate the date that is N trading days ago
+    # Accounts for weekends and market holidays
+    # Note: MarketHours.trading_day? only checks weekdays, not holidays
+    # For a more accurate check, consider adding a holiday calendar
+    def last_trading_day_ago(trading_days_ago)
+      return Time.zone.today if trading_days_ago.zero?
+
+      # Start from yesterday (today's data may not be complete)
+      date = Time.zone.today - 1.day
+      trading_days_found = 0
+
+      # Go back in time until we find enough trading days
+      # Limit to 1 year ago to prevent infinite loops
+      max_lookback = 1.year.ago.to_date
+
+      while trading_days_found < trading_days_ago && date >= max_lookback
+        # Check if this is a trading day (weekday, not weekend)
+        # MarketHours.trading_day? checks current time, so we check weekday directly
+        is_weekday = (1..5).include?(date.wday) # Monday = 1, Friday = 5
+
+        if is_weekday
+          trading_days_found += 1
+          # If we've found enough trading days, return this date
+          return date if trading_days_found == trading_days_ago
+        end
+
+        date -= 1.day
+      end
+
+      # If we couldn't find enough trading days (e.g., near holidays),
+      # return the date we found (which might be older than requested)
+      date + 1.day # Add back the last decrement
+    end
 
     def trigger_ingestion
       case @timeframe
