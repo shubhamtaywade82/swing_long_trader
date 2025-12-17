@@ -246,7 +246,7 @@ module Screeners
 
       # Load all daily candles in one query
       candle_records = CandleSeriesRecord
-                       .for_timeframe(:daily)
+                       .daily
                        .where(instrument_id: instrument_ids)
                        .recent(100) # Get last 100 candles per instrument
                        .order(instrument_id: :asc, timestamp: :desc)

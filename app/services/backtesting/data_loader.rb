@@ -34,7 +34,7 @@ module Backtesting
       # Load candles from database
       records = CandleSeriesRecord
                 .for_instrument(instrument)
-                .for_timeframe(timeframe)
+                .public_send(timeframe)
                 .between_dates(from_date, to_date)
                 .ordered
                 .to_a

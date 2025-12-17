@@ -26,7 +26,7 @@ module Candles
       # Load candles from database
       scope = CandleSeriesRecord
               .for_instrument(instrument)
-              .for_timeframe(timeframe)
+              .public_send(timeframe)
               .ordered
 
       scope = scope.between_dates(from_date, to_date) if from_date && to_date
@@ -46,7 +46,7 @@ module Candles
     def load_latest(instrument:, timeframe:, count: 100)
       records = CandleSeriesRecord
                 .for_instrument(instrument)
-                .for_timeframe(timeframe)
+                .public_send(timeframe)
                 .recent(count)
                 .reverse # Reverse to get chronological order
 

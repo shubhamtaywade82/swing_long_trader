@@ -72,7 +72,7 @@ class MonitorJob < ApplicationJob
     # If recent candles exist, use the latest of those for freshness check
     # This prevents false alarms when old historical data exists alongside recent data
     recent_candles_count = CandleSeriesRecord
-                          .for_timeframe(:daily)
+                          .daily
                           .where("timestamp >= ?", 30.days.ago)
                           .count
 
@@ -80,14 +80,14 @@ class MonitorJob < ApplicationJob
     latest_daily = if recent_candles_count.positive?
                      # If we have recent candles, use the latest of those
                      CandleSeriesRecord
-                       .for_timeframe(:daily)
+                       .daily
                        .where("timestamp >= ?", 30.days.ago)
                        .order(timestamp: :desc)
                        .first
                    else
                      # Fall back to global maximum if no recent candles
                      CandleSeriesRecord
-                       .for_timeframe(:daily)
+                       .daily
                        .order(timestamp: :desc)
                        .first
                    end
@@ -99,7 +99,7 @@ class MonitorJob < ApplicationJob
     # Also check when candles were last created/updated (ingestion time)
     # This helps identify if ingestion happened recently but only old data was fetched
     latest_created = CandleSeriesRecord
-                    .for_timeframe(:daily)
+                    .daily
                     .order(created_at: :desc)
                     .first&.created_at
 

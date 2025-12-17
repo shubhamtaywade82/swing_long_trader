@@ -28,7 +28,6 @@ class CandleSeriesRecord < ApplicationRecord
   default_scope { order(timestamp: :asc) }
 
   scope :for_instrument, ->(instrument) { where(instrument_id: instrument.id) }
-  scope :for_timeframe, ->(timeframe) { where(timeframe: timeframe) }
   scope :recent, ->(limit = 100) { order(timestamp: :desc).limit(limit) }
   # Note: This scope is redundant with default_scope but kept for explicit clarity
   # when reading code that uses .ordered
@@ -43,7 +42,7 @@ class CandleSeriesRecord < ApplicationRecord
   # @param timeframe [Symbol] Enum symbol (:daily, :weekly, :hourly)
   def self.latest_for(instrument:, timeframe:)
     for_instrument(instrument)
-      .for_timeframe(timeframe)
+      .public_send(timeframe)
       .order(timestamp: :desc)
       .first
   end

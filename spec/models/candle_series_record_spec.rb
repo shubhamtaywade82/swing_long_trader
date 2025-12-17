@@ -72,7 +72,7 @@ RSpec.describe CandleSeriesRecord do
       candle1 = create(:candle_series_record, instrument: instrument, timeframe: :daily)
       candle2 = create(:candle_series_record, instrument: instrument, timeframe: :weekly)
 
-      filtered = described_class.for_timeframe(:daily)
+      filtered = described_class.daily
       expect(filtered).to include(candle1)
       expect(filtered).not_to include(candle2)
     end

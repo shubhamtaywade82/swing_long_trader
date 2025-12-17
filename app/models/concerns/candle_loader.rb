@@ -55,7 +55,7 @@ module CandleLoader
   def has_candles?(timeframe:) # rubocop:disable Naming/PredicatePrefix
     CandleSeriesRecord
       .for_instrument(self)
-      .for_timeframe(timeframe)
+      .public_send(timeframe)
       .exists?
   end
 
