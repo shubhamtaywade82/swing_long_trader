@@ -31,6 +31,7 @@ module Candles
         success: 0,
         failed: 0,
         skipped_up_to_date: 0,
+        skipped_time_window: 0,
         total_candles: 0,
         errors: [],
         rate_limit_retries: 0,
@@ -68,6 +69,7 @@ module Candles
           puts "   Progress: #{results[:processed]}/#{@total_count} (#{(results[:processed].to_f / @total_count * 100).round(1)}%) | " \
                "Success: #{results[:success]} | Failed: #{results[:failed]} | " \
                "Up-to-date: #{results[:skipped_up_to_date]} | " \
+               "Skipped (time): #{results[:skipped_time_window]} | " \
                "ETA: #{(remaining / 60).round(1)} min"
         end
 
@@ -85,8 +87,18 @@ module Candles
       return { success: false, error: "Invalid instrument" } if instrument.blank?
       return { success: false, error: "Missing security_id" } if instrument.security_id.blank?
 
-      # Calculate date range
-      to_date = Time.zone.today - 1 # Yesterday (today's data may not be complete)
+      # Calculate date range and up-to-date threshold based on time
+      # Before 3:30 PM: up-to-date = yesterday (skip if latest == yesterday)
+      # After 3:30 PM: up-to-date = today (skip if latest == today)
+      now_ist = Time.current.in_time_zone("Asia/Kolkata")
+      market_close_today = now_ist.beginning_of_day.change(hour: 15, min: 30, sec: 0)
+
+      to_date = Time.zone.today - 1 # Yesterday (fetch up to yesterday)
+      up_to_date_threshold = if now_ist >= market_close_today
+                               Time.zone.today # After 3:30 PM: check if we have today's data
+                             else
+                               Time.zone.today - 1 # Before 3:30 PM: check if we have yesterday's data
+                             end
 
       # Check for existing candles to optimize date range
       latest_candle = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: :daily)
@@ -96,11 +108,13 @@ module Candles
         latest_date = latest_candle.timestamp.to_date
         from_date = latest_date + 1.day
 
-        # If we already have data up to yesterday, skip this instrument
-        if from_date > to_date
-          Rails.logger.debug do
+        # Skip only if latest timestamp equals the threshold date
+        # After 3:30 PM: skip if latest == today
+        # Before 3:30 PM: skip if latest == yesterday
+        if latest_date == up_to_date_threshold
+          Rails.logger.info do
             "[Candles::DailyIngestor] #{instrument.symbol_name}: " \
-              "Already up-to-date (latest: #{latest_date}, to_date: #{to_date})"
+              "Already up-to-date (latest: #{latest_date}, threshold: #{up_to_date_threshold})"
           end
           return {
             success: true,
@@ -119,7 +133,7 @@ module Candles
         # - If latest candle is older than days_back: gap fill (fetch from min_from_date)
         if latest_date >= min_from_date
           # Incremental update: latest candle is recent, fetch only new data
-          from_date = latest_date + 1.day
+          from_date = latest_date
           Rails.logger.debug do
             "[Candles::DailyIngestor] #{instrument.symbol_name}: " \
               "Incremental update (latest: #{latest_date}, fetching from: #{from_date})"
@@ -127,7 +141,7 @@ module Candles
         else
           # Gap fill: latest candle is very old, fetch from minimum required date
           from_date = min_from_date
-          gap_days = (to_date - latest_date).to_i
+          gap_days = (to_date - latest_date - 1).to_i
           Rails.logger.info do
             "[Candles::DailyIngestor] #{instrument.symbol_name}: " \
               "Gap detected (latest: #{latest_date}, gap: #{gap_days} days, fetching from: #{from_date})"
@@ -165,7 +179,16 @@ module Candles
 
       result
     rescue StandardError => e
-      error_msg = "Failed to fetch daily candles for #{instrument&.symbol_name}: #{e.message}"
+      error_msg = e.message.to_s
+      is_rate_limit = error_msg.include?("429") || error_msg.include?("rate limit") || error_msg.include?("Rate limit") || error_msg.include?("too many requests") || error_msg.include?("DH-904") || e.class.name == "DhanHQ::RateLimitError"
+
+      # Re-raise rate limit errors so they can be retried by fetch_and_store_daily_candles_with_retry
+      if is_rate_limit
+        Rails.logger.warn("[Candles::DailyIngestor] Rate limit error for #{instrument&.symbol_name}, will retry")
+        raise
+      end
+
+      error_msg = "Failed to fetch daily candles for #{instrument&.symbol_name}: #{error_msg}"
       Rails.logger.error("[Candles::DailyIngestor] #{error_msg}")
       { success: false, error: error_msg }
     end
@@ -223,6 +246,7 @@ module Candles
       puts "   Success: #{results[:success]}"
       puts "   Failed: #{results[:failed]}"
       puts "   Already up-to-date: #{results[:skipped_up_to_date]}" if results[:skipped_up_to_date].positive?
+      puts "   Skipped (time window): #{results[:skipped_time_window]}" if results[:skipped_time_window].positive?
       puts "   Total candles: #{results[:total_candles]}"
       puts "   Rate limit retries: #{results[:rate_limit_retries]}" if results[:rate_limit_retries].positive?
 
@@ -232,6 +256,7 @@ module Candles
         "success=#{results[:success]}, " \
         "failed=#{results[:failed]}, " \
         "skipped_up_to_date=#{results[:skipped_up_to_date]}, " \
+        "skipped_time_window=#{results[:skipped_time_window]}, " \
         "total_candles=#{results[:total_candles]}, " \
         "duration=#{duration.round(2)}s, " \
         "rate_limit_retries=#{results[:rate_limit_retries]}",
