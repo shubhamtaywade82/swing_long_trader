@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_15_153533) do
+ActiveRecord::Schema[8.1].define(version: 2025_12_16_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -202,6 +202,16 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_15_153533) do
     t.index ["instrument_id"], name: "index_long_term_holdings_on_instrument_id"
     t.index ["portfolio_id", "instrument_id"], name: "index_long_term_holdings_on_portfolio_id_and_instrument_id", unique: true
     t.index ["portfolio_id"], name: "index_long_term_holdings_on_portfolio_id"
+  end
+
+  create_table "market_holidays", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.date "date", null: false
+    t.string "description", null: false
+    t.datetime "updated_at", null: false
+    t.integer "year", null: false
+    t.index ["date"], name: "index_market_holidays_on_date", unique: true
+    t.index ["year"], name: "index_market_holidays_on_year"
   end
 
   create_table "optimization_runs", force: :cascade do |t|
@@ -422,9 +432,16 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_15_153533) do
     t.boolean "ai_avoid", default: false
     t.text "ai_comment"
     t.decimal "ai_confidence", precision: 5, scale: 2
+    t.string "ai_continuation_bias"
+    t.string "ai_entry_timing"
     t.string "ai_eval_id"
     t.string "ai_holding_days"
+    t.text "ai_invalidate_if"
+    t.string "ai_momentum_trend"
+    t.string "ai_price_position"
+    t.text "ai_primary_risk"
     t.string "ai_risk"
+    t.string "ai_stage"
     t.string "ai_status"
     t.datetime "analyzed_at", null: false
     t.decimal "base_score", precision: 8, scale: 2, default: "0.0"

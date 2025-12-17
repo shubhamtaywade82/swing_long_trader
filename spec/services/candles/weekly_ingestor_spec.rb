@@ -523,178 +523,177 @@ RSpec.describe Candles::WeeklyIngestor do
     end
   end
 
-    describe "private methods" do
-      let(:service) { described_class.new(instruments: instruments, weeks_back: 1) }
+  describe "private methods" do
+    let(:service) { described_class.new(instruments: instruments, weeks_back: 1) }
 
-      describe "#aggregate_to_weekly" do
-        it "aggregates daily candles to weekly" do
-          daily_candles = Array.new(7) do |i|
-            {
-              timestamp: i.days.ago.to_i,
-              open: 100.0,
-              high: 105.0,
-              low: 99.0,
-              close: 103.0,
-              volume: 1_000_000,
-            }
-          end
-
-          weekly = service.send(:aggregate_to_weekly, daily_candles)
-
-          expect(weekly).to be_an(Array)
-          expect(weekly.first).to have_key(:timestamp)
-          expect(weekly.first).to have_key(:open)
-          expect(weekly.first).to have_key(:high)
-          expect(weekly.first).to have_key(:low)
-          expect(weekly.first).to have_key(:close)
-          expect(weekly.first).to have_key(:volume)
-        end
-
-        it "uses first open and last close" do
-          # Ensure both candles are in the same week (use same week start)
-          week_start = Time.zone.today.beginning_of_week
-          daily_candles = [
-            { timestamp: week_start + 1.day, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
-            { timestamp: week_start + 2.days, open: 103.0, high: 108.0, low: 102.0, close: 106.0, volume: 1_200_000 },
-          ]
-
-          weekly = service.send(:aggregate_to_weekly, daily_candles)
-
-          expect(weekly.first[:open]).to eq(100.0) # First candle's open
-          expect(weekly.first[:close]).to eq(106.0) # Last candle's close
-        end
-
-        it "calculates max high and min low" do
-          # Ensure both candles are in the same week
-          week_start = Time.zone.today.beginning_of_week
-          daily_candles = [
-            { timestamp: week_start + 1.day, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
-            { timestamp: week_start + 2.days, open: 103.0, high: 110.0, low: 95.0, close: 106.0, volume: 1_200_000 },
-          ]
-
-          weekly = service.send(:aggregate_to_weekly, daily_candles)
-
-          expect(weekly.first[:high]).to eq(110.0) # Max high
-          expect(weekly.first[:low]).to eq(95.0) # Min low
-        end
-
-        it "sums volumes" do
-          # Ensure both candles are in the same week
-          week_start = Time.zone.today.beginning_of_week
-          daily_candles = [
-            { timestamp: week_start + 1.day, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
-            { timestamp: week_start + 2.days, open: 103.0, high: 108.0, low: 102.0, close: 106.0, volume: 1_200_000 },
-          ]
-
-          weekly = service.send(:aggregate_to_weekly, daily_candles)
-
-          expect(weekly.first[:volume]).to eq(2_200_000) # Sum of volumes
-        end
-
-        it "handles empty candles" do
-          weekly = service.send(:aggregate_to_weekly, [])
-
-          expect(weekly).to eq([])
-        end
-
-        it "sorts by timestamp" do
-          daily_candles = [
-            { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
-            { timestamp: 7.days.ago.to_i, open: 98.0, high: 102.0, low: 97.0, close: 100.0, volume: 900_000 },
-          ]
-
-          weekly = service.send(:aggregate_to_weekly, daily_candles)
-
-          timestamps = weekly.pluck(:timestamp)
-          expect(timestamps).to eq(timestamps.sort)
-        end
-      end
-
-      describe "#normalize_candles" do
-        it "handles array format" do
-          candles = [
-            { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
-          ]
-
-          normalized = service.send(:normalize_candles, candles)
-
-          expect(normalized).to be_an(Array)
-          expect(normalized.first).to have_key(:timestamp)
-        end
-
-        it "handles hash format (DhanHQ)" do
-          candles = {
-            "timestamp" => [1.day.ago.to_i],
-            "open" => [100.0],
-            "high" => [105.0],
-            "low" => [99.0],
-            "close" => [103.0],
-            "volume" => [1_000_000],
+    describe "#aggregate_to_weekly" do
+      it "aggregates daily candles to weekly" do
+        daily_candles = Array.new(7) do |i|
+          {
+            timestamp: i.days.ago.to_i,
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000,
           }
-
-          normalized = service.send(:normalize_candles, candles)
-
-          expect(normalized).to be_an(Array)
-          expect(normalized.first).to have_key(:timestamp)
         end
 
-        it "handles single hash" do
-          candle = { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 }
+        weekly = service.send(:aggregate_to_weekly, daily_candles)
 
-          normalized = service.send(:normalize_candles, candle)
-
-          expect(normalized).to be_an(Array)
-          expect(normalized.size).to eq(1)
-        end
-
-        it "handles nil data" do
-          normalized = service.send(:normalize_candles, nil)
-
-          expect(normalized).to eq([])
-        end
-
-        it "handles invalid candle data gracefully" do
-          invalid_candle = { invalid: "data" }
-
-          normalized = service.send(:normalize_candles, [invalid_candle])
-
-          expect(normalized).to be_an(Array)
-        end
+        expect(weekly).to be_an(Array)
+        expect(weekly.first).to have_key(:timestamp)
+        expect(weekly.first).to have_key(:open)
+        expect(weekly.first).to have_key(:high)
+        expect(weekly.first).to have_key(:low)
+        expect(weekly.first).to have_key(:close)
+        expect(weekly.first).to have_key(:volume)
       end
 
-      describe "#parse_timestamp" do
-        it "handles Time objects" do
-          time = Time.current
-          parsed = service.send(:parse_timestamp, time)
+      it "uses first open and last close" do
+        # Ensure both candles are in the same week (use same week start)
+        week_start = Time.zone.today.beginning_of_week
+        daily_candles = [
+          { timestamp: week_start + 1.day, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+          { timestamp: week_start + 2.days, open: 103.0, high: 108.0, low: 102.0, close: 106.0, volume: 1_200_000 },
+        ]
 
-          expect(parsed).to be_a(Time)
-        end
+        weekly = service.send(:aggregate_to_weekly, daily_candles)
 
-        it "handles integer timestamps" do
-          timestamp = Time.current.to_i
-          parsed = service.send(:parse_timestamp, timestamp)
+        expect(weekly.first[:open]).to eq(100.0) # First candle's open
+        expect(weekly.first[:close]).to eq(106.0) # Last candle's close
+      end
 
-          expect(parsed).to be_a(Time)
-        end
+      it "calculates max high and min low" do
+        # Ensure both candles are in the same week
+        week_start = Time.zone.today.beginning_of_week
+        daily_candles = [
+          { timestamp: week_start + 1.day, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+          { timestamp: week_start + 2.days, open: 103.0, high: 110.0, low: 95.0, close: 106.0, volume: 1_200_000 },
+        ]
 
-        it "handles string timestamps" do
-          timestamp = Time.current.iso8601
-          parsed = service.send(:parse_timestamp, timestamp)
+        weekly = service.send(:aggregate_to_weekly, daily_candles)
 
-          expect(parsed).to be_a(Time)
-        end
+        expect(weekly.first[:high]).to eq(110.0) # Max high
+        expect(weekly.first[:low]).to eq(95.0) # Min low
+      end
 
-        it "handles nil timestamps" do
-          parsed = service.send(:parse_timestamp, nil)
+      it "sums volumes" do
+        # Ensure both candles are in the same week
+        week_start = Time.zone.today.beginning_of_week
+        daily_candles = [
+          { timestamp: week_start + 1.day, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+          { timestamp: week_start + 2.days, open: 103.0, high: 108.0, low: 102.0, close: 106.0, volume: 1_200_000 },
+        ]
 
-          expect(parsed).to be_a(Time)
-        end
+        weekly = service.send(:aggregate_to_weekly, daily_candles)
 
-        it "handles invalid timestamps" do
-          parsed = service.send(:parse_timestamp, "invalid")
+        expect(weekly.first[:volume]).to eq(2_200_000) # Sum of volumes
+      end
 
-          expect(parsed).to be_a(Time)
-        end
+      it "handles empty candles" do
+        weekly = service.send(:aggregate_to_weekly, [])
+
+        expect(weekly).to eq([])
+      end
+
+      it "sorts by timestamp" do
+        daily_candles = [
+          { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+          { timestamp: 7.days.ago.to_i, open: 98.0, high: 102.0, low: 97.0, close: 100.0, volume: 900_000 },
+        ]
+
+        weekly = service.send(:aggregate_to_weekly, daily_candles)
+
+        timestamps = weekly.pluck(:timestamp)
+        expect(timestamps).to eq(timestamps.sort)
+      end
+    end
+
+    describe "#normalize_candles" do
+      it "handles array format" do
+        candles = [
+          { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+        ]
+
+        normalized = service.send(:normalize_candles, candles)
+
+        expect(normalized).to be_an(Array)
+        expect(normalized.first).to have_key(:timestamp)
+      end
+
+      it "handles hash format (DhanHQ)" do
+        candles = {
+          "timestamp" => [1.day.ago.to_i],
+          "open" => [100.0],
+          "high" => [105.0],
+          "low" => [99.0],
+          "close" => [103.0],
+          "volume" => [1_000_000],
+        }
+
+        normalized = service.send(:normalize_candles, candles)
+
+        expect(normalized).to be_an(Array)
+        expect(normalized.first).to have_key(:timestamp)
+      end
+
+      it "handles single hash" do
+        candle = { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 }
+
+        normalized = service.send(:normalize_candles, candle)
+
+        expect(normalized).to be_an(Array)
+        expect(normalized.size).to eq(1)
+      end
+
+      it "handles nil data" do
+        normalized = service.send(:normalize_candles, nil)
+
+        expect(normalized).to eq([])
+      end
+
+      it "handles invalid candle data gracefully" do
+        invalid_candle = { invalid: "data" }
+
+        normalized = service.send(:normalize_candles, [invalid_candle])
+
+        expect(normalized).to be_an(Array)
+      end
+    end
+
+    describe "#parse_timestamp" do
+      it "handles Time objects" do
+        time = Time.current
+        parsed = service.send(:parse_timestamp, time)
+
+        expect(parsed).to be_a(Time)
+      end
+
+      it "handles integer timestamps" do
+        timestamp = Time.current.to_i
+        parsed = service.send(:parse_timestamp, timestamp)
+
+        expect(parsed).to be_a(Time)
+      end
+
+      it "handles string timestamps" do
+        timestamp = Time.current.iso8601
+        parsed = service.send(:parse_timestamp, timestamp)
+
+        expect(parsed).to be_a(Time)
+      end
+
+      it "handles nil timestamps" do
+        parsed = service.send(:parse_timestamp, nil)
+
+        expect(parsed).to be_a(Time)
+      end
+
+      it "handles invalid timestamps" do
+        parsed = service.send(:parse_timestamp, "invalid")
+
+        expect(parsed).to be_a(Time)
       end
     end
   end
