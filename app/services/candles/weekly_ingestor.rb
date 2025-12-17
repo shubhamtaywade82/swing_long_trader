@@ -82,7 +82,7 @@ module Candles
         # Get the start of the next week (Monday after latest week)
         next_week_start = latest_week_start + 1.week
         # Convert to date for daily candle fetching
-        from_date = next_week_start.to_date
+        next_week_date = next_week_start.to_date
 
         # If we already have data up to the current week, check if we need to update
         current_week_start = to_date.beginning_of_week
@@ -103,9 +103,28 @@ module Candles
           }
         end
 
-        # Ensure we don't fetch less than minimum required weeks (for initial gaps)
+        # Calculate minimum required date range
         min_from_date = to_date - (@weeks_back * 7).days
-        from_date = [from_date, min_from_date].min
+
+        # Determine fetch strategy:
+        # - If latest weekly candle is within weeks_back window: incremental update (fetch from next week)
+        # - If latest weekly candle is older than weeks_back: gap fill (fetch from min_from_date)
+        if latest_week_date >= min_from_date
+          # Incremental update: latest weekly candle is recent, fetch only new weeks
+          from_date = next_week_date
+          Rails.logger.debug do
+            "[Candles::WeeklyIngestor] #{instrument.symbol_name}: " \
+              "Incremental update (latest week: #{latest_week_date}, fetching from: #{from_date})"
+          end
+        else
+          # Gap fill: latest weekly candle is very old, fetch from minimum required date
+          from_date = min_from_date
+          gap_weeks = ((to_date - latest_week_date).to_f / 7).round(1)
+          Rails.logger.info do
+            "[Candles::WeeklyIngestor] #{instrument.symbol_name}: " \
+              "Gap detected (latest week: #{latest_week_date}, gap: #{gap_weeks} weeks, fetching from: #{from_date})"
+          end
+        end
       else
         # No existing weekly candles - fetch full range
         from_date = to_date - (@weeks_back * 7).days

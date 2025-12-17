@@ -24,6 +24,20 @@ module Swing
     def call
       return { success: false, error: "Invalid instrument" } if @instrument.blank?
 
+      # Ensure candles are fresh before analysis (only check, don't auto-ingest in analysis)
+      # Auto-ingestion should happen at screener level, not during individual analysis
+      unless Rails.env.test?
+        daily_freshness = Candles::FreshnessChecker.check_freshness(timeframe: "1D")
+        weekly_freshness = Candles::FreshnessChecker.check_freshness(timeframe: "1W")
+        if !daily_freshness[:fresh] || !weekly_freshness[:fresh]
+          Rails.logger.warn(
+            "[Swing::MultiTimeframeAnalyzer] Analyzing with stale candles: " \
+            "Daily: #{daily_freshness[:freshness_percentage]&.round(1)}% fresh, " \
+            "Weekly: #{weekly_freshness[:freshness_percentage]&.round(1)}% fresh",
+          )
+        end
+      end
+
       analysis = {
         instrument_id: @instrument.id,
         symbol: @instrument.symbol_name,

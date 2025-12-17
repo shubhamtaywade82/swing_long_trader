@@ -22,6 +22,20 @@ module Screeners
     end
 
     def call
+      # Ensure candles are fresh before screening
+      # This checks if daily candles are up-to-date and triggers ingestion if stale
+      freshness_result = Candles::FreshnessChecker.ensure_fresh(
+        timeframe: "1D",
+        auto_ingest: !Rails.env.test?, # Auto-ingest in production, skip in tests
+      )
+      unless freshness_result[:fresh]
+        Rails.logger.warn(
+          "[Screeners::SwingScreener] Starting with stale candles: " \
+          "#{freshness_result[:freshness_percentage]&.round(1)}% fresh. " \
+          "Ingestion #{freshness_result[:ingested] ? 'triggered' : 'skipped'}.",
+        )
+      end
+
       candidates = []
       start_time = Time.current
       total_count = @instruments.count

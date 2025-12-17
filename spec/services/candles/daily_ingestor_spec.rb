@@ -248,5 +248,224 @@ RSpec.describe Candles::DailyIngestor do
         # This is tested implicitly through the API call
       end
     end
+
+    context "with incremental updates" do
+      it "fetches only new candles when latest candle exists" do
+        # Create existing candle from 5 days ago
+        latest_date = 5.days.ago.to_date
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: "1D",
+               timestamp: latest_date.beginning_of_day,
+               open: 100.0,
+               high: 105.0,
+               low: 99.0,
+               close: 103.0,
+               volume: 1_000_000)
+
+        # Mock API to return only new candles (from 4 days ago to yesterday)
+        new_candles = [
+          { timestamp: 4.days.ago.to_i, open: 101.0, high: 106.0, low: 100.0, close: 104.0, volume: 1_100_000 },
+          { timestamp: 3.days.ago.to_i, open: 102.0, high: 107.0, low: 101.0, close: 105.0, volume: 1_200_000 },
+          { timestamp: 2.days.ago.to_i, open: 103.0, high: 108.0, low: 102.0, close: 106.0, volume: 1_300_000 },
+          { timestamp: 1.day.ago.to_i, open: 104.0, high: 109.0, low: 103.0, close: 107.0, volume: 1_400_000 },
+        ]
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc) do |_inst, from_date:, to_date:, oi:|
+          # Verify it's fetching from the day after latest candle
+          expect(from_date).to eq(latest_date + 1.day)
+          expect(to_date).to eq(Time.zone.today - 1)
+          new_candles
+        end
+
+        result = described_class.call(instruments: instruments, days_back: 30)
+
+        expect(result[:success]).to eq(1)
+        expect(CandleSeriesRecord.where(instrument: instrument, timeframe: "1D").count).to eq(5) # 1 existing + 4 new
+      end
+
+      it "skips instrument when already up-to-date" do
+        # Create candle from yesterday (already up-to-date)
+        yesterday = Time.zone.today - 1
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: "1D",
+               timestamp: yesterday.beginning_of_day,
+               open: 100.0,
+               high: 105.0,
+               low: 99.0,
+               close: 103.0,
+               volume: 1_000_000)
+
+        # API should not be called
+        expect_any_instance_of(Instrument).not_to receive(:historical_ohlc)
+
+        result = described_class.call(instruments: instruments, days_back: 30)
+
+        expect(result[:success]).to eq(1)
+        expect(result[:skipped_up_to_date]).to eq(1)
+        expect(CandleSeriesRecord.where(instrument: instrument, timeframe: "1D").count).to eq(1)
+      end
+
+      it "uses minimum range when latest candle is very old" do
+        # Create candle from 400 days ago (older than days_back of 30)
+        old_date = 400.days.ago.to_date
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: "1D",
+               timestamp: old_date.beginning_of_day,
+               open: 100.0,
+               high: 105.0,
+               low: 99.0,
+               close: 103.0,
+               volume: 1_000_000)
+
+        days_back = 30
+        min_from_date = (Time.zone.today - 1) - days_back.days
+
+        new_candles = [
+          { timestamp: 1.day.ago.to_i, open: 101.0, high: 106.0, low: 100.0, close: 104.0, volume: 1_100_000 },
+        ]
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc) do |_inst, from_date:, to_date:, oi:|
+          # Should fetch from min_from_date (not from old_date + 1.day) to fill gaps
+          expect(from_date).to eq(min_from_date)
+          expect(to_date).to eq(Time.zone.today - 1)
+          new_candles
+        end
+
+        result = described_class.call(instruments: instruments, days_back: days_back)
+
+        expect(result[:success]).to eq(1)
+      end
+
+      it "fetches from latest + 1 day when latest candle is recent" do
+        # Create candle from 10 days ago (recent, within days_back of 30)
+        recent_date = 10.days.ago.to_date
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: "1D",
+               timestamp: recent_date.beginning_of_day,
+               open: 100.0,
+               high: 105.0,
+               low: 99.0,
+               close: 103.0,
+               volume: 1_000_000)
+
+        days_back = 30
+        expected_from_date = recent_date + 1.day
+
+        new_candles = [
+          { timestamp: 9.days.ago.to_i, open: 101.0, high: 106.0, low: 100.0, close: 104.0, volume: 1_100_000 },
+        ]
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc) do |_inst, from_date:, to_date:, oi:|
+          # Should fetch from latest + 1 day (not from min_from_date) for incremental update
+          expect(from_date).to eq(expected_from_date)
+          expect(to_date).to eq(Time.zone.today - 1)
+          new_candles
+        end
+
+        result = described_class.call(instruments: instruments, days_back: days_back)
+
+        expect(result[:success]).to eq(1)
+      end
+
+      it "handles gap between latest candle and today" do
+        # Create candle from 50 days ago (gap exists)
+        gap_date = 50.days.ago.to_date
+        create(:candle_series_record,
+               instrument: instrument,
+               timeframe: "1D",
+               timestamp: gap_date.beginning_of_day,
+               open: 100.0,
+               high: 105.0,
+               low: 99.0,
+               close: 103.0,
+               volume: 1_000_000)
+
+        days_back = 30
+        min_from_date = (Time.zone.today - 1) - days_back.days
+
+        # Gap is larger than days_back, so should use min_from_date
+        new_candles = (0..29).map do |i|
+          { timestamp: (Time.zone.today - 1 - i.days).to_i, open: 100.0 + i, high: 105.0 + i, low: 99.0 + i, close: 103.0 + i, volume: 1_000_000 }
+        end
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc) do |_inst, from_date:, to_date:, oi:|
+          # Should fetch from min_from_date to fill the gap
+          expect(from_date).to eq(min_from_date)
+          expect(to_date).to eq(Time.zone.today - 1)
+          new_candles
+        end
+
+        result = described_class.call(instruments: instruments, days_back: days_back)
+
+        expect(result[:success]).to eq(1)
+      end
+    end
+
+    context "with no existing candles" do
+      it "fetches full range when no candles exist" do
+        # Ensure no existing candles
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        days_back = 30
+        expected_from_date = (Time.zone.today - 1) - days_back.days
+
+        new_candles = [
+          { timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 },
+        ]
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc) do |_inst, from_date:, to_date:, oi:|
+          # Should fetch full range from days_back
+          expect(from_date).to eq(expected_from_date)
+          expect(to_date).to eq(Time.zone.today - 1)
+          new_candles
+        end
+
+        result = described_class.call(instruments: instruments, days_back: days_back)
+
+        expect(result[:success]).to eq(1)
+      end
+    end
+
+    context "with rate limit retries" do
+      it "retries on rate limit errors" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        retry_count = 0
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc) do
+          retry_count += 1
+          if retry_count < 2
+            raise StandardError.new("429 Rate limit exceeded")
+          else
+            [{ timestamp: 1.day.ago.to_i, open: 100.0, high: 105.0, low: 99.0, close: 103.0, volume: 1_000_000 }]
+          end
+        end
+
+        service = described_class.new(instruments: instruments, days_back: 2)
+        allow(service).to receive(:sleep) # Stub sleep to speed up test
+
+        result = service.call
+
+        expect(result[:success]).to eq(1)
+        expect(result[:rate_limit_retries]).to be > 0
+      end
+
+      it "gives up after max retries" do
+        CandleSeriesRecord.where(instrument: instrument).delete_all
+
+        allow_any_instance_of(Instrument).to receive(:historical_ohlc).and_raise(StandardError.new("429 Rate limit exceeded"))
+
+        service = described_class.new(instruments: instruments, days_back: 2)
+        allow(service).to receive(:sleep) # Stub sleep to speed up test
+
+        result = service.call
+
+        expect(result[:failed]).to eq(1)
+        expect(result[:errors]).not_to be_empty
+      end
+    end
   end
 end

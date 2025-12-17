@@ -46,10 +46,20 @@ module MarketHours
       true
     end
 
-    def trading_day?
-      now = Time.current.in_time_zone("Asia/Kolkata")
-      # Monday = 1, Friday = 5
-      (1..5).include?(now.wday)
+    # Check if a date is a trading day (weekday and not a holiday)
+    # @param date [Date, Time, nil] Date to check (defaults to current time)
+    # @return [Boolean] true if trading day, false otherwise
+    def trading_day?(date = nil)
+      date ||= Time.current.in_time_zone("Asia/Kolkata")
+      date = date.to_date if date.is_a?(Time) || date.is_a?(ActiveSupport::TimeWithZone)
+
+      # Must be a weekday (Monday = 1, Friday = 5)
+      return false unless (1..5).include?(date.wday)
+
+      # Must not be a market holiday
+      return false if MarketHoliday.holiday?(date)
+
+      true
     end
 
     def next_market_open
@@ -60,9 +70,14 @@ module MarketHours
         return now.change(hour: MARKET_OPEN_HOUR, min: MARKET_OPEN_MINUTE, sec: 0)
       end
 
-      # Otherwise, find next trading day
+      # Otherwise, find next trading day (skip weekends and holidays)
       days_ahead = 1
-      days_ahead += 1 until (now + days_ahead.days).wday.between?(1, 5)
+      loop do
+        candidate_date = (now + days_ahead.days).to_date
+        break if trading_day?(candidate_date)
+        days_ahead += 1
+        raise "Could not find next trading day within 30 days" if days_ahead > 30
+      end
 
       (now + days_ahead.days).change(hour: MARKET_OPEN_HOUR, min: MARKET_OPEN_MINUTE, sec: 0)
     end

@@ -63,6 +63,36 @@ namespace :candles do
     end
   end
 
+  desc "Check candle freshness and trigger ingestion if stale"
+  task check_freshness: :environment do
+    puts "\n🔍 Checking candle freshness..."
+    puts "=" * 60
+
+    %w[1D 1W].each do |timeframe|
+      puts "\n📊 Checking #{timeframe} candles..."
+      result = Candles::FreshnessChecker.ensure_fresh(
+        timeframe: timeframe,
+        auto_ingest: true,
+      )
+
+      if result[:fresh]
+        puts "✅ #{timeframe} candles are fresh: #{result[:fresh_count]}/#{result[:total_count]} instruments " \
+             "(#{result[:freshness_percentage].round(1)}%)"
+      else
+        puts "⚠️  #{timeframe} candles are stale: #{result[:fresh_count]}/#{result[:total_count]} instruments " \
+             "(#{result[:freshness_percentage].round(1)}%)"
+        if result[:ingested]
+          puts "   ✅ Ingestion triggered: #{result.dig(:ingestion_result, :total_candles) || 0} candles processed"
+        else
+          puts "   ⚠️  Auto-ingestion disabled or failed"
+        end
+      end
+    end
+
+    puts "\n" + "=" * 60
+    puts "✅ Freshness check complete!"
+  end
+
   desc "Show candle statistics"
   task stats: :environment do
     daily_count = CandleSeriesRecord.where(timeframe: "1D").count
