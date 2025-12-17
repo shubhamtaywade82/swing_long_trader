@@ -37,8 +37,7 @@ class CandleSeriesRecord < ApplicationRecord
   def self.latest_for(instrument:, timeframe:)
     for_instrument(instrument)
       .for_timeframe(timeframe)
-      .order(timestamp: :desc)
-      .first
+      .last
   end
 
   # Convert to CandleSeries format (for compatibility with existing code)

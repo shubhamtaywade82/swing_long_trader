@@ -35,10 +35,11 @@ namespace :test do
       puts "\n📈 Candles in database: #{candle_count}"
 
       if candle_count > 0
-        latest_candle = CandleSeriesRecord.where(instrument: instrument, timeframe: "1D")
-                                          .order(timestamp: :desc).first
-        puts "   Latest candle date: #{latest_candle.timestamp.to_date}"
-        puts "   Latest close: ₹#{latest_candle.close}"
+        latest_candle = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1D")
+        if latest_candle
+          puts "   Latest candle date: #{latest_candle.timestamp.to_date}"
+          puts "   Latest close: ₹#{latest_candle.close}"
+        end
       end
 
       puts "\n✅ Daily ingestion test completed!\n"
@@ -90,10 +91,11 @@ namespace :test do
       puts "\n📈 Weekly candles in database: #{weekly_count}"
 
       if weekly_count > 0
-        latest_weekly = CandleSeriesRecord.where(instrument: instrument, timeframe: "1W")
-                                          .order(timestamp: :desc).first
-        puts "   Latest weekly candle date: #{latest_weekly.timestamp.to_date}"
-        puts "   Latest close: ₹#{latest_weekly.close}"
+        latest_weekly = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1W")
+        if latest_weekly
+          puts "   Latest weekly candle date: #{latest_weekly.timestamp.to_date}"
+          puts "   Latest close: ₹#{latest_weekly.close}"
+        end
       end
 
       puts "\n✅ Weekly ingestion test completed!\n"
@@ -114,6 +116,36 @@ namespace :test do
       puts "   Fresh: #{daily_result[:fresh]}"
       puts "   Fresh count: #{daily_result[:fresh_count]}/#{daily_result[:total_count]}"
       puts "   Freshness percentage: #{daily_result[:freshness_percentage]&.round(1)}%"
+      puts "   Cutoff date: #{daily_result[:cutoff_date]}"
+      puts "   Cutoff trading days ago: #{daily_result[:cutoff_trading_days_ago]}"
+
+      # Diagnostic: Check how many instruments have candles at all
+      instruments_with_candles = Instrument.where(segment: %w[equity index])
+                                           .joins("INNER JOIN candle_series ON candle_series.instrument_id = instruments.id")
+                                           .where("candle_series.timeframe = ?", "1D")
+                                           .distinct
+                                           .count
+      puts "   Instruments with candles: #{instruments_with_candles}/#{daily_result[:total_count]}"
+
+      # Show sample of latest candle dates
+      if instruments_with_candles.positive?
+        sample_instruments = Instrument.where(segment: %w[equity index])
+                                       .joins("INNER JOIN candle_series ON candle_series.instrument_id = instruments.id")
+                                       .where("candle_series.timeframe = ?", "1D")
+                                       .distinct
+                                       .limit(5)
+        puts "   Sample latest candle dates:"
+        sample_instruments.each do |instrument|
+          latest = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1D")
+          next unless latest
+
+          is_fresh = latest.timestamp.to_date >= daily_result[:cutoff_date]
+          status = is_fresh ? "✅" : "❌"
+          days_ago = (Time.zone.today - latest.timestamp.to_date).to_i
+          puts "     #{status} #{instrument.symbol_name}: #{latest.timestamp.to_date} " \
+               "(#{days_ago} days ago)"
+        end
+      end
 
       # Test weekly freshness
       puts "\n🔄 Checking weekly candle freshness..."
@@ -126,6 +158,48 @@ namespace :test do
       puts "   Fresh: #{weekly_result[:fresh]}"
       puts "   Fresh count: #{weekly_result[:fresh_count]}/#{weekly_result[:total_count]}"
       puts "   Freshness percentage: #{weekly_result[:freshness_percentage]&.round(1)}%"
+      puts "   Cutoff date: #{weekly_result[:cutoff_date]}"
+      puts "   Cutoff trading days ago: #{weekly_result[:cutoff_trading_days_ago]}"
+
+      # Diagnostic: Check how many instruments have candles at all
+      instruments_with_weekly = Instrument.where(segment: %w[equity index])
+                                          .joins("INNER JOIN candle_series ON candle_series.instrument_id = instruments.id")
+                                          .where("candle_series.timeframe = ?", "1W")
+                                          .distinct
+                                          .count
+      puts "   Instruments with candles: #{instruments_with_weekly}/#{weekly_result[:total_count]}"
+
+      # Show sample of latest candle dates
+      if instruments_with_weekly.positive?
+        sample_instruments = Instrument.where(segment: %w[equity index])
+                                       .joins("INNER JOIN candle_series ON candle_series.instrument_id = instruments.id")
+                                       .where("candle_series.timeframe = ?", "1W")
+                                       .distinct
+                                       .limit(5)
+        puts "   Sample latest candle dates:"
+        sample_instruments.each do |instrument|
+          latest = CandleSeriesRecord.latest_for(instrument: instrument, timeframe: "1W")
+          next unless latest
+
+          is_fresh = latest.timestamp.to_date >= weekly_result[:cutoff_date]
+          status = is_fresh ? "✅" : "❌"
+          days_ago = (Time.zone.today - latest.timestamp.to_date).to_i
+          puts "     #{status} #{instrument.symbol_name}: #{latest.timestamp.to_date} " \
+               "(#{days_ago} days ago)"
+        end
+      end
+
+      # Summary and recommendations
+      puts "\n📋 Summary:"
+      if daily_result[:freshness_percentage] < 80.0 || weekly_result[:freshness_percentage] < 80.0
+        puts "   ⚠️  Candles are stale and need to be updated."
+        puts "   💡 To update candles, run:"
+        puts "      rails candles:daily:ingest[365]   # For daily candles (365 days back)"
+        puts "      rails candles:weekly:ingest[52]  # For weekly candles (52 weeks back)"
+        puts "      rails candles:check_freshness     # Check and auto-ingest if stale"
+      else
+        puts "   ✅ Candles are fresh!"
+      end
 
       puts "\n✅ Freshness check completed!\n"
     end
