@@ -298,7 +298,7 @@ module Screeners
       # Use a completely fresh query to avoid any GROUP BY issues
       all_candle_records = CandleSeriesRecord
                            .where(instrument_id: instrument_ids)
-                           .where(timeframe: %w[1D 1W])
+                           .where(timeframe: [:daily, :weekly])
                            .order(instrument_id: :asc, timeframe: :asc, timestamp: :desc)
                            .to_a
 
@@ -309,12 +309,12 @@ module Screeners
 
       # Build CandleSeries for each instrument
       @instruments.each do |instrument|
-        daily_records = candles_by_instrument[[instrument.id, "1D"]] || []
-        weekly_records = candles_by_instrument[[instrument.id, "1W"]] || []
+        daily_records = candles_by_instrument[[instrument.id, :daily]] || []
+        weekly_records = candles_by_instrument[[instrument.id, :weekly]] || []
 
         # Build daily series
         if daily_records.any?
-          daily_series = CandleSeries.new(symbol: instrument.symbol_name, interval: "1D")
+          daily_series = CandleSeries.new(symbol: instrument.symbol_name, interval: CandleSeriesRecord.timeframe_to_interval(:daily))
           daily_records.sort_by(&:timestamp).each do |record|
             candle = Candle.new(
               timestamp: record.timestamp,
@@ -329,13 +329,14 @@ module Screeners
           # Ensure candles are sorted by timestamp (safety check)
           daily_series.candles.sort_by!(&:timestamp)
           @candle_cache[instrument.id] ||= {}
-          @candle_cache[instrument.id]["1D"] = daily_series
+          @candle_cache[instrument.id] ||= {}
+          @candle_cache[instrument.id][:daily] = daily_series
         end
 
         # Build weekly series
         next unless weekly_records.any?
 
-        weekly_series = CandleSeries.new(symbol: instrument.symbol_name, interval: "1W")
+        weekly_series = CandleSeries.new(symbol: instrument.symbol_name, interval: CandleSeriesRecord.timeframe_to_interval(:weekly))
         weekly_records.sort_by(&:timestamp).each do |record|
           candle = Candle.new(
             timestamp: record.timestamp,
@@ -350,7 +351,8 @@ module Screeners
         # Ensure candles are sorted by timestamp (safety check)
         weekly_series.candles.sort_by!(&:timestamp)
         @candle_cache[instrument.id] ||= {}
-        @candle_cache[instrument.id]["1W"] = weekly_series
+        @candle_cache[instrument.id] ||= {}
+        @candle_cache[instrument.id][:weekly] = weekly_series
       end
 
       Rails.logger.info("[Screeners::LongtermScreener] Preloaded candles for #{@candle_cache.size} instruments")
@@ -363,9 +365,9 @@ module Screeners
       # Fallback: load if not in cache
       Rails.logger.warn("[Screeners::LongtermScreener] Cache miss for #{instrument.symbol_name} #{timeframe}, loading...")
       case timeframe
-      when "1D"
+      when :daily
         instrument.load_daily_candles(limit: 200)
-      when "1W"
+      when :weekly
         instrument.load_weekly_candles(limit: 52)
       end
     end
@@ -450,8 +452,8 @@ module Screeners
 
     def analyze_instrument(instrument)
       # Use cached candles to avoid N+1 queries
-      daily_series = get_cached_candles(instrument, "1D")
-      weekly_series = get_cached_candles(instrument, "1W")
+      daily_series = get_cached_candles(instrument, :daily)
+      weekly_series = get_cached_candles(instrument, :weekly)
 
       return nil unless daily_series&.candles&.any?
       return nil unless weekly_series&.candles&.any?

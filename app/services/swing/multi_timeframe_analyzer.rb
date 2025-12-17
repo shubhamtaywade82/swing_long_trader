@@ -5,8 +5,8 @@ module Swing
     TIMEFRAMES = {
       m15: "15",   # 15 minutes
       h1: "60",    # 1 hour
-      d1: "1D",    # Daily
-      w1: "1W",    # Weekly
+      d1: :daily,    # Daily
+      w1: :weekly,    # Weekly
     }.freeze
 
     def self.call(instrument:, include_intraday: true, cached_candles: nil)
@@ -134,7 +134,7 @@ module Swing
         )
         return nil unless result[:success]
 
-        # Convert to CandleSeries
+        # Convert to CandleSeries (intraday still uses string intervals)
         series = CandleSeries.new(symbol: @instrument.symbol_name, interval: tf_value)
         result[:candles].each do |candle_data|
           series.add_candle(
@@ -149,9 +149,9 @@ module Swing
           )
         end
         series
-      when "1D"
+      when :daily
         @instrument.load_daily_candles(limit: 200)
-      when "1W"
+      when :weekly
         @instrument.load_weekly_candles(limit: 52)
       else
         nil

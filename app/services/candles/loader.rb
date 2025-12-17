@@ -62,10 +62,13 @@ module Candles
     private
 
     def convert_to_candle_series(instrument:, timeframe:, records:)
+      # Convert enum to string interval for CandleSeries
+      interval = CandleSeriesRecord.timeframe_to_interval(timeframe)
+      
       # Create CandleSeries instance
       series = CandleSeries.new(
         symbol: instrument.symbol_name,
-        interval: timeframe,
+        interval: interval,
       )
 
       # Convert each record to Candle object and add to series

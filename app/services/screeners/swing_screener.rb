@@ -263,7 +263,7 @@ module Screeners
         # Convert to CandleSeries format
         series = CandleSeries.new(
           symbol: instrument.symbol_name,
-          interval: "1D",
+          interval: CandleSeriesRecord.timeframe_to_interval(:daily),
         )
 
         # Sort by timestamp (oldest first) and convert to Candle objects
@@ -283,7 +283,7 @@ module Screeners
         series.candles.sort_by!(&:timestamp)
 
         @candle_cache[instrument.id] ||= {}
-        @candle_cache[instrument.id]["1D"] = series
+        @candle_cache[instrument.id][:daily] = series
       end
 
       Rails.logger.info("[Screeners::SwingScreener] Preloaded candles for #{@candle_cache.size} instruments")
@@ -376,7 +376,7 @@ module Screeners
 
     def analyze_instrument(instrument)
       # Use cached candles to avoid N+1 queries
-      daily_series = get_cached_candles(instrument, "1D")
+      daily_series = get_cached_candles(instrument, :daily)
       return nil unless daily_series&.candles&.any?
 
       # Multi-timeframe analysis (DISABLE intraday by default for performance)

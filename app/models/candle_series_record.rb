@@ -28,30 +28,7 @@ class CandleSeriesRecord < ApplicationRecord
   default_scope { order(timestamp: :asc) }
 
   scope :for_instrument, ->(instrument) { where(instrument_id: instrument.id) }
-  scope :for_timeframe, ->(timeframe) do
-    # Handle both enum symbols and legacy string values
-    enum_value = if timeframe.is_a?(Symbol)
-                   timeframe
-                 else
-                   timeframe_from_string(timeframe)
-                 end
-    where(timeframe: enum_value)
-  end
-
-  # Helper method to convert legacy string values to enum
-  def self.timeframe_from_string(value)
-    case value.to_s.upcase
-    when "1D", "DAILY"
-      :daily
-    when "1W", "WEEKLY"
-      :weekly
-    when "1H", "1HOUR", "60", "HOURLY"
-      :hourly
-    else
-      # Default to daily if unknown
-      :daily
-    end
-  end
+  scope :for_timeframe, ->(timeframe) { where(timeframe: timeframe) }
   scope :recent, ->(limit = 100) { order(timestamp: :desc).limit(limit) }
   # Note: This scope is redundant with default_scope but kept for explicit clarity
   # when reading code that uses .ordered
@@ -63,13 +40,28 @@ class CandleSeriesRecord < ApplicationRecord
   }
 
   # Get latest candle for an instrument and timeframe
-  # Accepts both enum symbols (:daily, :weekly, :hourly) and legacy strings ("1D", "1W", "1H")
+  # @param timeframe [Symbol] Enum symbol (:daily, :weekly, :hourly)
   def self.latest_for(instrument:, timeframe:)
-    enum_value = timeframe.is_a?(Symbol) ? timeframe : timeframe_from_string(timeframe)
     for_instrument(instrument)
-      .for_timeframe(enum_value)
+      .for_timeframe(timeframe)
       .order(timestamp: :desc)
       .first
+  end
+
+  # Convert enum symbol to string interval for CandleSeries
+  # @param timeframe [Symbol] Enum symbol (:daily, :weekly, :hourly)
+  # @return [String] String interval ("1D", "1W", "1H")
+  def self.timeframe_to_interval(timeframe)
+    case timeframe
+    when :daily
+      "1D"
+    when :weekly
+      "1W"
+    when :hourly
+      "1H"
+    else
+      "1D" # Default fallback
+    end
   end
 
   # Convert to CandleSeries format (for compatibility with existing code)

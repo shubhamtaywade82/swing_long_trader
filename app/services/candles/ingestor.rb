@@ -50,32 +50,25 @@ module Candles
     private
 
     def upsert_single_candle(instrument:, timeframe:, timestamp:, open:, high:, low:, close:, volume:)
-      # Convert enum to string for normalization logic
-      timeframe_str = timeframe_to_string(timeframe)
-      
       # Normalize timestamp to beginning of candle period
-      normalized_timestamp = normalize_timestamp(timestamp, timeframe_str)
+      normalized_timestamp = normalize_timestamp(timestamp, timeframe)
 
       # Check if candle already exists
       # For daily candles, normalize existing timestamps to beginning_of_day for comparison
-      if timeframe_str == "1D"
+      if timeframe == :daily
         # Use range query to handle timestamp precision differences (microseconds, etc.)
         # The normalized timestamp should be at the beginning of the day
         day_start = normalized_timestamp.beginning_of_day
         day_end = normalized_timestamp.end_of_day
         # Use range syntax which is more reliable for timestamp comparisons
-        # Convert enum to symbol for query
-        enum_timeframe = timeframe.is_a?(Symbol) ? timeframe : CandleSeriesRecord.timeframe_from_string(timeframe)
         existing = CandleSeriesRecord.where(
           instrument_id: instrument.id,
-          timeframe: enum_timeframe,
+          timeframe: timeframe,
         ).where(timestamp: day_start..day_end).first
       else
-        # Convert enum to symbol for query
-        enum_timeframe = timeframe.is_a?(Symbol) ? timeframe : CandleSeriesRecord.timeframe_from_string(timeframe)
         existing = CandleSeriesRecord.find_by(
           instrument_id: instrument.id,
-          timeframe: enum_timeframe,
+          timeframe: timeframe,
           timestamp: normalized_timestamp,
         )
       end
@@ -95,11 +88,10 @@ module Candles
         return { success: true, action: :skipped, skipped: true }
       end
 
-      # Create new candle - convert to enum symbol
-      enum_timeframe = timeframe.is_a?(Symbol) ? timeframe : CandleSeriesRecord.timeframe_from_string(timeframe)
+      # Create new candle
       CandleSeriesRecord.create!(
         instrument_id: instrument.id,
-        timeframe: enum_timeframe,
+        timeframe: timeframe,
         timestamp: normalized_timestamp,
         open: open,
         high: high,
@@ -123,33 +115,15 @@ module Candles
              end
 
       # Keep in application timezone (IST) for consistency with database
-      return time.beginning_of_day if timeframe == "1D" || timeframe == :daily
-      return time.beginning_of_week if timeframe == "1W" || timeframe == :weekly
-
-      # For intraday timeframes, round to nearest interval
-      case timeframe
-      when "15", :hourly
-        time.beginning_of_hour
-      when "60", "1H", "1h"
-        time.beginning_of_hour
-      when "120"
-        time.beginning_of_hour + ((time.hour / 2) * 2).hours
-      else
-        time.beginning_of_minute
-      end
-    end
-
-    # Convert timeframe (enum symbol or string) to string for normalization logic
-    def timeframe_to_string(timeframe)
       case timeframe
       when :daily
-        "1D"
+        time.beginning_of_day
       when :weekly
-        "1W"
+        time.beginning_of_week
       when :hourly
-        "1H"
+        time.beginning_of_hour
       else
-        timeframe.to_s
+        time.beginning_of_minute
       end
     end
 

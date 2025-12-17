@@ -149,7 +149,7 @@ module Candles
 
     def trigger_ingestion
       case @timeframe
-      when :daily, "1D"
+      when :daily
         Rails.logger.info("[Candles::FreshnessChecker] Triggering daily candle ingestion...")
         result = DailyIngestor.call
         {
@@ -157,7 +157,7 @@ module Candles
           processed: result[:processed],
           total_candles: result[:total_candles],
         }
-      when :weekly, "1W"
+      when :weekly
         Rails.logger.info("[Candles::FreshnessChecker] Triggering weekly candle ingestion...")
         result = WeeklyIngestor.call
         {

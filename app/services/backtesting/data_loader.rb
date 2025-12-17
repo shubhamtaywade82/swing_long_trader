@@ -62,7 +62,7 @@ module Backtesting
       end
 
       # Fill missing dates if interpolation is enabled
-      if interpolate_missing && timeframe == "1D"
+      if interpolate_missing && timeframe == :daily
         fill_missing_daily_candles(series, existing_candles, from_date, to_date, interpolate_missing)
       else
         # Just add existing candles in order
