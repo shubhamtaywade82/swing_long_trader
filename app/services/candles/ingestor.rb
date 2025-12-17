@@ -1,8 +1,18 @@
 # frozen_string_literal: true
 
 module Candles
-  # Base helper for candle ingestion with deduplication and upsert logic
-  # Uses activerecord-import for bulk inserts/updates for better performance
+  # Service for ingesting candle data into the database
+  #
+  # Handles bulk import/update of candle data using activerecord-import for performance.
+  # Automatically handles duplicates via database-level unique constraints.
+  #
+  # @example
+  #   result = Candles::Ingestor.new.upsert_candles(
+  #     instrument: instrument,
+  #     timeframe: :daily,
+  #     candles_data: [{ timestamp: '2024-01-01', open: 100, high: 105, low: 99, close: 103, volume: 1000 }]
+  #   )
+  #   # => { success: true, upserted: 1, skipped: 0, errors: [], total: 1 }
   class Ingestor < ApplicationService
     def self.upsert_candles(instrument:, timeframe:, candles_data:)
       new.upsert_candles(instrument: instrument, timeframe: timeframe, candles_data: candles_data)
@@ -11,8 +21,21 @@ module Candles
     def upsert_candles(instrument:, timeframe:, candles_data:)
       return { success: false, error: "No candles data provided" } if candles_data.blank?
 
+      # Validate instrument exists
+      unless instrument&.persisted?
+        return { success: false, error: "Invalid or unsaved instrument provided" }
+      end
+
       normalized = normalize_candles(candles_data)
       return { success: false, error: "Failed to normalize candles" } if normalized.empty?
+
+      # Validate timeframe enum value
+      unless CandleSeriesRecord.timeframes.key?(timeframe)
+        return {
+          success: false,
+          error: "Invalid timeframe: #{timeframe}. Must be one of: #{CandleSeriesRecord.timeframes.keys.join(', ')}"
+        }
+      end
 
       # Normalize timestamps for all candles
       normalized_candles = normalized.map do |candle_hash|
@@ -33,19 +56,31 @@ module Candles
       # Use activerecord-import for bulk insert/update
       # The unique index on [instrument_id, timeframe, timestamp] handles duplicates
       # on_duplicate_key_update will update existing records automatically
+      #
+      # Note: validate: false is safe because:
+      # 1. All data is normalized and validated before this point
+      # 2. Timestamps are normalized to proper Time objects
+      # 3. All numeric fields are converted to proper types
+      # 4. Required fields (instrument_id, timeframe, timestamp) are always present
       upserted_count = 0
       skipped_count = 0
 
       begin
-        # Bulk import all candles - database handles duplicates via ON DUPLICATE KEY UPDATE
-        result = CandleSeriesRecord.import(
-          normalized_candles,
-          validate: false,
-          on_duplicate_key_update: {
-            conflict_target: [:instrument_id, :timeframe, :timestamp],
-            columns: [:open, :high, :low, :close, :volume, :updated_at]
-          }
-        )
+        # Wrap in transaction for atomicity - either all candles are imported or none
+        # This ensures data consistency even if the import partially fails
+        result = ActiveRecord::Base.transaction do
+          # Bulk import all candles - database handles duplicates via ON DUPLICATE KEY UPDATE
+          # For very large batches, import handles them efficiently internally
+          # No need to chunk unless memory becomes an issue (activerecord-import handles this)
+          CandleSeriesRecord.import(
+            normalized_candles,
+            validate: false, # Safe - data normalized and validated above
+            on_duplicate_key_update: {
+              conflict_target: [:instrument_id, :timeframe, :timestamp],
+              columns: [:open, :high, :low, :close, :volume, :updated_at]
+            }
+          )
+        end
 
         # activerecord-import returns result with failed_instances
         # Note: With on_duplicate_key_update, duplicates are handled by the database
@@ -55,45 +90,26 @@ module Candles
         upserted_count = normalized_candles.size - failed_count
         skipped_count = failed_count
 
-        Rails.logger.debug(
-          "[Candles::Ingestor] Bulk import completed: " \
+        Rails.logger.info(
+          "[Candles::Ingestor] Bulk import completed for #{instrument.symbol_name}: " \
           "total=#{normalized_candles.size}, upserted=#{upserted_count}, failed=#{failed_count}"
         )
-      rescue StandardError => e
-        Rails.logger.error("[Candles::Ingestor] Bulk import failed: #{e.message}, falling back to individual inserts")
+      rescue ActiveRecord::StatementInvalid => e
+        # Database-level errors (constraints, syntax, etc.)
+        Rails.logger.error(
+          "[Candles::Ingestor] Bulk import failed (database error): #{e.message}, " \
+          "falling back to individual inserts. Error class: #{e.class}"
+        )
         # Fallback to individual inserts if bulk import fails
-        normalized_candles.each do |candle|
-          begin
-            CandleSeriesRecord.create!(candle)
-            upserted_count += 1
-          rescue ActiveRecord::RecordNotUnique
-            # Try to update if duplicate
-            existing = CandleSeriesRecord.find_by(
-              instrument_id: candle[:instrument_id],
-              timeframe: candle[:timeframe],
-              timestamp: candle[:timestamp]
-            )
-            if existing
-              if candle_data_changed?(existing, open: candle[:open], high: candle[:high], low: candle[:low], close: candle[:close], volume: candle[:volume])
-                existing.update!(
-                  open: candle[:open],
-                  high: candle[:high],
-                  low: candle[:low],
-                  close: candle[:close],
-                  volume: candle[:volume]
-                )
-                upserted_count += 1
-              else
-                skipped_count += 1
-              end
-            else
-              skipped_count += 1
-            end
-          rescue StandardError => err
-            Rails.logger.warn("[Candles::Ingestor] Failed to upsert candle: #{err.message}")
-            skipped_count += 1
-          end
-        end
+        upserted_count, skipped_count = fallback_to_individual_upserts(normalized_candles)
+      rescue StandardError => e
+        # Other unexpected errors
+        Rails.logger.error(
+          "[Candles::Ingestor] Bulk import failed (unexpected error): #{e.message}, " \
+          "falling back to individual inserts. Error class: #{e.class}, Backtrace: #{e.backtrace.first(5).join(', ')}"
+        )
+        # Fallback to individual inserts if bulk import fails
+        upserted_count, skipped_count = fallback_to_individual_upserts(normalized_candles)
       end
 
       {
@@ -106,6 +122,46 @@ module Candles
     end
 
     private
+
+    def fallback_to_individual_upserts(candles)
+      upserted = 0
+      skipped = 0
+
+      candles.each do |candle|
+        begin
+          CandleSeriesRecord.create!(candle)
+          upserted += 1
+        rescue ActiveRecord::RecordNotUnique
+          # Try to update if duplicate
+          existing = CandleSeriesRecord.find_by(
+            instrument_id: candle[:instrument_id],
+            timeframe: candle[:timeframe],
+            timestamp: candle[:timestamp]
+          )
+          if existing
+            if candle_data_changed?(existing, open: candle[:open], high: candle[:high], low: candle[:low], close: candle[:close], volume: candle[:volume])
+              existing.update!(
+                open: candle[:open],
+                high: candle[:high],
+                low: candle[:low],
+                close: candle[:close],
+                volume: candle[:volume]
+              )
+              upserted += 1
+            else
+              skipped += 1
+            end
+          else
+            skipped += 1
+          end
+        rescue StandardError => err
+          Rails.logger.warn("[Candles::Ingestor] Failed to upsert candle: #{err.message}")
+          skipped += 1
+        end
+      end
+
+      [upserted, skipped]
+    end
 
     def normalize_timestamp(timestamp, timeframe)
       time = if timestamp.is_a?(Time)

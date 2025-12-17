@@ -8,6 +8,10 @@ class CandleSeriesRecord < ApplicationRecord
 
   belongs_to :instrument
 
+  # Enum for candle timeframes
+  # - daily (0): End-of-day candles, typically 1D
+  # - weekly (1): Weekly aggregated candles, typically 1W
+  # - hourly (2): Hourly candles, typically 1H or 60-minute intervals
   enum :timeframe, {
     daily: 0,
     weekly: 1,
@@ -41,6 +45,12 @@ class CandleSeriesRecord < ApplicationRecord
   # Get latest candle for an instrument and timeframe
   # @param timeframe [Symbol] Enum symbol (:daily, :weekly, :hourly)
   # @raise [ArgumentError] if timeframe is not a valid enum value
+  # Find the latest candle for a given instrument and timeframe
+  #
+  # @param instrument [Instrument] The instrument to query
+  # @param timeframe [Symbol] The timeframe enum key (:daily, :weekly, :hourly)
+  # @return [CandleSeriesRecord, nil] The latest candle record or nil if none exists
+  # @raise [ArgumentError] if timeframe is not a valid enum key
   def self.latest_for(instrument:, timeframe:)
     unless timeframes.key?(timeframe)
       raise ArgumentError, "Invalid timeframe: #{timeframe}. Must be one of: #{timeframes.keys.join(', ')}"

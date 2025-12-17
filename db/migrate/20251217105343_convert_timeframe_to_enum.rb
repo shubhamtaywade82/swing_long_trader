@@ -5,7 +5,31 @@ class ConvertTimeframeToEnum < ActiveRecord::Migration[8.0]
     # Step 1: Add temporary integer column
     add_column :candle_series, :timeframe_enum, :integer, null: true
 
-    # Step 2: Migrate existing string values to enum integers
+    # Step 2: Check for unknown timeframe values before migration
+    unknown_result = execute(
+      "SELECT DISTINCT timeframe FROM candle_series WHERE timeframe NOT IN ('1D', '1W', '1H', '1h', '60')"
+    )
+    
+    # Handle different result formats (ActiveRecord::Result vs array)
+    unknown_timeframes = if unknown_result.respond_to?(:to_a)
+                           unknown_result.to_a
+                         elsif unknown_result.is_a?(Array)
+                           unknown_result
+                         else
+                           []
+                         end
+
+    if unknown_timeframes.any?
+      unknown_values = unknown_timeframes.map { |row| row.is_a?(Array) ? row[0] : row['timeframe'] || row[:timeframe] }.compact.uniq
+      if unknown_values.any?
+        Rails.logger.warn(
+          "[ConvertTimeframeToEnum] Found unknown timeframe values: #{unknown_values.inspect}. " \
+          "These will be converted to daily (0)."
+        )
+      end
+    end
+
+    # Step 3: Migrate existing string values to enum integers
     # daily = 0, weekly = 1, hourly = 2
     execute <<-SQL
       UPDATE candle_series
@@ -19,7 +43,7 @@ class ConvertTimeframeToEnum < ActiveRecord::Migration[8.0]
       END
     SQL
 
-    # Step 3: Check for NULL values and log warning (shouldn't happen, but safety check)
+    # Step 4: Check for NULL values and log warning (shouldn't happen, but safety check)
     null_count_result = execute("SELECT COUNT(*) FROM candle_series WHERE timeframe_enum IS NULL")
     null_count = null_count_result.first[0] if null_count_result.respond_to?(:first)
 
@@ -36,16 +60,16 @@ class ConvertTimeframeToEnum < ActiveRecord::Migration[8.0]
       SQL
     end
 
-    # Step 4: Make the column non-nullable
+    # Step 5: Make the column non-nullable
     change_column_null :candle_series, :timeframe_enum, false
 
-    # Step 5: Remove old string column
+    # Step 6: Remove old string column
     remove_column :candle_series, :timeframe
 
-    # Step 6: Rename enum column to timeframe
+    # Step 7: Rename enum column to timeframe
     rename_column :candle_series, :timeframe_enum, :timeframe
 
-    # Step 7: Recreate indexes (they should be recreated automatically, but ensure they exist)
+    # Step 8: Recreate indexes (they should be recreated automatically, but ensure they exist)
     unless index_exists?(:candle_series, [:instrument_id, :timeframe, :timestamp],
                           name: "index_candle_series_on_instrument_timeframe_timestamp")
       add_index :candle_series, [:instrument_id, :timeframe, :timestamp],

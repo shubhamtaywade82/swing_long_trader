@@ -64,9 +64,12 @@ class MonitorJob < ApplicationJob
   end
 
   def check_candle_freshness
-    # Check latest daily candle specifically (:daily timeframe) - this is what matters for trading
-    # Weekly candles (:weekly) can be much older and shouldn't affect this check
-    # Note: timestamp field represents the trading date, not when the candle was ingested
+      # Check latest daily candle specifically (:daily timeframe) - this is what matters for trading
+      # Weekly candles (:weekly) can be much older and shouldn't affect this check
+      # Note: timestamp field represents the trading date, not when the candle was ingested
+      #
+      # Strategy: Prioritize recent candles (last 30 days) for freshness check.
+      # If no recent candles exist, fall back to the global latest to detect stale data.
     #
     # First, check if there are any recent candles (by trading date)
     # If recent candles exist, use the latest of those for freshness check
