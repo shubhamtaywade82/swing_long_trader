@@ -98,7 +98,7 @@ group :development, :test do
   gem "rspec-rails", "~> 7.0"
   gem "shoulda-matchers", "~> 6.0"
   gem "simplecov", require: false
-  gem "vcr", "~> 6.2"
+  gem "vcr", "~> 6.4"
   gem "webmock", "~> 3.18"
 end
 
